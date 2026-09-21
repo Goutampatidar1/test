@@ -81,17 +81,71 @@ const PROMOTION_PLAN_SEEDS = [
   },
 ];
 
-const ECOM_VENDOR_SEED = {
-  name: "Amit Verma",
-  email: "shop@example.com",
-  password: "12345678",
-  phone: "9876543213",
-  businessName: "Fresh Mart Online",
-  businessPhone: "9876543213",
-  businessAddress: "12 Commercial Street, Bengaluru, Karnataka 560001",
-  approvalStatus: "approved",
-  status: "active",
-};
+const DEFAULT_VENDOR_PASSWORD = "12345678";
+
+/** 5 e-commerce shop vendors (Vendor collection, vendorPanelType: ecom). */
+const ECOM_VENDOR_SEEDS = [
+  {
+    name: "Amit Verma",
+    email: "shop@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543213",
+    businessName: "Fresh Mart Online",
+    businessPhone: "9876543213",
+    businessAddress: "12 Commercial Street, Bengaluru, Karnataka 560001",
+    categoryName: "Groceries",
+    approvalStatus: "approved",
+    status: "active",
+  },
+  {
+    name: "Neha Kapoor",
+    email: "stylehub@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543214",
+    businessName: "Style Hub Fashion",
+    businessPhone: "9876543214",
+    businessAddress: "22 Brigade Road, Bengaluru, Karnataka 560025",
+    categoryName: "Fashion",
+    approvalStatus: "approved",
+    status: "active",
+  },
+  {
+    name: "Vikram Singh",
+    email: "gadgetzone@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543215",
+    businessName: "Gadget Zone",
+    businessPhone: "9876543215",
+    businessAddress: "8 Linking Road, Mumbai, Maharashtra 400050",
+    categoryName: "Electronics",
+    approvalStatus: "approved",
+    status: "active",
+  },
+  {
+    name: "Sana Khan",
+    email: "homekitchen@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543216",
+    businessName: "Home & Kitchen Mart",
+    businessPhone: "9876543216",
+    businessAddress: "55 Residency Road, Bengaluru, Karnataka 560025",
+    categoryName: "Home & Kitchen",
+    approvalStatus: "approved",
+    status: "active",
+  },
+  {
+    name: "Arjun Mehta",
+    email: "beautybox@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543217",
+    businessName: "Beauty Box Store",
+    businessPhone: "9876543217",
+    businessAddress: "19 Hill Road, Bandra, Mumbai, Maharashtra 400050",
+    categoryName: "Beauty & Personal Care",
+    approvalStatus: "approved",
+    status: "active",
+  },
+];
 
 const ECOM_PRODUCT_SEEDS = [
   {
@@ -193,11 +247,12 @@ const APP_CONFIG_SEED = {
   vendor_product_approval_required: true,
 };
 
+/** 5 service / venue vendors (VenueVendor collection, vendorPanelType: service). */
 const SERVICE_VENDOR_SEEDS = [
   {
     name: "Rahul Sharma",
     email: "royal@example.com",
-    password: "12345678",
+    password: DEFAULT_VENDOR_PASSWORD,
     phone: "9876543210",
     businessName: "Royal Events & Banquets",
     businessPhone: "9876543210",
@@ -217,7 +272,7 @@ const SERVICE_VENDOR_SEEDS = [
   {
     name: "Priya Patel",
     email: "dreamwedding@example.com",
-    password: "12345678",
+    password: DEFAULT_VENDOR_PASSWORD,
     phone: "9876543211",
     businessName: "Dream Wedding Planners",
     businessPhone: "9876543211",
@@ -235,9 +290,9 @@ const SERVICE_VENDOR_SEEDS = [
     approvalStatus: "approved",
   },
   {
-    name: "Amit Verma",
+    name: "Rohit Das",
     email: "elitecatering@example.com",
-    password: "12345678",
+    password: DEFAULT_VENDOR_PASSWORD,
     phone: "9876543212",
     businessName: "Elite Catering Services",
     businessPhone: "9876543212",
@@ -251,6 +306,163 @@ const SERVICE_VENDOR_SEEDS = [
     accountType: "Current",
     accountNumber: "70100345678901",
     ifscCode: "SBIN0003456",
+    status: "active",
+    approvalStatus: "approved",
+  },
+  {
+    name: "Kavita Nair",
+    email: "beatsdj@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543218",
+    businessName: "Beats & Lights DJ",
+    businessPhone: "9876543218",
+    businessEmail: "book@beatsdj.com",
+    businessAddress: "33 Church Street, Bengaluru, Karnataka 560001",
+    businessDescription: "Professional DJ, sound, and lighting for weddings and parties.",
+    panNumber: "PQRST3456U",
+    gstNumber: "29PQRST3456U1Z2",
+    bankName: "Axis Bank",
+    branchName: "Church Street",
+    accountType: "Current",
+    accountNumber: "80100456789012",
+    ifscCode: "UTIB0004567",
+    status: "active",
+    approvalStatus: "approved",
+  },
+  {
+    name: "Manish Gupta",
+    email: "tentcraft@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543219",
+    businessName: "TentCraft Decorators",
+    businessPhone: "9876543219",
+    businessEmail: "orders@tentcraft.com",
+    businessAddress: "90 FC Road, Pune, Maharashtra 411004",
+    businessDescription: "Wedding tents, mandap setup, and outdoor décor packages.",
+    panNumber: "VWXYZ7890A",
+    gstNumber: "27VWXYZ7890A1Z6",
+    bankName: "Kotak Mahindra Bank",
+    branchName: "FC Road",
+    accountType: "Savings",
+    accountNumber: "90100567890123",
+    ifscCode: "KKBK0005678",
+    status: "active",
+    approvalStatus: "approved",
+  },
+];
+
+/**
+ * 5 dual-mode vendors (vendorPanelType: both).
+ * Creates matching Vendor + VenueVendor rows on the same phone (same as panel registration).
+ */
+const BOTH_VENDOR_SEEDS = [
+  {
+    name: "Ananya Reddy",
+    email: "both.events.shop@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543220",
+    shopName: "Celebration Store",
+    serviceName: "Celebration Events Co.",
+    businessPhone: "9876543220",
+    businessEmail: "hello@celebration.example.com",
+    businessAddress: "14 Cubbon Road, Bengaluru, Karnataka 560001",
+    businessDescription: "Party supplies shop plus full event planning services.",
+    categoryName: "Home & Kitchen",
+    panNumber: "ANANY1234R",
+    gstNumber: "29ANANY1234R1Z1",
+    bankName: "HDFC Bank",
+    branchName: "Cubbon Park",
+    accountType: "Current",
+    accountNumber: "51100678901234",
+    ifscCode: "HDFC0006789",
+    status: "active",
+    approvalStatus: "approved",
+  },
+  {
+    name: "Deepak Joshi",
+    email: "both.wedding.mart@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543221",
+    shopName: "Shaadi Essentials Mart",
+    serviceName: "Shaadi Studio Services",
+    businessPhone: "9876543221",
+    businessEmail: "care@shaadistudio.example.com",
+    businessAddress: "67 SV Road, Mumbai, Maharashtra 400058",
+    businessDescription: "Wedding retail store with décor and catering coordination.",
+    categoryName: "Fashion",
+    panNumber: "DEEPA5678J",
+    gstNumber: "27DEEPA5678J1Z4",
+    bankName: "ICICI Bank",
+    branchName: "Santacruz",
+    accountType: "Current",
+    accountNumber: "61100789012345",
+    ifscCode: "ICIC0007890",
+    status: "active",
+    approvalStatus: "approved",
+  },
+  {
+    name: "Meera Iyer",
+    email: "both.soundshop@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543222",
+    shopName: "Pulse Audio Gear",
+    serviceName: "Pulse Live DJ",
+    businessPhone: "9876543222",
+    businessEmail: "book@pulse.example.com",
+    businessAddress: "5 Richmond Circle, Bengaluru, Karnataka 560025",
+    businessDescription: "Audio equipment shop and live DJ booking services.",
+    categoryName: "Electronics",
+    panNumber: "MEERA9012I",
+    gstNumber: "29MEERA9012I1Z7",
+    bankName: "Axis Bank",
+    branchName: "Richmond Road",
+    accountType: "Savings",
+    accountNumber: "71100890123456",
+    ifscCode: "UTIB0008901",
+    status: "active",
+    approvalStatus: "approved",
+  },
+  {
+    name: "Farhan Ali",
+    email: "both.feastmart@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543223",
+    shopName: "Feast & Pantry",
+    serviceName: "Feast Catering Kitchen",
+    businessPhone: "9876543223",
+    businessEmail: "orders@feast.example.com",
+    businessAddress: "28 Park Street, Kolkata, West Bengal 700016",
+    businessDescription: "Grocery and pantry shop with on-demand catering.",
+    categoryName: "Groceries",
+    panNumber: "FARHA3456A",
+    gstNumber: "19FARHA3456A1Z0",
+    bankName: "State Bank of India",
+    branchName: "Park Street",
+    accountType: "Current",
+    accountNumber: "81100901234567",
+    ifscCode: "SBIN0009012",
+    status: "active",
+    approvalStatus: "approved",
+  },
+  {
+    name: "Ishita Bose",
+    email: "both.glowhouse@example.com",
+    password: DEFAULT_VENDOR_PASSWORD,
+    phone: "9876543224",
+    shopName: "Glow House Beauty",
+    serviceName: "Glow Décor Lights",
+    businessPhone: "9876543224",
+    businessEmail: "hello@glowhouse.example.com",
+    businessAddress: "41 Baner Road, Pune, Maharashtra 411045",
+    businessDescription: "Beauty products store plus event lighting decoration.",
+    categoryName: "Beauty & Personal Care",
+    panNumber: "ISHIT7890B",
+    gstNumber: "27ISHIT7890B1Z3",
+    bankName: "Kotak Mahindra Bank",
+    branchName: "Baner",
+    accountType: "Savings",
+    accountNumber: "91100012345678",
+    ifscCode: "KKBK0000123",
     status: "active",
     approvalStatus: "approved",
   },
@@ -455,7 +667,7 @@ async function seedEcomCategories(adminId) {
   return categoryByName;
 }
 
-async function seedServiceVendor(entry) {
+async function seedServiceVendor(entry, vendorPanelType = "service") {
   const email = entry.email.toLowerCase();
   const passwordHash = await hashPassword(entry.password);
   const existing = await VenueVendor.findOne({
@@ -481,20 +693,22 @@ async function seedServiceVendor(entry) {
     ifscCode: entry.ifscCode,
     aadhaarCardFront: PLACEHOLDER_DOC,
     aadhaarCardBack: PLACEHOLDER_DOC,
+    panCard: PLACEHOLDER_DOC,
     status: entry.status,
     approvalStatus: entry.approvalStatus,
     isOpen: true,
+    vendorPanelType,
   };
 
   if (existing) {
     Object.assign(existing, payload);
     await existing.save();
-    console.log(`Updated service vendor: ${entry.businessName} (${email})`);
+    console.log(`Updated service vendor: ${entry.businessName} (${email}) [${vendorPanelType}]`);
     return existing;
   }
 
   const created = await VenueVendor.create(payload);
-  console.log(`Created service vendor: ${entry.businessName} (${email})`);
+  console.log(`Created service vendor: ${entry.businessName} (${email}) [${vendorPanelType}]`);
   return created;
 }
 
@@ -642,41 +856,96 @@ async function seedEcomProducts(ecomVendor, categoryByName) {
   return productBySku;
 }
 
-async function seedEcomVendor(categoryByName) {
-  const email = ECOM_VENDOR_SEED.email.toLowerCase();
-  const passwordHash = await hashPassword(ECOM_VENDOR_SEED.password);
-  const categoryId = categoryByName.get("Groceries");
+async function seedEcomVendor(entry, categoryByName, vendorPanelType = "ecom") {
+  const email = entry.email.toLowerCase();
+  const passwordHash = await hashPassword(entry.password);
+  const categoryId = categoryByName.get(entry.categoryName || "Groceries");
   const existing = await Vendor.findOne({
-    $or: [{ email }, { phone: ECOM_VENDOR_SEED.phone }],
+    $or: [{ email }, { phone: entry.phone }],
   });
 
   const payload = {
-    name: ECOM_VENDOR_SEED.name,
+    name: entry.name,
     email,
     passwordHash,
-    phone: ECOM_VENDOR_SEED.phone,
-    businessName: ECOM_VENDOR_SEED.businessName,
-    businessPhone: ECOM_VENDOR_SEED.businessPhone,
-    businessAddress: ECOM_VENDOR_SEED.businessAddress,
+    phone: entry.phone,
+    businessName: entry.businessName,
+    businessPhone: entry.businessPhone,
+    businessAddress: entry.businessAddress,
     ...(categoryId ? { category: categoryId } : {}),
     shopImages: [PLACEHOLDER_BANNER],
     shopLogo: PLACEHOLDER_BANNER,
-    approvalStatus: ECOM_VENDOR_SEED.approvalStatus,
-    status: ECOM_VENDOR_SEED.status,
+    shopBanner: PLACEHOLDER_BANNER,
+    aadhaarCardFront: PLACEHOLDER_DOC,
+    aadhaarCardBack: PLACEHOLDER_DOC,
+    panCardFront: PLACEHOLDER_DOC,
+    approvalStatus: entry.approvalStatus,
+    status: entry.status,
     isOpen: true,
-    vendorPanelType: "ecom",
+    vendorPanelType,
   };
 
   if (existing) {
     Object.assign(existing, payload);
     await existing.save();
-    console.log(`Updated e-commerce vendor: ${ECOM_VENDOR_SEED.businessName}`);
+    console.log(`Updated e-commerce vendor: ${entry.businessName} (${email}) [${vendorPanelType}]`);
     return existing;
   }
 
   const created = await Vendor.create(payload);
-  console.log(`Created e-commerce vendor: ${ECOM_VENDOR_SEED.businessName}`);
+  console.log(`Created e-commerce vendor: ${entry.businessName} (${email}) [${vendorPanelType}]`);
   return created;
+}
+
+async function seedEcomVendors(categoryByName) {
+  const vendors = [];
+  for (const entry of ECOM_VENDOR_SEEDS) {
+    vendors.push(await seedEcomVendor(entry, categoryByName, "ecom"));
+  }
+  return vendors;
+}
+
+async function seedBothVendors(ecomCategoryByName) {
+  const results = [];
+  for (const entry of BOTH_VENDOR_SEEDS) {
+    const shopEntry = {
+      name: entry.name,
+      email: entry.email,
+      password: entry.password,
+      phone: entry.phone,
+      businessName: entry.shopName,
+      businessPhone: entry.businessPhone,
+      businessAddress: entry.businessAddress,
+      categoryName: entry.categoryName,
+      approvalStatus: entry.approvalStatus,
+      status: entry.status,
+    };
+    const serviceEntry = {
+      name: entry.name,
+      email: entry.email,
+      password: entry.password,
+      phone: entry.phone,
+      businessName: entry.serviceName,
+      businessPhone: entry.businessPhone,
+      businessEmail: entry.businessEmail,
+      businessAddress: entry.businessAddress,
+      businessDescription: entry.businessDescription,
+      panNumber: entry.panNumber,
+      gstNumber: entry.gstNumber,
+      bankName: entry.bankName,
+      branchName: entry.branchName,
+      accountType: entry.accountType,
+      accountNumber: entry.accountNumber,
+      ifscCode: entry.ifscCode,
+      status: entry.status,
+      approvalStatus: entry.approvalStatus,
+    };
+
+    const vendor = await seedEcomVendor(shopEntry, ecomCategoryByName, "both");
+    const venueVendor = await seedServiceVendor(serviceEntry, "both");
+    results.push({ vendor, venueVendor });
+  }
+  return results;
 }
 
 async function upsertPromotionSubscription({ paymentId, payload }) {
@@ -915,13 +1184,15 @@ async function main() {
   const ecomCategoryByName = await seedEcomCategories(admin._id);
   const locationByKey = await seedLocations();
   const planByKey = await seedPromotionPlans();
-  const ecomVendor = await seedEcomVendor(ecomCategoryByName);
+  const ecomVendors = await seedEcomVendors(ecomCategoryByName);
+  const ecomVendor = ecomVendors[0] || null;
   const productBySku = await seedEcomProducts(ecomVendor, ecomCategoryByName);
   const vendorsByPhone = new Map();
   for (const vendor of SERVICE_VENDOR_SEEDS) {
-    const saved = await seedServiceVendor(vendor);
+    const saved = await seedServiceVendor(vendor, "service");
     if (saved?.phone) vendorsByPhone.set(saved.phone, saved);
   }
+  await seedBothVendors(ecomCategoryByName);
   await seedDummyServices(categoryByName, vendorsByPhone);
   await seedDummyPromotions({
     ecomVendor,
@@ -947,18 +1218,27 @@ async function main() {
   console.log("\nAdmin login:");
   console.log(`  Email:    ${ADMIN_SEED.email}`);
   console.log(`  Password: ${ADMIN_SEED.password}`);
-  console.log("\nE-commerce vendor (VenueVendorPanel → Shop mode):");
-  console.log(`  ${ECOM_VENDOR_SEED.businessName}`);
-  console.log(`    Email:    ${ECOM_VENDOR_SEED.email}`);
-  console.log(`    Phone:    ${ECOM_VENDOR_SEED.phone}`);
-  console.log(`    Password: ${ECOM_VENDOR_SEED.password}`);
   console.log("\nPromotion plans seeded:");
   for (const entry of PROMOTION_PLAN_SEEDS) {
     console.log(`  - ${entry.name} (${entry.vendorType})`);
   }
-  console.log("\nService vendors (VenueVendorPanel login):");
+  console.log(`\nE-commerce vendors (${ECOM_VENDOR_SEEDS.length}) — VenueVendorPanel Shop mode:`);
+  for (const vendor of ECOM_VENDOR_SEEDS) {
+    console.log(`  ${vendor.businessName} [${vendor.categoryName}]`);
+    console.log(`    Email:    ${vendor.email}`);
+    console.log(`    Phone:    ${vendor.phone}`);
+    console.log(`    Password: ${vendor.password}`);
+  }
+  console.log(`\nService vendors (${SERVICE_VENDOR_SEEDS.length}) — VenueVendorPanel Service mode:`);
   for (const vendor of SERVICE_VENDOR_SEEDS) {
     console.log(`  ${vendor.businessName}`);
+    console.log(`    Email:    ${vendor.email}`);
+    console.log(`    Phone:    ${vendor.phone}`);
+    console.log(`    Password: ${vendor.password}`);
+  }
+  console.log(`\nBoth-mode vendors (${BOTH_VENDOR_SEEDS.length}) — Shop + Service on same phone:`);
+  for (const vendor of BOTH_VENDOR_SEEDS) {
+    console.log(`  ${vendor.shopName} / ${vendor.serviceName}`);
     console.log(`    Email:    ${vendor.email}`);
     console.log(`    Phone:    ${vendor.phone}`);
     console.log(`    Password: ${vendor.password}`);
