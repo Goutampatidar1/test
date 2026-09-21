@@ -399,9 +399,16 @@ exports.updateVenue = asyncHandler(async (req, res) => {
     venue.shortDescription = normalizeOptional(req.body.shortDescription) || "";
   }
   if (Object.prototype.hasOwnProperty.call(req.body, "address")) {
-    const address = normalizeRequired(req.body.address);
-    if (!address) throw new AppError("Address cannot be empty", 400);
-    venue.address = address;
+    const address = normalizeOptional(req.body.address) || "";
+    // Vendor panel service form does not collect address; ignore empty updates so
+    // existing address is preserved. Admin still cannot clear address to blank.
+    if (!address) {
+      if (!isVenueVendorRequest(req)) {
+        throw new AppError("Address cannot be empty", 400);
+      }
+    } else {
+      venue.address = address;
+    }
   }
   if (Object.prototype.hasOwnProperty.call(req.body, "city")) {
     venue.city = normalizeOptional(req.body.city) || "";

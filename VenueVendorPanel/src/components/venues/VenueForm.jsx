@@ -231,6 +231,8 @@ export function VenueForm({
       return;
     }
 
+    const businessAddress = String(user?.businessAddress || "").trim();
+    const existingAddress = String(initialVenue?.address || "").trim();
     const payload = {
       name: values.name.trim(),
       shortDescription: values.shortDescription.trim(),
@@ -240,8 +242,13 @@ export function VenueForm({
       price: values.price,
       tokenAmount: values.tokenAmount,
       amenities: [],
-      address: "",
     };
+    // Simplified service form has no address field. Never send "" — backend rejects empty
+    // address on update. Prefer existing venue address, then profile business address.
+    const address = existingAddress || businessAddress;
+    if (address) {
+      payload.address = address;
+    }
 
     const files = {};
     if (photoFiles.length > 0) {
