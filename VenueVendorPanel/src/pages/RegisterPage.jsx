@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { vendorPanelRegister } from "../api/vendorPanelAuth.js";
 import { publicListCategories } from "../api/publicCatalog.js";
@@ -24,6 +24,7 @@ import {
   validateVenueVendorDocuments,
 } from "../utils/venueVendorFormValidation.js";
 import { reportFormValidity, reportStepValidity } from "../utils/formValidation.js";
+import { normalizePanelAuthSession } from "../utils/panelAuthSession.js";
 
 const STEPS = [
   { id: 1, label: "Vendor Type" },
@@ -49,8 +50,29 @@ function needsServiceFlow(type) {
   return type === "service" || type === "both";
 }
 
-function needsEcomFlow(type) {
+function needsShopImages(type) {
   return type === "ecom" || type === "both";
+}
+
+function needsShopCategory(type) {
+  return type === "ecom";
+}
+
+function categoryId(item) {
+  return item?._id || item?.id || "";
+}
+
+/** Live backend still requires category on register — pick one silently for Both vendors. */
+async function resolveRegistrationCategoryForBoth(existingCategories) {
+  const cached = (existingCategories || []).map(categoryId).find(Boolean);
+  if (cached) return cached;
+
+  const items = await publicListCategories({ mode: "ecom", limit: 100, includeEmpty: true });
+  const fetched = (items ?? []).map(categoryId).find(Boolean);
+  if (!fetched) {
+    throw new Error("Shop setup is temporarily unavailable. Please contact support.");
+  }
+  return fetched;
 }
 
 function validateIndianMobile(phone) {
@@ -101,11 +123,13 @@ function RegisterStepper({ currentStep }) {
         const lineClass = step.id < currentStep ? "is-done" : "is-upcoming";
 
         return (
-          <div key={step.id} className="vendor-register-stepper__item" role="listitem">
-            <div className={`vendor-register-stepper__circle ${circleClass}`}>{step.id}</div>
-            <span className={`vendor-register-stepper__label ${isActive || isCompleted ? "is-active" : ""}`}>
-              {step.label}
-            </span>
+          <div key={step.id} className="vendor-register-stepper__step" role="listitem">
+            <div className="vendor-register-stepper__node">
+              <div className={`vendor-register-stepper__circle ${circleClass}`}>{step.id}</div>
+              <span className={`vendor-register-stepper__label ${isActive || isCompleted ? "is-active" : ""}`}>
+                {step.label}
+              </span>
+            </div>
             {index < STEPS.length - 1 ? (
               <div className={`vendor-register-stepper__line ${lineClass}`} aria-hidden="true" />
             ) : null}
@@ -251,6 +275,12 @@ export function RegisterPage() {
   }, []);
 
   useEffect(() => {
+    if (!needsShopImages(vendorPanelType)) {
+      setCategory("");
+      setCategories([]);
+      return undefined;
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -263,11 +293,13 @@ export function RegisterPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [vendorPanelType]);
 
-  if (token) {
-    return <Navigate to="/vendor/dashboard" replace />;
-  }
+  useEffect(() => {
+    if (token) {
+      navigate("/vendor/dashboard", { replace: true });
+    }
+  }, [navigate, token]);
 
   const onChange = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
@@ -322,16 +354,16 @@ export function RegisterPage() {
           return false;
         }
       }
-      if (needsEcomFlow(vendorPanelType)) {
-        if (!category) {
-          await Swal.fire({
-            icon: "error",
-            title: "Required",
-            text: "Please select a shop category.",
-            confirmButtonColor: "#141414",
-          });
-          return false;
-        }
+      if (needsShopCategory(vendorPanelType) && !category) {
+        await Swal.fire({
+          icon: "error",
+          title: "Required",
+          text: "Please select a shop category.",
+          confirmButtonColor: "#141414",
+        });
+        return false;
+      }
+      if (needsShopImages(vendorPanelType)) {
         if (!shopImages.length) {
           await Swal.fire({
             icon: "error",
@@ -359,13 +391,57 @@ export function RegisterPage() {
 
   const handleBack = () => setStep((s) => Math.max(1, s - 1));
 
-  const handleShopImagesChange = (files) => {
-    const next = Array.from(files || []).filter((file) => {
-      if (file.size > MAX_FILE_BYTES) return false;
-      return true;
+  useEffect(
+    () => () => {
+      shopImages.forEach((row) => {
+        if (row.previewUrl) URL.revokeObjectURL(row.previewUrl);
+      });
+    },
+    [shopImages],
+  );
+
+  const handleShopImagesChange = async (files) => {
+    const picked = Array.from(files || []);
+    if (!picked.length) return;
+
+    const tooLarge = picked.filter((file) => file.size > MAX_FILE_BYTES);
+    if (tooLarge.length) {
+      await Swal.fire({
+        icon: "error",
+        title: "File too large",
+        text: "Each shop image must be 5 MB or less.",
+        confirmButtonColor: "#141414",
+      });
+    }
+
+    const valid = picked.filter((file) => file.size <= MAX_FILE_BYTES);
+    if (!valid.length) return;
+
+    const slotsLeft = 5 - shopImages.length;
+    if (slotsLeft <= 0) {
+      await Swal.fire({
+        icon: "info",
+        title: "Limit reached",
+        text: "You can upload up to 5 shop images.",
+        confirmButtonColor: "#141414",
+      });
+      return;
+    }
+
+    const next = valid.slice(0, slotsLeft).map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      key: `${file.name}-${file.size}-${file.lastModified}`,
+    }));
+    setShopImages((prev) => [...prev, ...next]);
+  };
+
+  const removeShopImage = (key) => {
+    setShopImages((prev) => {
+      const target = prev.find((row) => row.key === key);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((row) => row.key !== key);
     });
-    if (!next.length) return;
-    setShopImages((prev) => [...prev, ...next].slice(0, 5));
   };
 
   const handleSubmit = async (e) => {
@@ -390,6 +466,11 @@ export function RegisterPage() {
 
     setLoading(true);
     try {
+      let registrationCategory = category;
+      if (vendorPanelType === "both") {
+        registrationCategory = await resolveRegistrationCategoryForBoth(categories);
+      }
+
       const data = await vendorPanelRegister(
         {
           vendorPanelType,
@@ -399,31 +480,21 @@ export function RegisterPage() {
           businessName: form.businessName.trim(),
           businessPhone: form.phone,
           ...(needsServiceFlow(vendorPanelType) ? { businessAddress: form.businessAddress.trim() } : {}),
-          ...(needsEcomFlow(vendorPanelType) ? { category } : {}),
+          ...(registrationCategory ? { category: registrationCategory } : {}),
         },
         {
           aadhaarCardFront: aadhaarFrontFile,
           aadhaarCardBack: aadhaarBackFile,
           panCard: panFile,
-          shopImages,
+          shopImages: shopImages.map((row) => row.file),
         },
       );
 
-      dispatch(
-        setCredentials({
-          token: data.token,
-          refreshToken: data.refreshToken,
-          user: data.user,
-          panelMode: data.panelMode,
-          capabilities: data.capabilities,
-          vendorPanelType: data.vendorPanelType,
-          accounts: data.accounts,
-        }),
-      );
+      const session = normalizePanelAuthSession(data);
 
       const approved =
-        data?.approvalRequired === false ||
-        String(data?.user?.approvalStatus || "").toLowerCase() === "approved";
+        session.approvalRequired === false ||
+        String(session.user?.approvalStatus || "").toLowerCase() === "approved";
 
       await Swal.fire({
         icon: "success",
@@ -432,7 +503,11 @@ export function RegisterPage() {
           ? "Your account is ready. You can start using the vendor panel."
           : "Your application is pending admin approval.",
         confirmButtonColor: "#141414",
+        timer: 1600,
+        showConfirmButton: false,
       });
+
+      dispatch(setCredentials(session));
       navigate("/vendor/dashboard", { replace: true });
     } catch (err) {
       await Swal.fire({
@@ -448,7 +523,8 @@ export function RegisterPage() {
 
   const sectionTitle = STEPS[step - 1]?.label ?? "";
   const showServiceDocs = needsServiceFlow(vendorPanelType);
-  const showEcomDocs = needsEcomFlow(vendorPanelType);
+  const showShopCategory = needsShopCategory(vendorPanelType);
+  const showShopImages = needsShopImages(vendorPanelType);
 
   return (
     <div className="vendor-register-page">
@@ -542,62 +618,66 @@ export function RegisterPage() {
               className={`vendor-register-fields vendor-register-fields--stack${step === 3 ? "" : " d-none"}`}
               data-register-step="3"
             >
-              {showEcomDocs ? (
+              {showShopCategory || showShopImages ? (
                 <>
-                  <FormField label="Shop Category" required>
-                    <select
-                      className="vendor-register-input"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      required={showEcomDocs}
-                    >
-                      <option value="">Select category</option>
-                      {categories.map((cat) => (
-                        <option key={cat._id || cat.id} value={cat._id || cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                  <div className="vendor-register-field">
+                  {showShopCategory ? (
+                    <FormField label="Shop Category" required>
+                      <select
+                        className="vendor-register-input"
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        required
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((cat) => (
+                          <option key={cat._id || cat.id} value={cat._id || cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  ) : null}
+                  {showShopImages ? (
+                  <div className="vendor-register-field vendor-register-shop-images">
                     <span className="vendor-register-field__label">
                       Shop Images<span className="required-dot"> *</span>
                     </span>
-                    <label htmlFor={shopImagesInputId} className="vendor-register-upload">
-                      <input
-                        id={shopImagesInputId}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="vendor-register-upload__input"
-                        onChange={(e) => {
-                          handleShopImagesChange(e.target.files);
-                          e.target.value = "";
-                        }}
-                      />
-                      <UploadIcon />
-                      <p className="vendor-register-upload__text">
-                        <span className="vendor-register-upload__link">Click to upload</span> shop photos
-                      </p>
-                      <p className="vendor-register-upload__hint">At least 1 image, up to 5 (max. 5MB each)</p>
-                    </label>
-                    {shopImages.length ? (
-                      <ul className="vendor-register-shop-list">
-                        {shopImages.map((file, index) => (
-                          <li key={`${file.name}-${index}`}>
-                            {file.name}
-                            <button
-                              type="button"
-                              className="vendor-register-shop-list__remove"
-                              onClick={() => setShopImages((prev) => prev.filter((_, i) => i !== index))}
-                            >
-                              Remove
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+                    <p className="vendor-register-shop-images__hint">
+                      At least 1 image, up to 5 (max. 5MB each)
+                    </p>
+                    <div className="vendor-shop-images__grid">
+                      {shopImages.map((row) => (
+                        <div key={row.key} className="vendor-shop-images__tile is-pending">
+                          <img src={row.previewUrl} alt="" />
+                          <button
+                            type="button"
+                            className="vendor-shop-images__remove"
+                            onClick={() => removeShopImage(row.key)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+
+                      {shopImages.length < 5 ? (
+                        <label htmlFor={shopImagesInputId} className="vendor-shop-images__add">
+                          <span>+ Add image</span>
+                          <input
+                            id={shopImagesInputId}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            hidden
+                            onChange={(e) => {
+                              handleShopImagesChange(e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
                   </div>
+                  ) : null}
                 </>
               ) : null}
 

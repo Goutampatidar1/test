@@ -23,7 +23,7 @@ const COPY = {
 };
 
 export function ProfileCompletionCard({ completion, variant = "service", embedded = false, combined = false }) {
-  const { percent, doneCount, total, complete, modules } = completion ?? {};
+  const { percent, doneCount, total, complete, modules = [] } = completion ?? {};
   const [expanded, setExpanded] = useState(() => !complete);
 
   useEffect(() => {
@@ -132,7 +132,7 @@ export function ProfileCompletionCard({ completion, variant = "service", embedde
                 </p>
               ) : (
                 <p className="vendor-profile-complete__remaining">
-                  Remaining: {mod.remaining.map((field) => field.label).join(", ")}
+                  Remaining: {(mod.remaining ?? []).map((field) => field.label).join(", ")}
                 </p>
               )}
               <Link to={mod.href} className="vendor-profile-complete__module-link">

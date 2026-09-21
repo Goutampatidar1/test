@@ -83,6 +83,7 @@ export function CombinedDashboard() {
 
   const [recentSide, setRecentSide] = useState("service");
   const [addSide, setAddSide] = useState("service");
+  const [statsSide, setStatsSide] = useState("service");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isOpen, setIsOpen] = useState(serviceUser?.isOpen !== false);
@@ -205,19 +206,27 @@ export function CombinedDashboard() {
     [productCount, serviceUser, shopUser, venueCount],
   );
 
-  const statCards = useMemo(() => {
-    const serviceCards = SERVICE_STATS.map((card) => ({
-      ...card,
-      value: serviceStats[card.key] ?? 0,
-      group: "service",
-    }));
-    const shopCards = SHOP_STATS.map((card) => ({
-      ...card,
-      value: shopStats[card.key] ?? 0,
-      group: "shop",
-    }));
-    return [...serviceCards, ...shopCards];
-  }, [serviceStats, shopStats]);
+  const serviceStatCards = useMemo(
+    () =>
+      SERVICE_STATS.map((card) => ({
+        ...card,
+        value: serviceStats[card.key] ?? 0,
+        group: "service",
+      })),
+    [serviceStats],
+  );
+
+  const shopStatCards = useMemo(
+    () =>
+      SHOP_STATS.map((card) => ({
+        ...card,
+        value: shopStats[card.key] ?? 0,
+        group: "shop",
+      })),
+    [shopStats],
+  );
+
+  const visibleStatCards = statsSide === "service" ? serviceStatCards : shopStatCards;
 
   const greeting =
     serviceUser?.businessName ||
@@ -269,28 +278,119 @@ export function CombinedDashboard() {
 
       <VendorBannerCarousel />
 
-      <section className="vendor-dash-stats" aria-label="Summary statistics">
-        {statCards.map((card) => (
-          <Link
-            key={`${card.group}-${card.key}`}
-            to={card.to}
-            className={`vendor-dash-stat vendor-dash-stat--${card.tone}`}
-            aria-label={`${card.label}: ${loading ? "loading" : card.value}`}
-          >
-            <div className="vendor-dash-stat__icon">
-              {card.group === "service" ? <ServiceStatIcon name={card.icon} /> : <EcomStatIcon name={card.icon} />}
-            </div>
-            <div className="vendor-dash-stat__body">
-              <div className="vendor-dash-stat__value">{loading ? "—" : card.value}</div>
-              <div className="vendor-dash-stat__label">{card.label}</div>
-            </div>
-          </Link>
-        ))}
-      </section>
-
       <ProfileCompletionCard completion={profileCompletion} variant="both" combined />
 
       <ShopImagesPanel user={shopUser} />
+
+      <section className="vendor-dash-panel vendor-service-categories vendor-service-categories--compact vendor-dash-panel--toggle">
+        <div className="vendor-service-categories__head vendor-dash-panel-head--toggle">
+          <div>
+            <h2 className="vendor-dash-panel__title">
+              {addSide === "service" ? "Add a service" : "Add a product"}
+            </h2>
+            <p>
+              {addSide === "service"
+                ? "Pick a category to add a service quickly."
+                : "Pick a category to list a new product quickly."}
+            </p>
+          </div>
+          <div className="vendor-dash-panel-head__actions">
+            <DashboardSegmentToggle
+              value={addSide}
+              onChange={setAddSide}
+              ariaLabel="Switch between service and product categories"
+            />
+            <Link
+              to={addSide === "service" ? "/vendor/venues/new" : "/vendor/products/new"}
+              className="vendor-ecom-panel-head__link"
+            >
+              Browse all
+            </Link>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="vendor-service-categories__empty">Loading categories…</p>
+        ) : addSide === "service" ? (
+          serviceCategories.length === 0 ? (
+            <p className="vendor-service-categories__empty">No service categories are available yet.</p>
+          ) : (
+            <div className="vendor-service-category-grid vendor-service-category-grid--compact">
+              {serviceCategories.map((category) => (
+                <Link
+                  key={category._id}
+                  to={`/vendor/venues/new?category=${encodeURIComponent(category._id)}`}
+                  className="vendor-service-category-card vendor-service-category-card--compact"
+                  title={category.name}
+                >
+                  <span className="vendor-service-category-card__image">
+                    <AppImage src={category.image} alt="" />
+                  </span>
+                  <strong>{category.name}</strong>
+                  <span>Add service</span>
+                </Link>
+              ))}
+            </div>
+          )
+        ) : shopCategories.length === 0 ? (
+          <p className="vendor-service-categories__empty">No shop categories available yet.</p>
+        ) : (
+          <div className="vendor-service-category-grid vendor-service-category-grid--compact">
+            {shopCategories.map((category) => (
+              <Link
+                key={category._id}
+                to={`/vendor/products/new?category=${encodeURIComponent(category._id)}`}
+                className="vendor-service-category-card vendor-service-category-card--compact"
+                title={category.name}
+              >
+                <span className="vendor-service-category-card__image">
+                  <AppImage src={category.image} alt="" />
+                </span>
+                <strong>{category.name}</strong>
+                <span>Add product</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="vendor-dash-panel vendor-dash-stats-panel" aria-label="Summary statistics">
+        <div className="vendor-ecom-panel-head vendor-dash-panel-head--toggle">
+          <div>
+            <h2 className="vendor-dash-panel__title">
+              {statsSide === "service" ? "Service overview" : "Shop overview"}
+            </h2>
+            <p className="vendor-dash-stats-panel__hint">
+              {statsSide === "service"
+                ? "Booking counts for your services."
+                : "Order and product counts for your shop."}
+            </p>
+          </div>
+          <DashboardSegmentToggle
+            value={statsSide}
+            onChange={setStatsSide}
+            ariaLabel="Switch between service and shop statistics"
+          />
+        </div>
+        <div className="vendor-dash-stats vendor-dash-stats--panel">
+          {visibleStatCards.map((card) => (
+            <Link
+              key={`${card.group}-${card.key}`}
+              to={card.to}
+              className={`vendor-dash-stat vendor-dash-stat--${card.tone}`}
+              aria-label={`${card.label}: ${loading ? "loading" : card.value}`}
+            >
+              <div className="vendor-dash-stat__icon">
+                {card.group === "service" ? <ServiceStatIcon name={card.icon} /> : <EcomStatIcon name={card.icon} />}
+              </div>
+              <div className="vendor-dash-stat__body">
+                <div className="vendor-dash-stat__value">{loading ? "—" : card.value}</div>
+                <div className="vendor-dash-stat__label">{card.label}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <section className="vendor-dash-panel vendor-dash-panel--toggle">
         <div className="vendor-ecom-panel-head vendor-dash-panel-head--toggle">
@@ -405,78 +505,6 @@ export function CombinedDashboard() {
             </table>
           )}
         </div>
-      </section>
-
-      <section className="vendor-dash-panel vendor-service-categories vendor-service-categories--compact vendor-dash-panel--toggle">
-        <div className="vendor-service-categories__head vendor-dash-panel-head--toggle">
-          <div>
-            <h2 className="vendor-dash-panel__title">
-              {addSide === "service" ? "Add a service" : "Add a product"}
-            </h2>
-            <p>
-              {addSide === "service"
-                ? "Pick a category to add a service quickly."
-                : "Pick a category to list a new product quickly."}
-            </p>
-          </div>
-          <div className="vendor-dash-panel-head__actions">
-            <DashboardSegmentToggle
-              value={addSide}
-              onChange={setAddSide}
-              ariaLabel="Switch between service and product categories"
-            />
-            <Link
-              to={addSide === "service" ? "/vendor/venues/new" : "/vendor/products/new"}
-              className="vendor-ecom-panel-head__link"
-            >
-              Browse all
-            </Link>
-          </div>
-        </div>
-
-        {loading ? (
-          <p className="vendor-service-categories__empty">Loading categories…</p>
-        ) : addSide === "service" ? (
-          serviceCategories.length === 0 ? (
-            <p className="vendor-service-categories__empty">No service categories are available yet.</p>
-          ) : (
-            <div className="vendor-service-category-grid vendor-service-category-grid--compact">
-              {serviceCategories.map((category) => (
-                <Link
-                  key={category._id}
-                  to={`/vendor/venues/new?category=${encodeURIComponent(category._id)}`}
-                  className="vendor-service-category-card vendor-service-category-card--compact"
-                  title={category.name}
-                >
-                  <span className="vendor-service-category-card__image">
-                    <AppImage src={category.image} alt="" />
-                  </span>
-                  <strong>{category.name}</strong>
-                  <span>Add service</span>
-                </Link>
-              ))}
-            </div>
-          )
-        ) : shopCategories.length === 0 ? (
-          <p className="vendor-service-categories__empty">No shop categories available yet.</p>
-        ) : (
-          <div className="vendor-service-category-grid vendor-service-category-grid--compact">
-            {shopCategories.map((category) => (
-              <Link
-                key={category._id}
-                to={`/vendor/products/new?category=${encodeURIComponent(category._id)}`}
-                className="vendor-service-category-card vendor-service-category-card--compact"
-                title={category.name}
-              >
-                <span className="vendor-service-category-card__image">
-                  <AppImage src={category.image} alt="" />
-                </span>
-                <strong>{category.name}</strong>
-                <span>Add product</span>
-              </Link>
-            ))}
-          </div>
-        )}
       </section>
     </div>
   );

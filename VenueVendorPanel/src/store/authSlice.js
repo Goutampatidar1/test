@@ -101,15 +101,39 @@ const authSlice = createSlice({
   reducers: {
     setCredentials(state, action) {
       const payload = action.payload || {};
-      state.token = payload.token ?? null;
-      state.refreshToken = payload.refreshToken ?? null;
-      state.user = payload.user ?? null;
-      state.panelMode = normalizePanelMode(payload.panelMode);
-      state.capabilities = Array.isArray(payload.capabilities)
-        ? payload.capabilities
-        : state.capabilities;
-      state.vendorPanelType = payload.vendorPanelType ?? state.vendorPanelType;
-      state.accounts = payload.accounts && typeof payload.accounts === "object" ? payload.accounts : state.accounts;
+      const accounts =
+        payload.accounts && typeof payload.accounts === "object" ? payload.accounts : state.accounts || {};
+
+      const capabilities = Array.isArray(payload.capabilities)
+        ? payload.capabilities.filter((cap) => cap === "ecom" || cap === "service")
+        : [];
+      const derivedCapabilities = capabilities.length
+        ? capabilities
+        : ["ecom", "service"].filter((cap) => accounts[cap]?.token);
+
+      let panelMode = normalizePanelMode(payload.panelMode);
+      const vendorPanelType =
+        payload.vendorPanelType ||
+        (derivedCapabilities.length > 1 ? "both" : panelMode || state.vendorPanelType || "service");
+
+      if (vendorPanelType === "both" && derivedCapabilities.includes("ecom") && derivedCapabilities.includes("service")) {
+        panelMode = "both";
+      } else if (derivedCapabilities.length === 1) {
+        panelMode = derivedCapabilities[0];
+      }
+
+      const primary =
+        (panelMode === "both" ? accounts.service || accounts.ecom : accounts[panelMode]) ||
+        accounts.service ||
+        accounts.ecom;
+
+      state.token = payload.token ?? primary?.token ?? state.token ?? null;
+      state.refreshToken = payload.refreshToken ?? primary?.refreshToken ?? state.refreshToken ?? null;
+      state.user = payload.user ?? primary?.user ?? state.user ?? null;
+      state.panelMode = panelMode;
+      state.capabilities = derivedCapabilities.length ? derivedCapabilities : state.capabilities;
+      state.vendorPanelType = vendorPanelType;
+      state.accounts = accounts;
       persist(state);
     },
     setUser(state, action) {

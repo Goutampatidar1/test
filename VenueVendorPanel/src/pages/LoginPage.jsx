@@ -10,6 +10,7 @@ import { VENDOR_REGISTER_PATH } from "../constants/authRoutes.js";
 
 import { isValidIndianMobile, sanitizePhoneInput } from "../utils/validation.js";
 import { reportFormValidity } from "../utils/formValidation.js";
+import { normalizePanelAuthSession } from "../utils/panelAuthSession.js";
 
 const OTP_LENGTH = 4;
 const DEFAULT_RESEND_COOLDOWN = 30;
@@ -214,17 +215,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       const data = await vendorPanelVerifyOtp({ phone, otp: otpValue });
-      dispatch(
-        setCredentials({
-          token: data.token,
-          refreshToken: data.refreshToken,
-          user: data.user,
-          panelMode: data.panelMode,
-          capabilities: data.capabilities,
-          vendorPanelType: data.vendorPanelType,
-          accounts: data.accounts,
-        }),
-      );
+      dispatch(setCredentials(normalizePanelAuthSession(data)));
       await Swal.fire({
         icon: "success",
         title: "Signed in",

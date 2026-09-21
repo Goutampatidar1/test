@@ -146,9 +146,12 @@ async function createEcomAccount(req, phoneNorm, body, vendorPanelType) {
 
   if (!name) throw new AppError("Full name is required", 400);
   if (!businessName) throw new AppError("Shop name is required", 400);
-  if (!categoryRaw) throw new AppError("Shop category is required", 400);
-
-  await assertActiveEcomCategory(categoryRaw);
+  if (vendorPanelType !== "both") {
+    if (!categoryRaw) throw new AppError("Shop category is required", 400);
+    await assertActiveEcomCategory(categoryRaw);
+  } else if (categoryRaw) {
+    await assertActiveEcomCategory(categoryRaw);
+  }
 
   const uploads = collectEcomUploads(req, body);
   if (!uploads.shopImages.length) {
@@ -175,7 +178,7 @@ async function createEcomAccount(req, phoneNorm, body, vendorPanelType) {
     ...(emailNorm ? { email: emailNorm } : {}),
     phone: phoneNorm,
     businessName,
-    category: categoryRaw,
+    ...(categoryRaw ? { category: categoryRaw } : {}),
     businessPhone: body.businessPhone ? normalizePhone(body.businessPhone) : phoneNorm,
     businessAddress: normalizeOptional(body.businessAddress),
     aadhaarCardFront: uploads.aadhaarCardFront,

@@ -157,8 +157,11 @@ export function ShopImagesPanel({ user }) {
         <div>
           <h2 className="vendor-dash-panel__title">Shop Images</h2>
           <p className="vendor-shop-images__hint">
-            Add a shop logo and gallery photos so customers recognize your store. Up to {MAX_SHOP_IMAGES} gallery
-            images.
+            Add a shop logo and gallery photos so customers recognize your store.
+          </p>
+          <p className="vendor-shop-images__status">
+            {totalCount}/{MAX_SHOP_IMAGES} gallery images
+            {logoPreview ? " · Logo added" : " · Logo optional"}
           </p>
         </div>
       </div>
@@ -228,10 +231,6 @@ export function ShopImagesPanel({ user }) {
       ) : null}
 
       <div className="vendor-shop-images__actions">
-        <span className="vendor-shop-images__count">
-          {totalCount}/{MAX_SHOP_IMAGES} gallery images
-          {logoPreview ? " · Logo added" : " · Logo optional"}
-        </span>
         <button type="button" className="vendor-btn vendor-btn--primary" disabled={!hasChanges || saving} onClick={onSave}>
           {saving ? "Saving…" : "Save shop images"}
         </button>
