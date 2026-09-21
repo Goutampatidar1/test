@@ -1,6 +1,7 @@
 const AppError = require("./AppError");
 const { assertObjectId } = require("./assertObjectId");
 const { toAbsoluteUploadUrl } = require("./mediaUrl");
+const { getVenueDisplayPrice } = require("./venuePricing");
 const {
   pathForField,
   assertVideoUpload,
@@ -59,7 +60,7 @@ function toVenueVendorVideoFeedCard(doc, venue, baseUrl) {
       _id: venue._id,
       name: venue.name,
       thumbnail: toAbsoluteUploadUrl(venue.thumbnail, baseUrl),
-      dayPrice: venue.dayPrice ?? venue.basePrice ?? 0,
+      dayPrice: getVenueDisplayPrice(venue).amount,
       city: venue.city || "",
       state: venue.state || "",
     },
@@ -127,7 +128,7 @@ function toPublicVenueVideoFeedItem(
       _id: venue._id,
       name: venue.name,
       thumbnail: toAbsoluteUploadUrl(venue.thumbnail, baseUrl),
-      dayPrice: venue.dayPrice ?? venue.basePrice ?? 0,
+      dayPrice: getVenueDisplayPrice(venue).amount,
       city: venue.city || "",
       state: venue.state || "",
       address: venue.address || "",

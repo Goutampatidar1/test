@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
 import { vendorDeleteVenue, vendorListVenues, vendorUpdateVenueStatus } from "../../api/vendorVenues.js";
 import { VendorSearchField } from "../../components/VendorSearchField.jsx";
-import { formatVenuePrice, mapVenuesForList } from "../../utils/venueListMapper.js";
+import { mapVenuesForList } from "../../utils/venueListMapper.js";
 import { AppImage } from "../../components/AppImage.jsx";
 
 function VenueToggle({ checked, onChange, label, disabled }) {
@@ -54,7 +54,7 @@ function VenueCard({ venue, onToggle, onDelete }) {
             </svg>
             {venue.location}
           </p>
-          <p className="vendor-venue-card__price">{formatVenuePrice(venue.pricePerDay)}</p>
+          <p className="vendor-venue-card__price">{venue.priceLabel}</p>
           <div className="vendor-venue-card__badges">
             <span className={`vendor-venue-status vendor-venue-status--${statusClass}`}>{statusLabel}</span>
             {venue.adminApproved ? (

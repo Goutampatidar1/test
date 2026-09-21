@@ -1,8 +1,7 @@
 import { mediaUrl } from "../media.js";
+import { formatVenuePrice, resolveVenuePrice } from "./venuePricing.js";
 
-export function formatVenuePrice(amount) {
-  return `₹${Number(amount || 0).toLocaleString("en-IN")}/day`;
-}
+export { formatVenuePrice } from "./venuePricing.js";
 
 export function formatInr(amount) {
   return `₹${Number(amount || 0).toLocaleString("en-IN")}`;
@@ -15,6 +14,7 @@ export function mapVenueForList(v, index = 0) {
   const location = [v.city, v.state].filter((s) => String(s || "").trim()).join(", ") || v.address || "—";
   const rawId = v?._id ?? v?.id;
   const id = rawId != null && String(rawId).trim() !== "" ? String(rawId) : `venue-${index}`;
+  const resolved = resolveVenuePrice(v);
 
   return {
     id,
@@ -22,7 +22,9 @@ export function mapVenueForList(v, index = 0) {
     category: categoryName,
     location,
     capacity: Number(v.capacity) || 0,
-    pricePerDay: Number(v.dayPrice ?? v.basePrice) || 0,
+    pricePerDay: resolved.amount,
+    priceUnit: resolved.unit,
+    priceLabel: formatVenuePrice(resolved.amount, resolved.unit),
     hourlyPrice: Number(v.hourlyPrice) || 0,
     adminApproved: Boolean(v.adminApproved),
     status: v.status === "active" ? "available" : "inactive",

@@ -1,4 +1,5 @@
 const VenueVendor = require("../models/entity/venueVendor");
+const { getVenueDisplayPrice } = require("./venuePricing");
 
 /** Venues shown on the user app must have enough data for a useful listing card. */
 function activePublicVenueListingFilter(extra = {}) {
@@ -24,10 +25,7 @@ function isVenueListable(doc) {
   if (!String(doc.address || "").trim()) return false;
   if (!doc.category) return false;
   if (!Array.isArray(doc.amenities) || doc.amenities.length === 0) return false;
-  const dayPrice = Number(doc.dayPrice ?? doc.basePrice) || 0;
-  const hourlyPrice = Number(doc.hourlyPrice) || 0;
-  const basePrice = Number(doc.basePrice) || 0;
-  return dayPrice > 0 || hourlyPrice > 0 || basePrice > 0;
+  return getVenueDisplayPrice(doc).amount > 0;
 }
 
 /** Venue-vendor accounts that are closed → hide their venues from users. */

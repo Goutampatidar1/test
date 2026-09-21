@@ -11,6 +11,7 @@ import Swal from "sweetalert2";
 import { adminGetVenueById, adminUpdateVenue } from "../../api/adminVenues.js";
 import { mediaUrl } from "../../media.js";
 import { logout } from "../../store/authSlice.js";
+import { formatVenuePrice, formatVenueToken, resolveVenuePrice } from "../../utils/venuePricing.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 
 function normalizeVenuePayload(data) {
@@ -23,13 +24,6 @@ function titleCase(value) {
   const text = String(value || "").trim();
   if (!text) return "—";
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
-}
-
-function formatNumber(value) {
-  const n = Number(value);
-  if (Number.isNaN(n)) return "—";
-  if (n % 1 === 0) return n.toLocaleString();
-  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 function ViewRow({ label, value }) {
@@ -201,6 +195,9 @@ export function VenueView() {
   }
 
   const locationValue = [venue.city, venue.state].filter(Boolean).join(", ");
+  const resolvedPrice = resolveVenuePrice(venue);
+  const priceDisplay = formatVenuePrice(resolvedPrice.amount, resolvedPrice.unit);
+  const tokenDisplay = formatVenueToken(venue);
   const serviceVendorApproved =
     venue.role !== "VenueVendor" ||
     venue.addedById?.approvalStatus === "approved";
@@ -274,14 +271,14 @@ export function VenueView() {
             </div>
             <div className="col-sm-6 col-lg-3">
               <div className="venue-view__metric">
-                <span className="venue-view__metric-label">Day price</span>
-                <strong>₹ {formatNumber(venue.dayPrice ?? venue.basePrice)}</strong>
+                <span className="venue-view__metric-label">{resolvedPrice.label}</span>
+                <strong>{priceDisplay}</strong>
               </div>
             </div>
             <div className="col-sm-6 col-lg-3">
               <div className="venue-view__metric">
                 <span className="venue-view__metric-label">Token amount</span>
-                <strong>{formatNumber(venue.tokenAmountPercentage)}%</strong>
+                <strong>{tokenDisplay}</strong>
               </div>
             </div>
             <div className="col-sm-6 col-lg-3">
@@ -305,8 +302,8 @@ export function VenueView() {
                     <ViewRow label="Category" value={venue.category?.name || "—"} />
                     <ViewRow label="Sub-category" value={venue.subCategory?.name || "—"} />
                     <ViewRow label="Added by" value={venue.addedById?.name || venue.addedById?.businessName || "—"} />
-                    <ViewRow label="Day price" value={formatNumber(venue.dayPrice ?? venue.basePrice)} />
-                    <ViewRow label="Token amount (%)" value={formatNumber(venue.tokenAmountPercentage)} />
+                    <ViewRow label={resolvedPrice.label} value={priceDisplay} />
+                    <ViewRow label="Token amount" value={tokenDisplay} />
                     <ViewRow label="Address" value={venue.address || "—"} />
                     <ViewRow label="City / Sub-district" value={locationValue || "—"} />
                   </div>
@@ -432,12 +429,12 @@ export function VenueView() {
                     <strong>{venue.adminApproved ? "Approved" : "Pending review"}</strong>
                   </div>
                   <div className="venue-view__info-chip">
-                    <span>Day price</span>
-                    <strong>₹ {formatNumber(venue.dayPrice ?? venue.basePrice)}</strong>
+                    <span>{resolvedPrice.label}</span>
+                    <strong>{priceDisplay}</strong>
                   </div>
                   <div className="venue-view__info-chip">
                     <span>Token amount</span>
-                    <strong>{formatNumber(venue.tokenAmountPercentage)}%</strong>
+                    <strong>{tokenDisplay}</strong>
                   </div>
                 </div>
               </div>

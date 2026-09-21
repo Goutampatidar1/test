@@ -1,6 +1,7 @@
 const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { buildSimpleVariantView, formatSimpleCombination } = require("./productVariants");
 const { formatRatingValue } = require("./productRating");
+const { getVenueDisplayPrice, positiveAmount } = require("./venuePricing");
 
 /**
  * Shapes documents for mobile / storefront clients.
@@ -212,9 +213,10 @@ function toPublicVenueSummary(doc, baseUrl) {
     name: doc.name,
     shortDescription: doc.shortDescription ?? "",
     thumbnail: toAbsoluteUploadUrl(doc.thumbnail, baseUrl),
-    basePrice: doc.basePrice ?? 0,
-    dayPrice: doc.dayPrice ?? doc.basePrice ?? 0,
-    hourlyPrice: doc.hourlyPrice ?? 0,
+    basePrice: positiveAmount(doc.basePrice, doc.dayPrice),
+    dayPrice: getVenueDisplayPrice(doc).amount,
+    hourlyPrice: positiveAmount(doc.hourlyPrice),
+    priceType: doc.priceType || "full",
     capacity: doc.capacity ?? 0,
     carpetArea: doc.carpetArea ?? 0,
     location: formatVenueLocation(doc),

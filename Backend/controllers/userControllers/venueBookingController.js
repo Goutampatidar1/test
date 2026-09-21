@@ -25,6 +25,7 @@ const {
   getVenueHourlyPrice,
   parseBookingCustomer,
 } = require("../../utils/venueBooking");
+const { getVenueDisplayPrice } = require("../../utils/venuePricing");
 const {
   buildBookingHistoryList,
   paginateBookings,
@@ -72,20 +73,26 @@ function formatVenueLocation(venue) {
 function toBookingVenueCard(venue, baseUrl) {
   const dayPrice = getVenueDayPrice(venue);
   const hourlyPrice = getVenueHourlyPrice(venue);
+  const display = getVenueDisplayPrice(venue);
+  const amount = display.amount;
+  const period = display.unit === "hour" ? "hour" : display.unit === "full" ? "booking" : "day";
+  const suffix = display.unit === "hour" ? "/hr" : display.unit === "day" ? "/day" : "";
 
   return {
     _id: venue._id,
     name: venue.name,
     thumbnail: toAbsoluteUploadUrl(venue.thumbnail, baseUrl),
     location: formatVenueLocation(venue),
-    basePrice: dayPrice,
-    dayPrice,
+    basePrice: amount,
+    dayPrice: dayPrice || amount,
     hourlyPrice,
+    priceType: display.priceType,
     price: {
-      amount: dayPrice,
+      amount,
       currency: "INR",
       symbol: "₹",
-      period: "day",
+      period,
+      label: amount > 0 ? `₹${amount}${suffix}` : null,
     },
     hourlyRate: {
       amount: hourlyPrice,
@@ -95,12 +102,13 @@ function toBookingVenueCard(venue, baseUrl) {
       label: hourlyPrice > 0 ? `₹${hourlyPrice}/hr` : null,
     },
     dayRate: {
-      amount: dayPrice,
+      amount: dayPrice || amount,
       currency: "INR",
       symbol: "₹",
       period: "day",
-      label: dayPrice > 0 ? `₹${dayPrice}/day` : null,
+      label: (dayPrice || amount) > 0 ? `₹${dayPrice || amount}${display.unit === "full" ? "" : "/day"}` : null,
     },
+    tokenAmount: Number(venue.tokenAmount) || 0,
     tokenAmountPercentage: Number(venue.tokenAmountPercentage) || 0,
     rating: null,
   };

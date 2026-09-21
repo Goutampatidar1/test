@@ -5,7 +5,7 @@ import { vendorGetVenueById } from "../../api/vendorVenues.js";
 import { mediaUrl } from "../../media.js";
 import { AppImage } from "../../components/AppImage.jsx";
 import { logout } from "../../store/authSlice.js";
-import { formatVenuePrice } from "../../utils/venueListMapper.js";
+import { formatVenuePrice, formatVenueToken, resolveVenuePrice } from "../../utils/venuePricing.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 
 function DetailRow({ label, value }) {
@@ -59,7 +59,7 @@ export function ViewVenuePage() {
   }
   if (!venue) return <p className="vendor-venues-empty">Loading service…</p>;
 
-  const dayPrice = Number(venue.dayPrice ?? venue.basePrice) || 0;
+  const resolvedPrice = resolveVenuePrice(venue);
   const location = [venue.city, venue.state].filter(Boolean).join(", ") || venue.address || "—";
   const gallery = [
     ...(venue.thumbnail ? [mediaUrl(venue.thumbnail)] : []),
@@ -129,11 +129,11 @@ export function ViewVenuePage() {
             </div>
             <div className="col-lg-6">
               <h2 className="h6 text-secondary text-uppercase border-bottom pb-2">Pricing</h2>
-              <DetailRow label="Day price" value={formatVenuePrice(dayPrice)} />
               <DetailRow
-                label="Token amount"
-                value={`${Number(venue.tokenAmountPercentage) || 0}%`}
+                label={resolvedPrice.label}
+                value={formatVenuePrice(resolvedPrice.amount, resolvedPrice.unit)}
               />
+              <DetailRow label="Token amount" value={formatVenueToken(venue)} />
               <h2 className="h6 text-secondary text-uppercase border-bottom pb-2 mt-4">Location</h2>
               <DetailRow label="Address" value={venue.address} />
               <DetailRow label="City / Sub-district" value={location} />

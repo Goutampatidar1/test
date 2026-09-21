@@ -1,6 +1,7 @@
 const VenueOrder = require("../models/other/venueOrder");
 const AppError = require("./AppError");
 const { parseDateOnly, formatDateOnly } = require("./dateOnly");
+const { getVenueDayPrice, getVenueHourlyPrice } = require("./venuePricing");
 
 const MAX_BOOKING_DAYS = 60;
 const BLOCKED_ORDER_STATUSES = ["cancelled", "refunded"];
@@ -233,16 +234,6 @@ function generateVenueOrderNumber() {
   const ts = Date.now().toString(36).toUpperCase();
   const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `VO-${ts}-${rnd}`;
-}
-
-function getVenueDayPrice(venue) {
-  return Number(venue.dayPrice ?? venue.basePrice) || 0;
-}
-
-function getVenueHourlyPrice(venue) {
-  const hourly = Number(venue.hourlyPrice);
-  if (hourly > 0) return hourly;
-  return 0;
 }
 
 function assertHourlyBookingAllowed(venue) {

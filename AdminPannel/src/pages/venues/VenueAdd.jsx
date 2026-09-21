@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import { adminCreateVenue, adminUpdateVenue } from "../../api/adminVenues.js";
+import { positiveAmount } from "../../utils/venuePricing.js";
 import { adminListCategories } from "../../api/adminCategories.js";
 import { adminListSubCategories } from "../../api/adminSubCategories.js";
 import { adminListAmenities } from "../../api/adminAmenities.js";
@@ -58,8 +59,12 @@ function venueToFormValues(venue) {
     ...venue,
     category: venue.category?._id || venue.category || "",
     subCategory: venue.subCategory?._id || venue.subCategory || "",
-    dayPrice: venue.dayPrice ?? venue.basePrice ?? "",
+    dayPrice: (() => {
+      const amount = positiveAmount(venue.dayPrice, venue.basePrice);
+      return amount > 0 ? amount : "";
+    })(),
     tokenAmountPercentage: venue.tokenAmountPercentage ?? "",
+    tokenAmount: venue.tokenAmount ?? "",
     amenities: Array.isArray(venue.amenities)
       ? venue.amenities.map((item) => (typeof item === "string" ? item : item?._id || item?.id || "")).filter(Boolean)
       : [],
