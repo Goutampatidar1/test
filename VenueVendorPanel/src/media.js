@@ -1,0 +1,59 @@
+import { getApiBase } from "./api.js";
+
+function isDevHost(hostname) {
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
+
+function toAbsolute(urlLike) {
+  try {
+    return new URL(urlLike, typeof window !== "undefined" ? window.location.origin : getApiBase());
+  } catch {
+    return null;
+  }
+}
+
+/** Same-origin on live (iPhone-safe). Keep :5001 only on local/LAN. */
+export function mediaUrl(path) {
+  if (!path) return "";
+  const raw = String(path).trim();
+  if (!raw) return "";
+  if (raw.startsWith("blob:") || raw.startsWith("data:")) return raw;
+
+  const absolute = /^https?:\/\//i.test(raw)
+    ? toAbsolute(raw)
+    : toAbsolute(`${getApiBase().replace(/\/$/, "")}${raw.startsWith("/") ? raw : `/${raw}`}`);
+
+  if (!absolute) return raw;
+
+  if (!isDevHost(absolute.hostname) && (absolute.port === "5001" || absolute.port === "5000")) {
+    absolute.port = "";
+  }
+  return absolute.toString();
+}
+
+/** Node static port — used when the public /uploads path is missing on Apache. */
+export function mediaUrlOnNodePort(path) {
+  const primary = mediaUrl(path);
+  const parsed = toAbsolute(primary || path);
+  if (!parsed || !/^https?:$/i.test(parsed.protocol)) return "";
+  if (parsed.port === "5001") return "";
+  parsed.port = "5001";
+  return parsed.toString();
+}
+
+/**
+ * Open uploads in a new tab via Node :5001. Otherwise Apache serves the SPA 404.
+ */
+export function mediaOpenUrl(path) {
+  if (!path) return "";
+  const raw = String(path).trim();
+  if (!raw || raw.startsWith("blob:") || raw.startsWith("data:")) {
+    return mediaUrl(raw);
+  }
+  return mediaUrlOnNodePort(raw) || mediaUrl(raw);
+}
