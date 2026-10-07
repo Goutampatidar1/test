@@ -61,6 +61,9 @@ import { OrderAndBookingPage } from "../pages/orderAndBooking/OrderAndBookingPag
 import { OrderAndBookingTransactionPage } from "../pages/orderAndBookingTransaction/OrderAndBookingTransactionPage.jsx";
 import { PaymentTransactionDetailPage } from "../pages/orderAndBookingTransaction/PaymentTransactionDetailPage.jsx";
 import { VideoFeedPage } from "../pages/videoFeeds/VideoFeedPage.jsx";
+import { HotDealsPage } from "../pages/hotDeals/HotDealsPage.jsx";
+import { VenueEnquiryPage } from "../pages/venues/VenueEnquiryPage.jsx";
+import { FeatureSettingsPage } from "../pages/setting/FeatureSettingsPage.jsx";
 
 export const adminRouteTree = (
   <Route path="/admin" element={<AdminLayout />}>
@@ -68,6 +71,7 @@ export const adminRouteTree = (
     <Route path="dashboard" element={<DashboardPage />} />
     <Route path="profile" element={<AdminProfile />} />
     <Route path="settings" element={<BusinessSetting />} />
+    <Route path="feature-settings" element={<FeatureSettingsPage />} />
 
     <Route path="static-pages" element={<Outlet />}>
       <Route index element={<StaticPageList />} />
@@ -146,6 +150,10 @@ export const adminRouteTree = (
       <Route path=":kind/:orderId" element={<OrderAndBookingDetailPage />} />
     </Route>
     <Route path="banners" element={<BannerPage />} />
+    <Route path="hot-deals" element={<HotDealsPage />} />
+    <Route path="hot-deals/queue" element={<HotDealsPage initialTab="queue" />} />
+    <Route path="venue-enquiries" element={<VenueEnquiryPage />} />
+    <Route path="enquiries/:id" element={<Navigate to="/admin/venue-enquiries" replace />} />
     <Route path="video-feeds" element={<VideoFeedPage />} />
     <Route path="plans" element={<VendorPlanPage />} />
     <Route path="promotion-dashboard" element={<PromotionDashboardPage />} />

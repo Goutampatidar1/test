@@ -4,7 +4,32 @@ function bannersBase() {
   return "/admin/banners";
 }
 
+const CONTENT_KEYS = [
+  "subtitle",
+  "description",
+  "ctaText",
+  "badge",
+  "bgColor",
+  "textColor",
+  "displayOrder",
+  "showTimer",
+  "timerLabel",
+  "timerEndsAt",
+];
+
+function contentPayload(fields) {
+  const out = {};
+  for (const key of CONTENT_KEYS) {
+    if (fields[key] === undefined) continue;
+    if (key === "showTimer") out[key] = Boolean(fields[key]);
+    else if (key === "displayOrder") out[key] = Number(fields[key]) || 0;
+    else out[key] = String(fields[key] ?? "").trim();
+  }
+  return out;
+}
+
 function appendBannerFields(fd, fields, { includeAll = false } = {}) {
+  Object.entries(contentPayload(fields)).forEach(([key, value]) => fd.append(key, String(value)));
   const set = (key, value) => {
     if (includeAll || fields[key] !== undefined) {
       fd.append(key, String(value ?? ""));
@@ -85,6 +110,7 @@ export async function adminCreateBanner(token, fields, file) {
         related: String(fields.related ?? "none").trim(),
         relatedId: fields.relatedId !== undefined ? String(fields.relatedId ?? "") : "",
         cities: Array.isArray(fields.cities) ? fields.cities.map((city) => String(city).trim()).filter(Boolean) : [],
+        ...contentPayload(fields),
       },
       { headers: authHeader(token) }
     );
@@ -107,7 +133,7 @@ export async function adminUpdateBanner(token, id, fields, file) {
     }
   }
 
-  const payload = {};
+  const payload = contentPayload(fields);
   if (fields.targetType !== undefined) payload.targetType = String(fields.targetType).trim();
   if (fields.mode !== undefined) payload.mode = String(fields.mode).trim();
   if (fields.title !== undefined) payload.title = String(fields.title).trim();

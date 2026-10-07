@@ -25,6 +25,7 @@ export const navItems = [
     children: [
       { to: "venue-vendors", label: "Service Vendor Management", icon: "map" },
       { to: "venues", label: "Services", icon: "map-pin" },
+      { to: "venue-enquiries", label: "Service Enquiries", icon: "list" },
       { to: "amenities", label: "Amenities", icon: "sliders" },
     ],
   },
@@ -57,6 +58,7 @@ export const navItems = [
   // { to: "commission", label: "Commission", icon: "percent" },
   { to: "payments", label: "Payment Management", icon: "credit" },
   { to: "banners", label: "Banner Management", icon: "image" },
+  { to: "hot-deals", label: "Hot Deals", icon: "percent" },
   { to: "video-feeds", label: "Reels / Video Feeds", icon: "video" },
   { to: "plans", label: "Vendor Plans", icon: "tag" },
   { to: "faq", label: "FAQ", icon: "help" },
@@ -64,6 +66,7 @@ export const navItems = [
   { to: "notifications", label: "Notifications", icon: "bell" },
   { to: "static-pages", label: "Static Pages", icon: "file" },
   { to: "settings", label: "App Settings", icon: "gear" },
+  { to: "feature-settings", label: "App Feature Controls", icon: "sliders" },
   { to: "profile", label: "Admin Profile", icon: "profile" },
 ];
 

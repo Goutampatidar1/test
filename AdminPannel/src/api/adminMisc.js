@@ -37,6 +37,20 @@ export async function patchAppConfig(token, formData) {
   }
 }
 
+/** Returns `null` when no app configuration exists yet (it must be created in Business settings first). */
+export async function getFeatureSettings(token) {
+  const body = await getAppConfig(token);
+  const doc = Array.isArray(body?.data) ? body.data[0] : body?.data;
+  return doc ? doc.feature_settings ?? {} : null;
+}
+
+/** Partial update: the server merges with the stored settings and fills defaults. */
+export async function patchFeatureSettings(token, partial) {
+  const body = await patchAppConfig(token, { feature_settings: partial });
+  const doc = Array.isArray(body?.data) ? body.data[0] : body?.data;
+  return doc?.feature_settings ?? null;
+}
+
 export async function listPages(token, params = {}) {
   try {
     const { data: body } = await api.get(`${miscBase()}/pages`, {

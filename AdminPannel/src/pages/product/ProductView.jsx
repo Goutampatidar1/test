@@ -88,6 +88,40 @@ function isProductApproved(product) {
   return product?.role === "Admin" || Boolean(product?.adminApproved);
 }
 
+const HOT_DEAL_PILL = {
+  pending: "pill pill--vendor-pending",
+  approved: "pill pill--vendor-approved",
+  rejected: "pill pill--blocked",
+};
+
+function discountSummary(product) {
+  const price = Number(product?.price) || 0;
+  const value = Number(product?.discountValue) || 0;
+  if (!price || !value) return "No discount";
+  const off = product.discountType === "percentage" ? (price * Math.min(value, 100)) / 100 : Math.min(value, price);
+  const percent = Math.round((off / price) * 100);
+  return `${percent}% off · sells at ₹${formatNumber(price - off)} (saves ₹${formatNumber(off)})`;
+}
+
+function hotDealSummary(hotDeal) {
+  if (!hotDeal?.optIn) return <span className="data-table__muted">Not requested by vendor</span>;
+  const status = hotDeal.status || "pending";
+  return (
+    <span>
+      <span className={HOT_DEAL_PILL[status] || "pill pill--inactive"}>{titleCase(status)}</span>
+      {hotDeal.requestedAt ? <span className="data-table__muted"> · requested {formatDateTime(hotDeal.requestedAt)}</span> : null}
+      {status === "rejected" && hotDeal.rejectionReason ? (
+        <span className="d-block small text-danger">Reason: {hotDeal.rejectionReason}</span>
+      ) : null}
+      {status === "pending" ? (
+        <Link to="/admin/hot-deals/queue" className="d-block small">
+          Review in Hot Deals queue
+        </Link>
+      ) : null}
+    </span>
+  );
+}
+
 function formatNumber(value) {
   const n = Number(value);
   if (Number.isNaN(n)) return "—";
@@ -555,6 +589,9 @@ export function ProductView() {
                   label="Discount"
                   value={`${titleCase(product.discountType)} (${formatTypedAmount(product.discountType, product.discountValue)})`}
                 />
+                <ViewRow label="Customer price" value={discountSummary(product)} />
+                <ViewRow label="Hot deal" value={hotDealSummary(product.hotDeal)} />
+                <ViewRow label="Vendor profile score" value={`${formatNumber(product.vendorProfileScore ?? 0)}%`} />
                 <ViewRow label="Combinations" value={comboCount} />
               </div>
             </div>
