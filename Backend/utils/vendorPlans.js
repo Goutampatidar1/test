@@ -4,6 +4,7 @@ const PLAN_TYPE_LABELS = {
   banner: "Banner",
   get_verified: "Get Verified",
   product_presence_first: "Product Presence First",
+  show_phone: "Show Number",
 };
 
 /** Calendar-day inclusive window (admin date inputs are usually midnight UTC). */
@@ -39,6 +40,12 @@ function toPublicVendorPlan(doc, now = new Date()) {
     endDate: doc.endDate ?? null,
     presenceTopLimit: Number(doc.presenceTopLimit) || 100,
     presenceMode: doc.presenceMode || "random",
+    durationDays: Number(doc.durationDays) || 0,
+    description: doc.description || "",
+    benefits: Array.isArray(doc.benefits) ? doc.benefits : [],
+    badge: doc.badge || "",
+    isRecommended: Boolean(doc.isRecommended),
+    sortOrder: Number(doc.sortOrder) || 0,
     status: doc.status,
     /** true when today is within startDate–endDate (inclusive) */
     isAvailable: inRange,
@@ -63,7 +70,7 @@ async function listActiveVendorPlans({ vendorType = "ecom", availableOnly = fals
     filter.endDate = { $gte: startOfUtcDay(now) };
   }
 
-  const plans = await VendorPlan.find(filter).sort({ planType: 1, createdAt: -1 }).lean();
+  const plans = await VendorPlan.find(filter).sort({ planType: 1, sortOrder: 1, price: 1, createdAt: -1 }).lean();
   return plans.map((doc) => toPublicVendorPlan(doc, now)).filter(Boolean);
 }
 

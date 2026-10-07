@@ -5,7 +5,16 @@ const { optionalBannerFile } = require("../../middleware/authMultipart");
 
 const router = express.Router();
 
+const { makeRecommendationHandlers, makeDeviceTokenHandlers } = require("../../utils/vendorRecommendations");
+
+const recommendations = makeRecommendationHandlers("ecom");
+const deviceToken = makeDeviceTokenHandlers(() => require("../../models/entity/vendor"));
+
 router.use(protectVendor);
+router.get("/recommendations", recommendations.list);
+router.put("/device-token", deviceToken.set);
+router.post("/device-token", deviceToken.set);
+router.delete("/device-token", deviceToken.clear);
 router.get("/plans", planController.listPlans);
 router.get("/plans/subscriptions", planController.getSubscriptions);
 router.get("/plans/banner-subscription", planController.getBannerSubscription);

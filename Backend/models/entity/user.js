@@ -40,6 +40,9 @@ const userSchema = new mongoose.Schema({
 
     fcm_id: { type: String, default: null },
 
+    /** Personal switch for the video (reels) section; admin switch must also be on. */
+    videoEnabled: { type: Boolean, default: true },
+
     otp: String,
     otpExpire: Date,
     resetPasswordToken: String,

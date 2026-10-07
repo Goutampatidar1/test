@@ -16,6 +16,7 @@ router.get("/me", protectVenueVendor, authController.getMe);
 router.patch("/me", protectVenueVendor, optionalVenueVendorFiles, authController.updateMe);
 router.get("/shop-status", protectVenueVendor, authController.getShopStatus);
 router.patch("/shop-status", protectVenueVendor, authController.updateShopStatus);
+router.get("/profile-completion", protectVenueVendor, authController.getProfileCompletion);
 router.get("/phone-visibility", protectVenueVendor, authController.getPhoneVisibility);
 router.patch("/phone-visibility", protectVenueVendor, authController.updatePhoneVisibility);
 router.delete("/me", protectVenueVendor, authController.deleteMe);

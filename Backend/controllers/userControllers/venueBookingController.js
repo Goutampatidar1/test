@@ -26,6 +26,7 @@ const {
   parseBookingCustomer,
 } = require("../../utils/venueBooking");
 const { getVenueDisplayPrice } = require("../../utils/venuePricing");
+const { toVenuePriceBlock } = require("../../utils/venueDiscount");
 const {
   buildBookingHistoryList,
   paginateBookings,
@@ -59,6 +60,14 @@ const {
 } = require("../../utils/venueRating");
 const { formatRatingValue } = require("../../utils/productRating");
 const { activePublicVenueListingFilterOpen } = require("../../utils/publicVenueList");
+const VenueEnquiry = require("../../models/other/venueEnquiry");
+const { getFeatureSettings } = require("../../utils/appFeatureSettings");
+const { queueAppNotification } = require("../../utils/appNotify");
+const {
+  assertNoEnquiryHold,
+  bookingBodyFromEnquiry,
+  loadBookableEnquiry,
+} = require("../../utils/venueEnquiry");
 
 async function activePublicVenueFilter(extra = {}) {
   return activePublicVenueListingFilterOpen(extra);
@@ -111,6 +120,8 @@ function toBookingVenueCard(venue, baseUrl) {
     tokenAmount: Number(venue.tokenAmount) || 0,
     tokenAmountPercentage: Number(venue.tokenAmountPercentage) || 0,
     rating: null,
+    priceInfo: toVenuePriceBlock(venue),
+    discount: toVenuePriceBlock(venue).discount,
   };
 }
 
@@ -173,7 +184,7 @@ function availabilityInputFromRequest(req) {
 async function loadBookableVenue(venueId) {
   assertObjectId(venueId, "Invalid venue id");
   const venue = await Venue.findOne(await activePublicVenueFilter({ _id: venueId }))
-    .select("name thumbnail address city state basePrice dayPrice hourlyPrice priceType tokenAmount tokenAmountPercentage status adminApproved")
+    .select("name thumbnail address city state basePrice dayPrice hourlyPrice priceType tokenAmount tokenAmountPercentage status adminApproved role addedById discountType discountValue discountLabel discountStartsAt discountEndsAt")
     .lean();
   if (!venue) throw new AppError("Venue not found", 404);
   return venue;
@@ -284,31 +295,38 @@ exports.getBookingPreview = asyncHandler(async (req, res) => {
   sendSuccess(res, "Booking preview fetched", payload);
 });
 
-/** Book Now — create venue order */
-exports.createBooking = asyncHandler(async (req, res) => {
-  const venue = await loadBookableVenue(req.params.venueId);
-  const bookingRequest = parseBookingRequest(req.body ?? {});
+/**
+ * Shared booking creation. Used by the direct flow and by "book from accepted enquiry".
+ * `body` is the booking input (already merged with enquiry data when `enquiry` is set).
+ */
+async function createBookingCore(req, res, { venue, body, enquiry = null }) {
+  const bookingRequest = parseBookingRequest(body);
   await assertVenueAvailableForBooking(venue._id, bookingRequest);
+  await assertNoEnquiryHold(venue._id, bookingRequest, {
+    excludeEnquiryId: enquiry?._id ?? null,
+  });
 
   const pricing = calculateVenueBookingPricingWithToken(venue, bookingRequest);
-  const payNowAmount = resolvePaymentAmountFromBody(req.body ?? {}, pricing);
+  const payNowAmount = resolvePaymentAmountFromBody(body, pricing);
 
   const items = buildOrderItems(venue, bookingRequest, pricing);
-  const addressSnapshot = parseBookingCustomer(req.body ?? {}, req.user);
+  const addressSnapshot = parseBookingCustomer(body, req.user);
   const paymentSnapshot = buildOrderPaymentSnapshot(pricing);
 
-  const paymentMethod = String(req.body?.paymentMethod || "online").trim().toLowerCase();
+  const paymentMethod = String(body.paymentMethod || "online").trim().toLowerCase();
   const allowedMethods = new Set(["cod", "online", "wallet"]);
   if (!allowedMethods.has(paymentMethod)) {
     throw new AppError("Invalid paymentMethod. Use cod, online, or wallet", 400);
   }
 
-  const notes = String(req.body?.notes || "").trim();
+  const notes = String(body.notes || "").trim();
   const shouldApplyPayment =
     paymentMethod === "wallet" ||
-    (paymentMethod === "online" && isVenuePaymentConfirmed(req.body ?? {}));
+    (paymentMethod === "online" && isVenuePaymentConfirmed(body));
 
   const order = await VenueOrder.create({
+    enquiry: enquiry?._id ?? null,
+    source: enquiry ? "enquiry" : "direct",
     orderNumber: generateVenueOrderNumber(),
     user: req.user._id,
     items,
@@ -333,11 +351,34 @@ exports.createBooking = asyncHandler(async (req, res) => {
   if (shouldApplyPayment) {
     await markVenueOrderPaymentPaid(order, {
       paidAmount: payNowAmount,
-      gatewayPaymentId: readGatewayPaymentId(req.body ?? {}),
-      gateway: String(req.body?.gateway || req.body?.paymentGateway || "razorpay").trim(),
-      gatewayOrderId: String(req.body?.gatewayOrderId || req.body?.razorpay_order_id || "").trim(),
-      providerResponse: req.body?.providerResponse,
+      gatewayPaymentId: readGatewayPaymentId(body),
+      gateway: String(body.gateway || body.paymentGateway || "razorpay").trim(),
+      gatewayOrderId: String(body.gatewayOrderId || body.razorpay_order_id || "").trim(),
+      providerResponse: body.providerResponse,
     });
+  }
+
+  if (enquiry) {
+    await VenueEnquiry.updateOne(
+      { _id: enquiry._id },
+      { $set: { status: "converted", convertedAt: new Date(), order: order._id } }
+    );
+    if (enquiry.vendor) {
+      queueAppNotification({
+        recipientType: "venueVendor",
+        recipientId: enquiry.vendor,
+        type: "enquiry_converted",
+        title: "Enquiry converted to booking",
+        message: `${enquiry.contact?.name || "The customer"} confirmed the booking for ${venue.name} (enquiry ${enquiry.enquiryNumber}).`,
+        metadata: {
+          event: "enquiry_converted",
+          enquiryId: String(enquiry._id),
+          bookingId: String(order._id),
+          venueId: String(venue._id),
+          linkPath: `/vendor/bookings/${order._id}`,
+        },
+      });
+    }
   }
 
   const fresh = await VenueOrder.findById(order._id)
@@ -387,9 +428,44 @@ exports.createBooking = asyncHandler(async (req, res) => {
     remainingAmount: fresh.remainingAmount ?? 0,
     paymentStatus: fresh.paymentStatus,
     orderStatus: fresh.orderStatus,
+    source: fresh.source || "direct",
+    enquiryId: enquiry?._id ?? null,
     transaction: toVenueTransactionHistoryItem(paymentTx ?? transaction, fresh),
   });
+}
+
+/** Book Now — direct booking, or booking from an accepted enquiry when `enquiryId` is sent. */
+exports.createBooking = asyncHandler(async (req, res) => {
+  const venue = await loadBookableVenue(req.params.venueId);
+  const input = req.body ?? {};
+
+  if (input.enquiryId) {
+    assertObjectId(input.enquiryId, "Invalid enquiry id");
+    const enquiry = await loadBookableEnquiry(input.enquiryId, req.user._id);
+    if (String(enquiry.venue) !== String(venue._id)) {
+      throw new AppError("This enquiry belongs to a different venue", 400);
+    }
+    return createBookingCore(req, res, {
+      venue,
+      enquiry,
+      body: bookingBodyFromEnquiry(enquiry, input),
+    });
+  }
+
+  const settings = await getFeatureSettings();
+  if (settings.venueBookingMode === "enquiry") {
+    throw new AppError(
+      "Please send an enquiry first. You can book once the venue accepts it.",
+      409,
+      "ENQUIRY_REQUIRED"
+    );
+  }
+
+  return createBookingCore(req, res, { venue, body: input });
 });
+
+exports.createBookingCore = createBookingCore;
+exports.loadBookableVenue = loadBookableVenue;
 
 /** Confirm online payment after gateway success */
 exports.confirmBookingPayment = asyncHandler(async (req, res) => {

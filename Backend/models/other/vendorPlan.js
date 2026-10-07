@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const PLAN_TYPES = ["banner", "get_verified", "product_presence_first"];
+const PLAN_TYPES = ["banner", "get_verified", "product_presence_first", "show_phone"];
 const VENDOR_TYPES = ["ecom", "venue", "both"];
 const STATUS = ["active", "inactive"];
 const PRESENCE_MODES = ["random"];
@@ -60,6 +60,21 @@ const vendorPlanSchema = new mongoose.Schema(
       default: "active",
       index: true,
     },
+    /**
+     * Duration plans (e.g. Show Number tiers): when > 0 the subscription runs for this many days
+     * from activation instead of using the plan's start/end dates (those become the sale window).
+     */
+    durationDays: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    /** Shown on plan cards in the vendor app / panel. */
+    description: { type: String, default: "", trim: true, maxlength: 500 },
+    benefits: { type: [String], default: [] },
+    badge: { type: String, default: "", trim: true, maxlength: 40 },
+    isRecommended: { type: Boolean, default: false },
+    sortOrder: { type: Number, default: 0 },
   },
   {
     timestamps: true,

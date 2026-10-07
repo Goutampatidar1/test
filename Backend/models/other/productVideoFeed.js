@@ -53,5 +53,7 @@ const productVideoFeedSchema = new mongoose.Schema(
 
 productVideoFeedSchema.index({ vendor: 1, createdAt: -1 });
 productVideoFeedSchema.index({ product: 1, variantSku: 1 });
+// public feed: newest active videos first (cursor pagination)
+productVideoFeedSchema.index({ status: 1, createdAt: -1, _id: -1 });
 
 module.exports = mongoose.model("ProductVideoFeed", productVideoFeedSchema);

@@ -1,8 +1,19 @@
 const { Vendor } = require("../../models");
 const Category = require("../../models/other/category");
 const AppError = require("../../utils/AppError");
+const {
+  assertCanShowPhone,
+  canSetPhoneVisible,
+  describePhonePlanState,
+} = require("../../utils/phonePlan");
 const { asyncHandler } = require("../../utils/asyncHandler");
 const { sendSuccess } = require("../../utils/apiResponse");
+const { getPublicBaseUrl } = require("../../utils/mediaUrl");
+const {
+  computeProfileCompletion,
+  refreshProfileScore,
+  queueRefreshProfileScore,
+} = require("../../utils/profileCompletion");
 const { toMobileVendorProfile } = require("../../utils/toPublicProfile");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { assertObjectId } = require("../../utils/assertObjectId");
@@ -332,7 +343,10 @@ exports.updateProfile = asyncHandler(async (req, res) => {
       if (parsed === null) {
         throw new AppError("Invalid showPhoneOnApp value", 400);
       }
-      vendor.showPhoneOnApp = parsed;
+      // General profile saves must not fail when no Show Number plan is active; keep the old value instead.
+      if (canSetPhoneVisible(vendor, parsed)) {
+        vendor.showPhoneOnApp = parsed;
+      }
     }
 
     await vendor.save();
@@ -341,6 +355,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     throw err;
   }
 
+  queueRefreshProfileScore("ecom", vendor._id);
   const fresh = await loadVendorProfile(vendor._id);
   sendSuccess(res, "Profile updated", { user: toMobileVendorProfile(fresh, req) });
 });
@@ -359,16 +374,40 @@ exports.getShopStatus = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/vendor/profile/completion
+ * Completion %, per-module checklist (icon/colour/image) and benefit tiers.
+ * Also refreshes the stored profileScore used for ranking.
+ */
+exports.getProfileCompletion = asyncHandler(async (req, res) => {
+  const vendor = await Vendor.findById(req.user._id).lean();
+  if (!vendor) throw new AppError("Account not found", 404);
+
+  const baseUrl = getPublicBaseUrl(req);
+  const result = await refreshProfileScore("ecom", vendor._id);
+  const completion = await computeProfileCompletion({
+    ecom: vendor,
+    variant: vendor.vendorPanelType === "both" ? "both" : "ecom",
+    baseUrl,
+  });
+  sendSuccess(res, "Profile completion fetched", { ...completion, score: result?.percent ?? completion.percent });
+});
+
 /** GET /api/vendor/profile/phone-visibility */
 exports.getPhoneVisibility = asyncHandler(async (req, res) => {
-  const vendor = await Vendor.findById(req.user._id).select("showPhoneOnApp businessPhone phone").lean();
+  const vendor = await Vendor.findById(req.user._id)
+    .select("showPhoneOnApp businessPhone phone phonePlanUntil")
+    .lean();
   if (!vendor) {
     throw new AppError("Account not found", 404);
   }
   const showPhoneOnApp = vendor.showPhoneOnApp !== false;
+  const plan = describePhonePlanState(vendor);
   sendSuccess(res, "Phone visibility fetched", {
     showPhoneOnApp,
     statusLabel: showPhoneOnApp ? "visible" : "hidden",
+    phonePlan: plan,
+    phoneVisibleToUsers: plan.phoneVisibleToUsers,
   });
 });
 
@@ -387,6 +426,7 @@ exports.updatePhoneVisibility = asyncHandler(async (req, res) => {
     throw new AppError("Account not found", 404);
   }
 
+  assertCanShowPhone(vendor, parsed);
   vendor.showPhoneOnApp = parsed;
   await vendor.save();
 

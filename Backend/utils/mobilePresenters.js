@@ -2,6 +2,7 @@ const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { buildSimpleVariantView, formatSimpleCombination } = require("./productVariants");
 const { formatRatingValue } = require("./productRating");
 const { getVenueDisplayPrice, positiveAmount } = require("./venuePricing");
+const { toVenuePriceBlock } = require("./venueDiscount");
 
 /**
  * Shapes documents for mobile / storefront clients.
@@ -186,6 +187,39 @@ function toPublicBanner(doc, baseUrl, relatedEntity = null) {
     cities: doc.cities ?? [],
     startDate: doc.startDate ?? null,
     endDate: doc.endDate ?? null,
+    subtitle: doc.subtitle || "",
+    description: doc.description || "",
+    ctaText: doc.ctaText || "",
+    badge: doc.badge || "",
+    bgColor: doc.bgColor || "",
+    textColor: doc.textColor || "",
+    displayOrder: Number(doc.displayOrder) || 0,
+    imageWidth: doc.imageWidth ?? null,
+    imageHeight: doc.imageHeight ?? null,
+    aspectRatio:
+      doc.imageWidth && doc.imageHeight
+        ? Number((doc.imageWidth / doc.imageHeight).toFixed(3))
+        : null,
+    timer: toBannerTimer(doc),
+  };
+}
+
+/** Countdown block for banners that show a timer; null when the banner has none. */
+function toBannerTimer(doc) {
+  if (!doc?.showTimer) return null;
+  let endsAt = doc.timerEndsAt ? new Date(doc.timerEndsAt) : null;
+  if (!endsAt && doc.endDate) {
+    const d = new Date(doc.endDate);
+    endsAt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+  }
+  if (!endsAt || Number.isNaN(endsAt.getTime())) return null;
+  const now = Date.now();
+  return {
+    enabled: true,
+    label: doc.timerLabel || "Ends in",
+    endsAt,
+    serverNow: new Date(now),
+    remainingSeconds: Math.max(0, Math.floor((endsAt.getTime() - now) / 1000)),
   };
 }
 
@@ -207,6 +241,7 @@ function toPublicVenueSummary(doc, baseUrl) {
     doc.subCategory && typeof doc.subCategory === "object"
       ? { _id: doc.subCategory._id, name: doc.subCategory.name }
       : doc.subCategory;
+  const priceInfo = toVenuePriceBlock(doc);
 
   return {
     _id: doc._id,
@@ -229,6 +264,11 @@ function toPublicVenueSummary(doc, baseUrl) {
     ratingCount: doc.ratingCount ?? 0,
     tokenAmountPercentage: Number(doc.tokenAmountPercentage) || 0,
     availableFrom: doc.availableFrom ?? null,
+    priceInfo,
+    hasDiscount: priceInfo.hasDiscount,
+    discount: priceInfo.discount,
+    originalPrice: priceInfo.originalAmount,
+    discountedPrice: priceInfo.hasDiscount ? priceInfo.amount : null,
   };
 }
 
@@ -441,6 +481,12 @@ function toVendorProduct(doc, baseUrl) {
     adminApproved: Boolean(doc.adminApproved),
     statusLockedByAdmin: Boolean(doc.statusLockedByAdmin),
     status: doc.status,
+    hotDeal: {
+      optIn: Boolean(doc.hotDeal?.optIn),
+      status: doc.hotDeal?.status || "none",
+      rejectionReason: doc.hotDeal?.rejectionReason || "",
+      requestedAt: doc.hotDeal?.requestedAt || null,
+    },
     rating: formatRatingValue(doc.averageRating, doc.ratingCount),
     ratingCount: Number(doc.ratingCount) || 0,
     averageRating: Number(doc.averageRating) || 0,

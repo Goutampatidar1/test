@@ -4,6 +4,10 @@ const { sendSuccess } = require("../../utils/apiResponse");
 const { toPublicEcomFlow, resolveEcomAvailability, mergePaymentMethods } = require("../../utils/appCommerceSettings");
 const { toPublicVendorDocuments } = require("../../utils/vendorDocumentSettings");
 const { resolveRazorpayPublicSettings } = require("../../utils/mobileAppSettings");
+const {
+  normalizeFeatureSettings,
+  toPublicFeatureSettings,
+} = require("../../utils/appFeatureSettings");
 
 /**
  * Shape returned to clients without auth — suitable for storefront / login branding.
@@ -45,6 +49,7 @@ function toPublicAppConfig(doc) {
     documents: toPublicVendorDocuments(doc.documents),
     shipping_charge: Number(doc.shipping_charge) || 0,
     ecom_flow: toPublicEcomFlow(doc),
+    features: toPublicFeatureSettings(normalizeFeatureSettings(doc.feature_settings)),
     updatedAt: doc.updatedAt,
   };
 }
@@ -112,6 +117,7 @@ function defaultPublicAppConfig() {
       pincodes: [],
       subDistricts: [],
     },
+    features: toPublicFeatureSettings(normalizeFeatureSettings({})),
     updatedAt: null,
   };
 }

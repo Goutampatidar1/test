@@ -9,6 +9,7 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPublicBaseUrl } = require("../../utils/mediaUrl");
 const { getPagination } = require("../../utils/listQuery");
+const { getFeatureSettings } = require("../../utils/appFeatureSettings");
 const { toPublicVideoFeedItem } = require("../../utils/productVideoFeed");
 const { getLikeMetaForFeeds } = require("../../utils/productVideoFeedLike");
 const { toPublicVenueVideoFeedItem } = require("../../utils/venueVideoFeed");
@@ -24,7 +25,7 @@ function normalizeFeedType(raw) {
   throw new AppError("Invalid type filter. Use all, ecom, or venue", 400);
 }
 
-async function hydratePublicEcomFeeds(feeds, baseUrl, userId = null) {
+async function hydratePublicEcomFeeds(feeds, baseUrl, userId = null, { lite = false } = {}) {
   const productIds = [
     ...new Set(feeds.map((f) => f.product).filter(Boolean).map((id) => String(id))),
   ];
@@ -40,12 +41,13 @@ async function hydratePublicEcomFeeds(feeds, baseUrl, userId = null) {
       status: "active",
       approvalStatus: "approved",
       isOpen: { $ne: false },
+      videoEnabled: { $ne: false },
     })
       .select("businessName shopLogo city state")
       .lean(),
   ]);
 
-  const productCounts = vendors.length
+  const productCounts = vendors.length && !lite
     ? await Product.aggregate([
         {
           $match: {
@@ -86,7 +88,7 @@ async function hydratePublicEcomFeeds(feeds, baseUrl, userId = null) {
     .filter(Boolean);
 }
 
-async function hydratePublicVenueFeeds(feeds, baseUrl, userId = null) {
+async function hydratePublicVenueFeeds(feeds, baseUrl, userId = null, { lite = false } = {}) {
   const venueIds = [
     ...new Set(feeds.map((f) => f.venue).filter(Boolean).map((id) => String(id))),
   ];
@@ -103,12 +105,13 @@ async function hydratePublicVenueFeeds(feeds, baseUrl, userId = null) {
       status: "active",
       approvalStatus: "approved",
       isOpen: { $ne: false },
+      videoEnabled: { $ne: false },
     })
       .select("name businessName profileImage businessAddress")
       .lean(),
   ]);
 
-  const venueCounts = venueVendors.length
+  const venueCounts = venueVendors.length && !lite
     ? await Venue.aggregate([
         {
           $match: {
@@ -151,7 +154,7 @@ async function hydratePublicVenueFeeds(feeds, baseUrl, userId = null) {
 }
 
 /** User app — video section (reels). Query: type=all|ecom|venue */
-exports.listVideoFeeds = asyncHandler(async (req, res) => {
+async function listVideoFeedsOffset(req, res) {
   const { page, limit, skip } = getPagination(req.query);
   const baseUrl = getPublicBaseUrl(req);
   const feedType = normalizeFeedType(req.query.type ?? req.query.feedType ?? req.query.kind);
@@ -245,7 +248,188 @@ exports.listVideoFeeds = asyncHandler(async (req, res) => {
       pages: Math.ceil(total / limit) || 1,
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cursor pagination (default). Small pages, short-lived cache, optional lite payload.
+// ---------------------------------------------------------------------------
+const FEED_CACHE_TTL_MS = 30 * 1000;
+const FEED_CACHE_MAX = 200;
+const feedCache = new Map();
+
+function readFeedCache(key) {
+  const hit = feedCache.get(key);
+  if (!hit) return null;
+  if (hit.expires < Date.now()) {
+    feedCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function writeFeedCache(key, value) {
+  if (feedCache.size >= FEED_CACHE_MAX) {
+    feedCache.delete(feedCache.keys().next().value);
+  }
+  feedCache.set(key, { value, expires: Date.now() + FEED_CACHE_TTL_MS });
+}
+
+function encodeCursor(feed) {
+  return Buffer.from(`${new Date(feed.createdAt).getTime()}_${feed._id}`).toString("base64url");
+}
+
+function decodeCursor(raw) {
+  if (!raw) return null;
+  try {
+    const [ms, id] = Buffer.from(String(raw), "base64url").toString("utf8").split("_");
+    const date = new Date(Number(ms));
+    if (Number.isNaN(date.getTime()) || !id) return null;
+    assertObjectId(id, "Invalid cursor");
+    return { date, id };
+  } catch {
+    throw new AppError("Invalid cursor", 400);
+  }
+}
+
+function withCursor(filter, cursor) {
+  if (!cursor) return filter;
+  return {
+    ...filter,
+    $or: [
+      { createdAt: { $lt: cursor.date } },
+      { createdAt: cursor.date, _id: { $lt: cursor.id } },
+    ],
+  };
+}
+
+const LITE_VIDEO_FIELDS = ["_id", "type", "video", "thumbnail", "title", "likeCount", "isLiked", "product", "venue", "shopNow", "bookNow", "createdAt"];
+
+function toLiteItem(item) {
+  const lite = {};
+  for (const key of LITE_VIDEO_FIELDS) lite[key] = item[key];
+  lite.vendor = item.vendor ? { _id: item.vendor._id, name: item.vendor.name, profileImage: item.vendor.profileImage } : null;
+  return lite;
+}
+
+/**
+ * User app — video section (reels).
+ * Query: type=all|ecom|venue, limit (default 6, max 20), cursor (from previous `nextCursor`), lite=1.
+ * Legacy `page=` requests keep the old offset behaviour.
+ */
+exports.listVideoFeeds = asyncHandler(async (req, res) => {
+  if (req.query.page !== undefined) {
+    return listVideoFeedsOffset(req, res);
+  }
+
+  const features = await getFeatureSettings();
+  const userEnabled = features.videoEnabledUser !== false && req.user?.videoEnabled !== false;
+  const empty = (message) =>
+    res.status(200).json({
+      status: false,
+      message,
+      data: [],
+      videoEnabled: false,
+      pagination: { limit: 0, hasMore: false, nextCursor: null },
+    });
+  if (features.videoEnabledUser === false) return empty("Videos are currently disabled");
+  if (!userEnabled) return empty("Videos are turned off in your settings");
+
+  const baseUrl = getPublicBaseUrl(req);
+  const feedType = normalizeFeedType(req.query.type ?? req.query.feedType ?? req.query.kind);
+  const lite = ["1", "true", "yes"].includes(String(req.query.lite ?? "").toLowerCase());
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 6, 1), 20);
+
+  const productId = req.query.product ?? req.query.productId;
+  const venueId = req.query.venue ?? req.query.venueId;
+  if (productId) assertObjectId(productId, "Invalid product id");
+  if (venueId) assertObjectId(venueId, "Invalid venue id");
+
+  const page = await loadVideoPage({
+    feedType,
+    limit,
+    lite,
+    cursorRaw: req.query.cursor,
+    productId,
+    venueId,
+    baseUrl,
+    userId: req.user?._id,
+  });
+  const items = page.items;
+
+  if (!req.user) res.set("Cache-Control", "public, max-age=15");
+  return res.status(200).json({
+    status: items.length > 0,
+    message: "Video feeds fetched",
+    data: items,
+    videoEnabled: true,
+    filter: { type: feedType },
+    pagination: { limit, hasMore: page.hasMore, nextCursor: page.nextCursor },
+  });
 });
+
+/** One cursor page of videos (cached, user "liked" flags layered on top). Reused by the home feed. */
+async function loadVideoPage({ feedType = "all", limit = 6, lite = false, cursorRaw, productId, venueId, baseUrl, userId }) {
+  const cursor = decodeCursor(cursorRaw);
+  const cacheKey = [feedType, limit, lite ? 1 : 0, cursorRaw || "", productId || "", venueId || ""].join("|");
+  let page = readFeedCache(cacheKey);
+
+  if (!page) {
+    const ecomFilter = withCursor({ status: "active", ...(productId ? { product: productId } : {}) }, cursor);
+    const venueFilter = withCursor({ status: "active", ...(venueId ? { venue: venueId } : {}) }, cursor);
+    const includeEcom = feedType !== "venue" && !venueId;
+    const includeVenue = feedType !== "ecom" && !productId;
+    const sortSpec = { createdAt: -1, _id: -1 };
+
+    const [ecomRaw, venueRaw] = await Promise.all([
+      includeEcom
+        ? ProductVideoFeed.find(ecomFilter).sort(sortSpec).limit(limit + 1).lean()
+        : Promise.resolve([]),
+      includeVenue
+        ? VenueVideoFeed.find(venueFilter).sort(sortSpec).limit(limit + 1).lean()
+        : Promise.resolve([]),
+    ]);
+
+    const merged = [
+      ...ecomRaw.map((feed) => ({ kind: "ecom", feed })),
+      ...venueRaw.map((feed) => ({ kind: "venue", feed })),
+    ].sort((a, b) => {
+      const diff = new Date(b.feed.createdAt).getTime() - new Date(a.feed.createdAt).getTime();
+      return diff || String(b.feed._id).localeCompare(String(a.feed._id));
+    });
+
+    const hasMore = merged.length > limit;
+    const slice = merged.slice(0, limit);
+    const nextCursor = hasMore && slice.length ? encodeCursor(slice[slice.length - 1].feed) : null;
+
+    const [ecomItems, venueItems] = await Promise.all([
+      hydratePublicEcomFeeds(slice.filter((r) => r.kind === "ecom").map((r) => r.feed), baseUrl, null, { lite }),
+      hydratePublicVenueFeeds(slice.filter((r) => r.kind === "venue").map((r) => r.feed), baseUrl, null, { lite }),
+    ]);
+    const byId = new Map([...ecomItems, ...venueItems].map((item) => [String(item._id), item]));
+    const items = slice.map((r) => byId.get(String(r.feed._id))).filter(Boolean);
+
+    page = { items: lite ? items.map(toLiteItem) : items, hasMore, nextCursor };
+    writeFeedCache(cacheKey, page);
+  }
+
+  // per-user liked flags are layered on top of the shared cached page
+  let items = page.items;
+  if (userId && items.length) {
+    const ecomIds = items.filter((i) => i.type !== "venue").map((i) => i._id);
+    const venueIds = items.filter((i) => i.type === "venue").map((i) => i._id);
+    const [ecomMeta, venueMeta] = await Promise.all([
+      ecomIds.length ? getLikeMetaForFeeds(ecomIds, userId) : { likedSet: new Set() },
+      venueIds.length ? getVenueLikeMetaForFeeds(venueIds, userId) : { likedSet: new Set() },
+    ]);
+    items = items.map((item) => ({
+      ...item,
+      isLiked: (item.type === "venue" ? venueMeta : ecomMeta).likedSet.has(String(item._id)),
+    }));
+  }
+
+  return { items, hasMore: page.hasMore, nextCursor: page.nextCursor };
+}
+exports.loadVideoPage = loadVideoPage;
 
 /** User app — single video by feed id (ecom or venue), or all ecom videos for a product id */
 exports.getVideoFeedById = asyncHandler(async (req, res) => {

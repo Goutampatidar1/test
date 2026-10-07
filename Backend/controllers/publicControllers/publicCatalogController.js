@@ -42,6 +42,9 @@ const { getPublicBaseUrl } = require("../../utils/mediaUrl");
 const { formatRatingValue, getUserProductRating, getUserRatingsForProducts, getRatingStatsForProducts, applyRatingStatsToProduct } = require("../../utils/productRating");
 const { buildPublicProductDetail } = require("../../utils/publicProductDetail");
 const { buildProductCartDetailMap } = require("../../utils/cart");
+const { buildProductCards } = require("../../utils/publicProductCards");
+const { findVendorsMatchingSearch, nameTokenClause, recordRecentView } = require("../../utils/homeFeed");
+const { toAbsoluteUploadUrl } = require("../../utils/mediaUrl");
 const { activePublicVenueListingFilter, activePublicVenueListingFilterOpen, isVenueListable } = require("../../utils/publicVenueList");
 
 const ALLOWED_MODES = new Set(["ecom", "venue"]);
@@ -306,7 +309,7 @@ exports.getVenueById = asyncHandler(async (req, res) => {
   if (venue.role === "VenueVendor" && venue.addedById) {
     const VenueVendor = require("../../models/entity/venueVendor");
     vendorDoc = await VenueVendor.findById(venue.addedById)
-      .select("name businessName businessPhone phone showPhoneOnApp approvalStatus status isOpen")
+      .select("name businessName businessPhone phone showPhoneOnApp phonePlanUntil approvalStatus status isOpen")
       .lean();
   }
 
@@ -602,9 +605,25 @@ exports.listProducts = asyncHandler(async (req, res) => {
   if (priceRangeFilter) Object.assign(filter, priceRangeFilter);
 
   const searchOr = searchFilter(search, ["name", "slug", "description", "shortDescription", "sku"]);
-  if (searchOr) Object.assign(filter, searchOr);
+  let matchedVendors = [];
+  if (searchOr) {
+    // vendor-aware: "shiv shakti" also returns that shop's products, and any-order word matches on the name
+    const nameWords = nameTokenClause("name", search);
+    if (nameWords) searchOr.$or.push(nameWords);
+    if (!vendorId) {
+      matchedVendors = await findVendorsMatchingSearch(search, { limit: 10 });
+      if (matchedVendors.length) {
+        searchOr.$or.push({ role: "Vendor", addedById: { $in: matchedVendors.map((v) => v._id) } });
+      }
+    }
+    Object.assign(filter, searchOr);
+  }
 
-  const sortSpec = resolveProductListSort(sort);
+  // default order: newest, but with search, better-completed vendor profiles rank higher
+  const sortSpec =
+    search && String(search).trim() && !sort
+      ? { vendorProfileScore: -1, createdAt: -1 }
+      : resolveProductListSort(sort);
 
   const [products, total, priceBounds] = await Promise.all([
     Product.find(filter)
@@ -619,57 +638,19 @@ exports.listProducts = asyncHandler(async (req, res) => {
     getCatalogPriceBounds(Product),
   ]);
 
-  const vendorIds = [...new Set(products.map((p) => String(p.addedById)).filter(Boolean))];
-  const productIds = products.map((product) => product._id);
-
-  const [vendors, ratingStatsMap] = await Promise.all([
-    Vendor.find({
-      _id: { $in: vendorIds },
-      status: "active",
-      approvalStatus: "approved",
-      isOpen: { $ne: false },
-    })
-      .select("businessName shopLogo")
-      .lean(),
-    getRatingStatsForProducts(productIds),
-  ]);
-  const vendorMap = new Map(vendors.map((v) => [String(v._id), v]));
-
-  let wishlistSet = new Set();
-  let myRatingMap = new Map();
-  let cartDetailMap = new Map();
-  if (req.user?._id) {
-    const [wishlist, ratings, cartDetails] = await Promise.all([
-      Wishlist.findOne({ user: req.user._id }).select("products").lean(),
-      getUserRatingsForProducts(
-        req.user._id,
-        products.map((product) => product._id)
-      ),
-      buildProductCartDetailMap(req.user._id, productIds),
-    ]);
-    wishlistSet = new Set((wishlist?.products || []).map((id) => String(id)));
-    myRatingMap = ratings;
-    cartDetailMap = cartDetails;
-  }
-
-  const baseUrl = getPublicBaseUrl(req);
-  const items = products
-    .map((product) => {
-      const seller = resolvePublicProductSeller(product, vendorMap);
-      if (!seller) return null;
-      const enrichedProduct = applyRatingStatsToProduct(product, ratingStatsMap);
-      return toPublicProductListCard(enrichedProduct, seller, baseUrl, {
-        isWishlisted: wishlistSet.has(String(product._id)),
-        myRating: myRatingMap.get(String(product._id)) ?? null,
-        cartDetail: cartDetailMap.get(String(product._id)) ?? null,
-      });
-    })
-    .filter(Boolean);
+  const items = await buildProductCards(products, req);
+  const baseUrlForVendors = getPublicBaseUrl(req);
 
   return res.status(200).json({
     status: true,
     message: "Products fetched",
     data: items,
+    matchedVendors: matchedVendors.map((v) => ({
+      _id: v._id,
+      name: v.businessName,
+      shopLogo: v.shopLogo ? toAbsoluteUploadUrl(v.shopLogo, baseUrlForVendors) : "",
+      location: [v.subDistrict, v.city].filter(Boolean).join(", "),
+    })),
     pagination: {
       page,
       limit,
@@ -705,6 +686,15 @@ exports.getProductDetail = asyncHandler(async (req, res) => {
 
   if (!detail) {
     throw new AppError("Product not found", 404);
+  }
+
+  if (req.user?._id) {
+    // feeds "Recently viewed" / "Suggested for you"; never block the response
+    Product.findById(req.params.productId)
+      .select("_id category")
+      .lean()
+      .then((product) => recordRecentView(req.user._id, product))
+      .catch(() => {});
   }
 
   return res.status(200).json({

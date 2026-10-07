@@ -4,6 +4,10 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { normalizeEcomFlow } = require("../../utils/appCommerceSettings");
 const createUploader = require("../../utils/fileUploader");
+const {
+  normalizeFeatureSettings,
+  invalidateFeatureSettingsCache,
+} = require("../../utils/appFeatureSettings");
 
 const upload = createUploader("appconfig");
 
@@ -30,7 +34,9 @@ exports.getAppConfig = asyncHandler(async (req, res) => {
   const config = await AppConfig.findOne().lean();
   res.json({
     message: "App configuration fetched",
-    data: config || null,
+    data: config
+      ? { ...config, feature_settings: normalizeFeatureSettings(config.feature_settings) }
+      : null,
   });
 });
 
@@ -169,6 +175,17 @@ exports.updateAppConfig = asyncHandler(async (req, res) => {
     );
     config.vendor_approval_required = approvalRequired;
     config.vendor_product_approval_required = approvalRequired;
+  }
+
+  if (req.body.feature_settings !== undefined) {
+    const incoming = parseJSON(req.body.feature_settings, null);
+    if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+      throw new AppError("feature_settings must be a JSON object", 400);
+    }
+    const merged = { ...(config.feature_settings || {}), ...incoming };
+    config.feature_settings = normalizeFeatureSettings(merged);
+    config.markModified("feature_settings");
+    invalidateFeatureSettingsCache();
   }
 
   if (req.body.ecom_flow !== undefined) {

@@ -16,6 +16,14 @@ const {
 
 const FEED_FOLDER = "venue-video-feed";
 
+const videoSettings = require("../../utils/videoFeatures").makeVideoSettingsHandlers(
+  () => require("../../models/entity/venueVendor"),
+  "vendor"
+);
+/** Venue vendor — personal video on/off switch */
+exports.getVideoSettings = videoSettings.get;
+exports.updateVideoSettings = videoSettings.update;
+
 exports.listMyVideoFeeds = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
 

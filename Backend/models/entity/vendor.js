@@ -74,6 +74,12 @@ const vendorSchema = new mongoose.Schema(
     isOpen: { type: Boolean, default: true, index: true },
     /** When false, user apps hide this vendor's contact number. */
     showPhoneOnApp: { type: Boolean, default: true },
+    /** Vendor's own switch for videos; when false their reels are hidden from the user app. */
+    videoEnabled: { type: Boolean, default: true },
+    /** End of the active Show Number plan (denormalised from VendorPlanSubscription). */
+    phonePlanUntil: { type: Date, default: null },
+    /** 0-100 profile completion, refreshed on profile/product changes; boosts search ranking. */
+    profileScore: { type: Number, default: 0, min: 0, max: 100, index: true },
     rejectionReason: { type: String, default: null, trim: true },
     walletBalance: {
       type: Number,

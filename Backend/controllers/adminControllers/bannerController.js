@@ -5,7 +5,8 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPagination, searchFilter } = require("../../utils/listQuery");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
-const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
+const { publicUploadPathFromFile, getMulterUploadFile } = require("../../utils/publicUploadPath");
+const { normalizeImageFile } = require("../../utils/imageNormalize");
 
 const { normalizeTargetType, normalizeRelatedType } = require("../../utils/bannerSpecs");
 const Product = require("../../models/other/product");
@@ -109,6 +110,54 @@ function resolveRelatedFields(targetType, body) {
       ? normalizeOptional(body.relatedId)
       : undefined,
   };
+}
+
+const has = (body, key) => Object.prototype.hasOwnProperty.call(body, key);
+
+function parseBool(value) {
+  if (typeof value === "boolean") return value;
+  const v = String(value ?? "").trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(v)) return true;
+  if (["false", "0", "no", "off", ""].includes(v)) return false;
+  return null;
+}
+
+/** Content / timer / ordering fields shared by create and update. Returns only the keys present. */
+function readContentFields(body) {
+  const out = {};
+  for (const key of ["subtitle", "description", "ctaText", "badge", "timerLabel"]) {
+    if (has(body, key)) out[key] = String(body[key] ?? "").trim().slice(0, key === "description" ? 400 : 120);
+  }
+  for (const key of ["bgColor", "textColor"]) {
+    if (has(body, key)) {
+      const v = String(body[key] ?? "").trim();
+      if (v && !/^#[0-9a-fA-F]{3,8}$/.test(v)) throw new AppError(`${key} must be a hex colour like #FF6600`, 400);
+      out[key] = v;
+    }
+  }
+  if (has(body, "displayOrder")) {
+    const n = Number(body.displayOrder);
+    if (!Number.isFinite(n)) throw new AppError("displayOrder must be a number", 400);
+    out.displayOrder = Math.trunc(n);
+  }
+  if (has(body, "showTimer")) {
+    const b = parseBool(body.showTimer);
+    if (b === null) throw new AppError("showTimer must be true or false", 400);
+    out.showTimer = b;
+  }
+  if (has(body, "timerEndsAt")) {
+    const raw = String(body.timerEndsAt ?? "").trim();
+    out.timerEndsAt = raw ? parseDateOrThrow(raw, "Timer end") : null;
+  }
+  return out;
+}
+
+/** Fix rotation / oversize on the uploaded banner and capture its dimensions. */
+async function normalizeBannerUpload(req) {
+  const file = getMulterUploadFile(req);
+  if (!file) return null;
+  const meta = await normalizeImageFile(file, { maxWidth: 1600, maxHeight: 900 });
+  return meta ? { imageWidth: meta.width, imageHeight: meta.height } : null;
 }
 
 /** @deprecated use assertOptionalCategoryForTarget */
@@ -234,6 +283,9 @@ exports.createBanner = asyncHandler(async (req, res) => {
       categoryId = await assertOptionalCategoryForTarget(categoryInput, targetType);
     }
 
+    const content = readContentFields(req.body);
+    const imageMeta = await normalizeBannerUpload(req);
+
     const banner = await Banner.create({
       targetType,
       mode,
@@ -246,6 +298,8 @@ exports.createBanner = asyncHandler(async (req, res) => {
       endDate,
       cities,
       status,
+      ...content,
+      ...(imageMeta || {}),
     });
 
     const fresh = await Banner.findById(banner._id).populate("category", "name mode status").lean();
@@ -291,9 +345,16 @@ exports.updateBanner = asyncHandler(async (req, res) => {
 
   if (req.file) {
     const uploadedImage = publicUploadPathFromFile(req, UPLOAD_FOLDER);
+    const imageMeta = await normalizeBannerUpload(req);
     deleteUploadFileByPublicUrl(banner.image);
     banner.image = uploadedImage;
+    if (imageMeta) {
+      banner.imageWidth = imageMeta.imageWidth;
+      banner.imageHeight = imageMeta.imageHeight;
+    }
   }
+
+  Object.assign(banner, readContentFields(req.body));
 
   let nextStartDate = banner.startDate;
   let nextEndDate = banner.endDate;
@@ -387,6 +448,16 @@ exports.updateBanner = asyncHandler(async (req, res) => {
       throw new AppError("Invalid status", 400);
     }
     banner.status = status;
+  } else if (banner.autoExpired && banner.status === "inactive") {
+    // Admin extended an auto-expired banner into the future -> bring it back
+    const now = new Date();
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const extended = banner.timerEndsAt ? banner.timerEndsAt > now : !banner.endDate || banner.endDate >= dayStart;
+    if (extended) banner.status = "active";
+  }
+  if (banner.status === "active") {
+    banner.autoExpired = false;
+    banner.expiredAt = null;
   }
 
   await banner.save();

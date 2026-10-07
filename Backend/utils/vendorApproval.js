@@ -64,6 +64,32 @@ async function resolveVendorApprovalRequired() {
   };
 }
 
+/**
+ * Approval for an item (service / product) created by an existing vendor account.
+ * Vendors whose account admin already approved are trusted when `autoApproveTrustedVendors`
+ * is on, so their listings go live without waiting again (and without a full profile).
+ */
+async function resolveItemApprovalForVendor(vendor) {
+  const base = await resolveVendorApprovalRequired();
+  if (!base.approvalRequired) return { ...base, trusted: false };
+
+  const { getFeatureSettings } = require("./appFeatureSettings");
+  const settings = await getFeatureSettings();
+  const trusted =
+    settings.autoApproveTrustedVendors &&
+    String(vendor?.approvalStatus || "") === "approved" &&
+    String(vendor?.status || "active") === "active";
+
+  if (!trusted) return { ...base, trusted: false };
+  return {
+    approvalRequired: false,
+    adminApproved: true,
+    approvalStatus: "approved",
+    catalogStatus: "active",
+    trusted: true,
+  };
+}
+
 /** @deprecated use resolveVendorApprovalRequired */
 async function resolveVendorProductApproval() {
   const result = await resolveVendorApprovalRequired();
@@ -77,6 +103,7 @@ module.exports = {
   applyVendorApprovalStatus,
   normalizeRejectionReason,
   resolveVendorApprovalRequired,
+  resolveItemApprovalForVendor,
   resolveVendorProductApproval,
   REJECTION_REASON_MAX,
   REJECTION_REASON_MIN,

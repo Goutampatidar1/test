@@ -2,6 +2,7 @@ const VenueOrder = require("../models/other/venueOrder");
 const AppError = require("./AppError");
 const { parseDateOnly, formatDateOnly } = require("./dateOnly");
 const { getVenueDayPrice, getVenueHourlyPrice } = require("./venuePricing");
+const { calculateBookingDiscount } = require("./venueDiscount");
 
 const MAX_BOOKING_DAYS = 60;
 const BLOCKED_ORDER_STATUSES = ["cancelled", "refunded"];
@@ -299,12 +300,12 @@ function attachTokenPaymentToPricing(pricing, venue) {
 }
 
 function calculateVenueBookingPricing(venue, bookingRequest) {
-  const discountTotal = 0;
   const taxTotal = 0;
 
   if (bookingRequest.bookingType === "hourly") {
     const hourlyRate = assertHourlyBookingAllowed(venue);
     const venueFee = hourlyRate * bookingRequest.durationHours;
+    const discountTotal = calculateBookingDiscount(venue, venueFee);
     const subTotal = venueFee;
     const grandTotal = subTotal + taxTotal - discountTotal;
 
@@ -329,6 +330,7 @@ function calculateVenueBookingPricing(venue, bookingRequest) {
   const dayRate = assertFullDayBookingAllowed(venue);
   const days = bookingRequest.bookingDates.length;
   const venueFee = dayRate * days;
+  const discountTotal = calculateBookingDiscount(venue, venueFee);
   const subTotal = venueFee;
   const grandTotal = subTotal + taxTotal - discountTotal;
 

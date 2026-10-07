@@ -65,6 +65,7 @@ function applyOrderDateRangeFilter(filter, query = {}) {
 
 module.exports = {
   getPagination,
+  escapeRegex,
   searchFilter,
   orderSearchFilter,
   applyOrderDateRangeFilter,

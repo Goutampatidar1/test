@@ -9,7 +9,8 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPagination, searchFilter } = require("../../utils/listQuery");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
-const { resolveVendorApprovalRequired } = require("../../utils/vendorApproval");
+const { resolveItemApprovalForVendor } = require("../../utils/vendorApproval");
+const { queueRefreshProfileScore } = require("../../utils/profileCompletion");
 
 const ALLOWED_STATUS = new Set(["active", "inactive"]);
 const ALLOWED_ROLES = new Set(["Admin", "VenueVendor", "Vendor"]);
@@ -334,8 +335,11 @@ exports.createVenue = asyncHandler(async (req, res) => {
   if (subCategory) await assertCategoryAndSubCategory(category, subCategory);
   if (amenities.length > 0) await assertAmenitiesExist(amenities);
 
-  const { adminApproved } = await resolveVendorApprovalRequired();
-  const venueAdminApproved = role === "VenueVendor" ? adminApproved : true;
+  let venueAdminApproved = true;
+  if (role === "VenueVendor") {
+    const ownerVendor = await VenueVendor.findById(addedById).select("approvalStatus status").lean();
+    ({ adminApproved: venueAdminApproved } = await resolveItemApprovalForVendor(ownerVendor));
+  }
 
   const venue = await Venue.create({
     name,
@@ -361,6 +365,8 @@ exports.createVenue = asyncHandler(async (req, res) => {
     status,
     adminApproved: venueAdminApproved,
   });
+
+  if (role === "VenueVendor") queueRefreshProfileScore("venue", addedById);
 
   const fresh = await Venue.findById(venue._id)
     .populate("category", "name status")
@@ -595,11 +601,28 @@ exports.updateVenue = asyncHandler(async (req, res) => {
     }
     venue.adminApproved = nextAdminApproved;
   } else if (req.auth?.role === "venueVendor" && venue.isModified()) {
-    const { approvalRequired, adminApproved } = await resolveVendorApprovalRequired();
-    if (approvalRequired) {
-      venue.adminApproved = false;
-    } else {
-      venue.adminApproved = adminApproved;
+    // Only content changes need a fresh look. Price/availability/discount edits never unlist a service.
+    const reviewFields = [
+      "name",
+      "description",
+      "shortDescription",
+      "thumbnail",
+      "images",
+      "category",
+      "subCategory",
+    ];
+    if (venue.isModified(reviewFields)) {
+      const ownerVendor = await VenueVendor.findById(venue.addedById)
+        .select("approvalStatus status")
+        .lean();
+      const approval = await resolveItemApprovalForVendor(ownerVendor);
+      if (venue.adminApproved) {
+        venue.adminApproved = approval.adminApproved;
+      } else if (!approval.approvalRequired && !approval.trusted) {
+        // approval switched off globally: pending items go live on the next edit
+        venue.adminApproved = true;
+      }
+      // trusted vendors never re-approve an item an admin explicitly un-approved
     }
   }
 
