@@ -24,29 +24,47 @@ export function PromoSection({ hotDeals }: { hotDeals: PublicHotDeal[] }) {
       const q = gsap.utils.selector(el);
       const art = q("[data-promo-art]")[0] as HTMLElement | undefined;
       const map = el.querySelector("feDisplacementMap");
-      if (!art || !map) return;
 
-      const tl = gsap.timeline({
-        defaults: { ease: "none" },
-        scrollTrigger: {
-          trigger: el,
-          start: "top 75%",
-          end: "center 45%",
-          scrub: 0.8,
-          onUpdate: (self) => {
-            art.style.filter = self.progress >= 0.999 ? "none" : `url(#${filterId})`;
+      if (art && map) {
+        const tl = gsap.timeline({
+          defaults: { ease: "none" },
+          scrollTrigger: {
+            trigger: el,
+            start: "top 75%",
+            end: "center 45%",
+            scrub: 0.8,
+            onUpdate: (self) => {
+              art.style.filter = self.progress >= 0.999 ? "none" : `url(#${filterId})`;
+            },
           },
-        },
-      });
-      tl.fromTo(map, { attr: { scale: 220 } }, { attr: { scale: 0 }, ease: "power2.out", duration: 1 }, 0)
-        .fromTo(art, { opacity: 0, scale: 1.12, yPercent: 8 }, { opacity: 1, scale: 1, yPercent: 0, ease: "power2.out", duration: 0.8 }, 0)
-        .fromTo(q("[data-promo-light]"), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 1 }, 0);
+        });
+        tl.fromTo(map, { attr: { scale: 220 } }, { attr: { scale: 0 }, ease: "power2.out", duration: 1 }, 0)
+          .fromTo(art, { opacity: 0, scale: 1.12, yPercent: 8 }, { opacity: 1, scale: 1, yPercent: 0, ease: "power2.out", duration: 0.8 }, 0)
+          .fromTo(q("[data-promo-light]"), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 1 }, 0);
+      }
 
       gsap.fromTo(
         q("[data-promo-drift]"),
         { yPercent: 6 },
         { yPercent: -6, ease: "none", scrollTrigger: { trigger: el, start: "top bottom", end: "bottom top", scrub: true } },
       );
+
+      // Deal items cascade in when the list enters view
+      const dealItems = q("[data-promo-deal]");
+      if (dealItems.length) {
+        gsap.fromTo(
+          dealItems,
+          { opacity: 0, x: -20 },
+          {
+            opacity: 1,
+            x: 0,
+            duration: 0.75,
+            stagger: 0.1,
+            ease: "power3.out",
+            scrollTrigger: { trigger: dealItems[0], start: "top 85%", toggleActions: "play none none reverse" },
+          },
+        );
+      }
     },
     [reduced, filterId, lang],
     ref,
@@ -75,20 +93,39 @@ export function PromoSection({ hotDeals }: { hotDeals: PublicHotDeal[] }) {
           <p className="t-lead mt-8 max-w-[28rem] text-ivory/65">{t.promo.body}</p>
 
           {deals.length > 0 && (
-            <div className="mt-12 max-w-[30rem]">
+            <div className="mt-12 max-w-[34rem]">
               <p className="eyebrow text-ember">{t.promo.deals(hotDeals.length)}</p>
-              <ul className="mt-3">
+              <ul className="mt-4 space-y-1">
                 {deals.map((d, i) => {
                   const img = d.image ?? d.thumbnail;
                   const src = !isPlaceholder(img) ? resolveMediaUrl(img) : undefined;
                   return (
-                    <li key={d._id ?? i} className="flex items-center gap-4 border-t border-ivory/10 py-3">
-                      {src && (
-                        <span className="size-12 shrink-0 overflow-hidden rounded-[6px]">
+                    <li
+                      key={d._id ?? i}
+                      data-promo-deal
+                      className="group relative flex items-center gap-5 border-t border-ivory/10 py-4 transition-colors hover:border-oho/30"
+                    >
+                      {/* Subtle hover glow */}
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 -z-10 rounded-lg opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                        style={{ background: "linear-gradient(90deg,rgba(254,112,0,0.08),transparent)" }}
+                      />
+                      {/* Deal index */}
+                      <span className="w-6 shrink-0 select-none font-display text-sm tabular-nums text-oho/60">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      {/* Thumbnail or placeholder dot */}
+                      {src ? (
+                        <span className="size-11 shrink-0 overflow-hidden rounded-[8px] ring-1 ring-ivory/10">
                           <RemoteImage src={src} alt="" />
                         </span>
+                      ) : (
+                        <span className="size-2 shrink-0 rounded-full bg-oho/40" />
                       )}
-                      <span className="line-clamp-2 font-display text-lg">{d.name ?? d.title}</span>
+                      <span className="line-clamp-2 font-display text-[1.05rem] leading-snug transition-colors group-hover:text-ember">
+                        {d.name ?? d.title}
+                      </span>
                     </li>
                   );
                 })}

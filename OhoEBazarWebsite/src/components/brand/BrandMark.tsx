@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 
-/** The OHO bag mark used across the admin and vendor panels' favicon. */
+/** The OHO bag mark — SVG glyph used as a small decorative icon (e.g. hero eyebrow). */
 export function BrandGlyph({ className }: { className?: string }) {
   const id = useId();
   return (
@@ -20,25 +20,59 @@ export function BrandGlyph({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Full OHO E-Bazar logo image (oho-logo.png).
+ *
+ * The PNG has a white background so this component wraps it in a tight
+ * white rounded container — this looks intentional on any background
+ * (dark header, dark footer, light section).
+ *
+ * `size`:
+ *   "sm"  → h-7  (28 px) — compact use, e.g. mobile menu header
+ *   "md"  → h-9  (36 px) — desktop navbar  (default)
+ *   "lg"  → h-11 (44 px) — footer brand block
+ */
+type BrandLogoSize = "sm" | "md" | "lg";
+
+const SIZE: Record<BrandLogoSize, { wrap: string; img: string }> = {
+  sm: { wrap: "h-7  px-1.5 rounded-lg",  img: "h-5" },
+  md: { wrap: "h-9  px-2   rounded-[10px]", img: "h-6" },
+  lg: { wrap: "h-11 px-3   rounded-xl",  img: "h-7" },
+};
+
+export function BrandLogo({
+  className,
+  size = "md",
+}: {
+  className?: string;
+  size?: BrandLogoSize;
+}) {
+  const s = SIZE[size];
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center bg-white shadow-sm ring-1 ring-black/[.07]",
+        s.wrap,
+        className,
+      )}
+    >
+      <img
+        src="/oho-logo.png"
+        alt="OHO E-Bazar"
+        className={cn("w-auto object-contain", s.img)}
+        draggable={false}
+      />
+    </span>
+  );
+}
+
 type BrandMarkProps = {
   className?: string;
-  /** Wordmark colour scheme. */
   tone?: "dark" | "light";
   label: string;
 };
 
-export function BrandMark({ className, tone = "dark", label }: BrandMarkProps) {
-  return (
-    <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <BrandGlyph className="size-9" />
-      <span
-        className={cn(
-          "font-display text-[1.15rem] font-semibold leading-none tracking-tight",
-          tone === "dark" ? "text-charcoal" : "text-ivory",
-        )}
-      >
-        {label}
-      </span>
-    </span>
-  );
+/** Used in Footer — renders the actual logo image at lg size. */
+export function BrandMark({ className }: BrandMarkProps) {
+  return <BrandLogo size="lg" className={className} />;
 }

@@ -55,6 +55,7 @@ export type Dictionary = {
   promo: { eyebrow: string; lines: Lines; body: string; deals: (n: number) => string; caption: string };
   story: { eyebrow: string; line1: Lines; line2: Lines; body: string };
   value: { eyebrow: string; lines: Lines; items: ValueItem[] };
+  bridge: { quote: string };
   cta: { lines: Lines; body: string; primary: string; secondary: string };
   footer: {
     tagline: string;
@@ -76,7 +77,7 @@ export type Dictionary = {
 };
 
 const hi: Dictionary = {
-  meta: { title: "ओहो ई-बाज़ार — आपकी हर पसंद, एक ही बाज़ार में" },
+  meta: { title: "ओहो ई-बाज़ार — आपकी दुनिया, आपकी पसंद, आपका बाज़ार" },
   a11y: {
     skip: "मुख्य सामग्री पर जाएँ",
     openMenu: "मेनू खोलें",
@@ -93,8 +94,8 @@ const hi: Dictionary = {
   },
   hero: {
     eyebrow: "स्थानीय दुकानें · ऑनलाइन बाज़ार · इवेंट सेवाएँ",
-    lines: [[{ t: "आपकी " }, { t: "हर पसंद", accent: true }, { t: "," }], [{ t: "एक ही बाज़ार में।" }]],
-    sub: "खरीदारी से लेकर खास मौकों की सेवाओं तक, आपकी जरूरतों के लिए एक ही जगह।",
+    lines: [[{ t: "आपकी दुनिया।" }], [{ t: "आपकी " }, { t: "पसंद।", accent: true }], [{ t: "आपका बाज़ार।" }]],
+    sub: "हर दिन की ज़रूरतों से लेकर खास मौकों तक — अपनी अगली पसंद खोजें।",
     primary: "ओहो ई-बाज़ार देखें",
     secondary: "हमारी दुनिया जानें",
     scroll: "स्क्रॉल करें",
@@ -168,6 +169,7 @@ const hi: Dictionary = {
       { title: "विक्रेता बनें", body: "अपनी दुकान या सेवा को ओहो ई-बाज़ार पर लाएँ।" },
     ],
   },
+  bridge: { quote: "हर चीज़ के पीछे एक हाथ है।" },
   cta: {
     lines: [[{ t: "आपकी अगली पसंद" }], [{ t: "यहीं से ", accent: true }, { t: "शुरू होती है।" }]],
     body: "श्रेणियाँ देखें, स्थानीय विक्रेताओं को जानें, या अपनी दुकान को मंच पर लाएँ।",
@@ -175,7 +177,7 @@ const hi: Dictionary = {
     secondary: "विक्रेता बनें",
   },
   footer: {
-    tagline: "आपकी हर पसंद, एक ही बाज़ार में।",
+    tagline: "आपकी दुनिया। आपकी पसंद। आपका बाज़ार।",
     shop: "खरीदारी",
     services: "इवेंट सेवाएँ",
     sellers: "विक्रेताओं के लिए",
@@ -225,7 +227,7 @@ const hi: Dictionary = {
 };
 
 const en: Dictionary = {
-  meta: { title: "OHO E-Bazar — Everything You Love, All in One Marketplace" },
+  meta: { title: "OHO E-Bazar — Your World. Your Choices. Your Marketplace." },
   a11y: {
     skip: "Skip to main content",
     openMenu: "Open menu",
@@ -242,8 +244,8 @@ const en: Dictionary = {
   },
   hero: {
     eyebrow: "Local shops · Online marketplace · Event services",
-    lines: [[{ t: "Everything " }, { t: "You Love", accent: true }, { t: "," }], [{ t: "All in One Marketplace." }]],
-    sub: "From everyday shopping to special occasions, discover more in one place.",
+    lines: [[{ t: "Your World." }], [{ t: "Your " }, { t: "Choices.", accent: true }], [{ t: "Your Marketplace." }]],
+    sub: "From everyday essentials to life's biggest moments — find your next discovery.",
     primary: "Explore OHO E-Bazar",
     secondary: "Discover Our Story",
     scroll: "Scroll",
@@ -317,6 +319,7 @@ const en: Dictionary = {
       { title: "Become a seller", body: "Bring your shop or service to OHO E-Bazar." },
     ],
   },
+  bridge: { quote: "Behind every product, a person." },
   cta: {
     lines: [[{ t: "Your Next Discovery" }], [{ t: "Starts ", accent: true }, { t: "Here." }]],
     body: "Browse categories, meet local sellers, or bring your own shop to the platform.",
@@ -324,7 +327,7 @@ const en: Dictionary = {
     secondary: "Become a seller",
   },
   footer: {
-    tagline: "Everything you love, all in one marketplace.",
+    tagline: "Your World. Your Choices. Your Marketplace.",
     shop: "Shop",
     services: "Event services",
     sellers: "For sellers",

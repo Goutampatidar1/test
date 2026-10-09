@@ -137,9 +137,13 @@ export function serviceArt(name: string): CategoryArt {
 }
 
 const PRODUCT_ART: { match: RegExp; photo: PhotoKey }[] = [
-  { match: /t-?shirt|\btee\b/i, photo: "tee" },
-  { match: /chips|snack|namkeen/i, photo: "grocery" },
-  { match: /banana/i, photo: "bananas" },
+  { match: /t-?shirt|\btee\b|kurta|top\b/i, photo: "tee" },
+  { match: /chips|snack|namkeen|biscuit|mithai|sweet/i, photo: "grocery" },
+  { match: /banana|fruit|vegetable|sabzi|atta|dal\b/i, photo: "bananas" },
+  { match: /saree|sari|lehenga|dupatta|salwar|kurti/i, photo: "saree-portrait" },
+  { match: /headphone|earphone|speaker|laptop|mobile|phone|tablet|gadget/i, photo: "electronics" },
+  { match: /fitness|gym|dumbbell|yoga|mat\b|exercise/i, photo: "fitness" },
+  { match: /gift|hamper|box\b/i, photo: "gifts" },
 ];
 
 /** Representative art for a live product whose API image is a placeholder; `undefined` renders a typographic tile. */

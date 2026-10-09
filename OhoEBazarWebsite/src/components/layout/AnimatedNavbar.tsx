@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "motion/react";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { BrandGlyph } from "@/components/brand/BrandMark";
+import { BrandLogo } from "@/components/brand/BrandMark";
 import { useI18n } from "@/i18n/LanguageProvider";
 import type { Lang } from "@/i18n/dictionary";
 import { cn } from "@/lib/utils";
@@ -70,28 +70,25 @@ export function AnimatedNavbar() {
   const introDone = useIntroDone();
   const { scrollY } = useScroll();
   const [solid, setSolid] = useState(false);
-  const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [onDark, setOnDark] = useState(true);
   const menuButton = useRef<HTMLButtonElement>(null);
   const firstLink = useRef<HTMLAnchorElement>(null);
 
-  // Sections declare `data-nav="dark" | "light"`; the last one in document order under the bar is the one on top.
+  // Sections declare `data-nav="dark" | "light"`. Keep current value when no section is under the bar
+  // (e.g. while scrolling through ArtisanBridge which intentionally has no data-nav).
   const probe = () => {
-    let theme = null as string | null;
+    let theme: string | null = null;
     document.querySelectorAll<HTMLElement>("[data-nav]").forEach((el) => {
       const r = el.getBoundingClientRect();
-      if (r.top <= 36 && r.bottom > 36) theme = el.dataset.nav ?? null;
+      if (r.top <= 60 && r.bottom > 60) theme = el.dataset.nav ?? null;
     });
-    setOnDark(theme === "dark");
+    if (theme !== null) setOnDark(theme === "dark");
   };
 
   useMotionValueEvent(scrollY, "change", (y) => {
-    const prev = scrollY.getPrevious() ?? 0;
     setSolid(y > 40);
-    setHidden(y > 640 && y > prev + 2 && !open);
-    if (y < prev - 2) setHidden(false);
     probe();
   });
 
@@ -138,8 +135,8 @@ export function AnimatedNavbar() {
     <>
       <motion.header
         initial={{ y: -110, opacity: 0 }}
-        animate={introDone ? { y: hidden ? -110 : 0, opacity: 1 } : { y: -110, opacity: 0 }}
-        transition={{ duration: hidden ? 0.45 : 0.9, ease: EASE, delay: introDone && !solid && !hidden ? 0.05 : 0 }}
+        animate={introDone ? { y: 0, opacity: 1 } : { y: -110, opacity: 0 }}
+        transition={{ duration: 0.9, ease: EASE, delay: introDone && !solid ? 0.05 : 0 }}
         className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5"
       >
         <nav
@@ -156,28 +153,17 @@ export function AnimatedNavbar() {
           <a
             href="#top"
             onClick={go("top")}
-            className="group flex items-center gap-2.5 rounded-full pr-2"
+            className="group flex items-center rounded-full pr-2"
             aria-label={brand}
           >
             <motion.span
-              initial={{ scale: 0, rotate: -120 }}
-              animate={introDone ? { scale: 1, rotate: 0 } : undefined}
-              transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.2 }}
-              className="inline-flex transition-transform duration-500 group-hover:-rotate-12"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={introDone ? { scale: 1, opacity: 1 } : undefined}
+              transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.2 }}
+              className="inline-flex transition-transform duration-500 group-hover:scale-105"
             >
-              <BrandGlyph className="size-9" />
+              <BrandLogo size="md" />
             </motion.span>
-            <span className="overflow-hidden">
-              <motion.span
-                key={lang}
-                initial={{ y: "110%" }}
-                animate={introDone ? { y: 0 } : undefined}
-                transition={{ duration: 0.8, ease: EASE, delay: 0.3 }}
-                className="block font-display text-[1.12rem] font-semibold tracking-tight"
-              >
-                {brand}
-              </motion.span>
-            </span>
           </a>
 
           <ul className="hidden items-center gap-1 lg:flex">
@@ -249,10 +235,7 @@ export function AnimatedNavbar() {
             className="grain fixed inset-0 z-[60] flex flex-col bg-charcoal px-6 pb-8 pt-5 text-ivory lg:hidden"
           >
             <div className="relative z-10 flex items-center justify-between">
-              <span className="flex items-center gap-2.5 font-display text-lg font-semibold">
-                <BrandGlyph className="size-9" />
-                {brand}
-              </span>
+              <BrandLogo size="sm" />
               <button
                 type="button"
                 onClick={() => setOpen(false)}

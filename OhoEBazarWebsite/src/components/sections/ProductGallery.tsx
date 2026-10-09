@@ -8,7 +8,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { resolveMediaUrl } from "@/lib/api";
 import { formatINR } from "@/lib/format";
 import { gsap, useGsap } from "@/lib/gsap";
-import { isPlaceholder, productArt } from "@/lib/media";
+import { categoryArt, isPlaceholder, productArt } from "@/lib/media";
 import type { PublicProduct } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SectionLabel } from "./SectionLabel";
@@ -21,15 +21,22 @@ const PLACEMENT = [
   { cell: "lg:col-span-4 lg:col-start-2 lg:-mt-[10vh]", ratio: "aspect-[4/5]", depth: 1, mask: "inset(0% 0% 0% 100% round 18px)" },
 ];
 
-function productImage(p: PublicProduct) {
+/**
+ * heroMode: the hero expansion always wants an art-directed editorial photo — even when the API
+ * image is real — because a full-bleed product thumbnail rarely looks cinematic at 100vw.
+ * Standard mode prefers the real API image and only falls back to art when it's missing.
+ */
+function productImage(p: PublicProduct, heroMode = false) {
   const api = p.image ?? p.thumbnail;
   const real = !isPlaceholder(api) ? resolveMediaUrl(api) : undefined;
-  return { real, art: real ? undefined : productArt(p.name) };
+  const art = productArt(p.name) ?? categoryArt(p.category?.name ?? "").photo;
+  if (heroMode) return { real: art ? undefined : real, art };
+  return { real, art: real ? undefined : art };
 }
 
-function ProductVisual({ product, sizes, priority }: { product: PublicProduct; sizes: string; priority?: boolean }) {
+function ProductVisual({ product, sizes, priority, heroMode = false }: { product: PublicProduct; sizes: string; priority?: boolean; heroMode?: boolean }) {
   const { t } = useI18n();
-  const { real, art } = productImage(product);
+  const { real, art } = productImage(product, heroMode);
   if (real) return <RemoteImage src={real} alt={product.name} />;
   if (art) return <Photo name={art} alt={`${product.name} — ${t.products.representative}`} sizes={sizes} priority={priority} />;
   return (
@@ -39,9 +46,9 @@ function ProductVisual({ product, sizes, priority }: { product: PublicProduct; s
   );
 }
 
-function RepresentativeBadge({ product, className }: { product: PublicProduct; className?: string }) {
+function RepresentativeBadge({ product, className, heroMode }: { product: PublicProduct; className?: string; heroMode?: boolean }) {
   const { t } = useI18n();
-  if (!productImage(product).art) return null;
+  if (!heroMode && !productImage(product).art) return null;
   return (
     <span className={cn("rounded-full bg-ivory/85 px-3 py-1 text-[0.7rem] font-semibold text-charcoal/80 backdrop-blur", className)}>
       {t.products.representative}
@@ -128,7 +135,7 @@ function ProductStage({ product, fixtures }: { product: PublicProduct; fixtures:
     <div ref={ref} className="relative h-[100svh] min-h-[640px] overflow-hidden">
       <div data-p-frame className="absolute inset-0 overflow-hidden bg-sand will-change-[clip-path]">
         <div data-p-inner className="absolute inset-0">
-          <ProductVisual product={product} sizes="100vw" />
+          <ProductVisual product={product} sizes="100vw" heroMode />
         </div>
         <div
           data-p-shade
@@ -156,7 +163,7 @@ function ProductStage({ product, fixtures }: { product: PublicProduct; fixtures:
             )}
           </div>
           <div className="flex flex-col items-end gap-4">
-            <RepresentativeBadge product={product} />
+            <RepresentativeBadge product={product} heroMode />
             <Price product={product} className="text-[clamp(2.2rem,3.6vw,3.6rem)] leading-none" />
           </div>
         </div>
