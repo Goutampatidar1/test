@@ -70,7 +70,6 @@ export function AnimatedNavbar() {
   const introDone = useIntroDone();
   const { scrollY } = useScroll();
   const [solid, setSolid] = useState(false);
-  const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [onDark, setOnDark] = useState(true);
@@ -89,18 +88,8 @@ export function AnimatedNavbar() {
   };
 
   useMotionValueEvent(scrollY, "change", (y) => {
-    const prev = scrollY.getPrevious() ?? 0;
-    const delta = y - prev;
     setSolid(y > 40);
     probe();
-    if (open) return;
-    // Always visible in the first 80px (hero entrance)
-    if (y < 80) { setHidden(false); return; }
-    // Hide on meaningful downward scroll; show on any upward movement.
-    // Lenis smooth-scroll produces small per-frame deltas, so delta < 0 catches
-    // even gentle upward intent without requiring a large threshold.
-    if (delta > 5) setHidden(true);
-    else if (delta < 0) setHidden(false);
   });
 
   useEffect(() => {
@@ -146,8 +135,8 @@ export function AnimatedNavbar() {
     <>
       <motion.header
         initial={{ y: -110, opacity: 0 }}
-        animate={introDone ? { y: hidden ? -110 : 0, opacity: 1 } : { y: -110, opacity: 0 }}
-        transition={{ duration: hidden ? 0.45 : 0.9, ease: EASE, delay: introDone && !solid && !hidden ? 0.05 : 0 }}
+        animate={introDone ? { y: 0, opacity: 1 } : { y: -110, opacity: 0 }}
+        transition={{ duration: 0.9, ease: EASE, delay: introDone && !solid ? 0.05 : 0 }}
         className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5"
       >
         <nav
