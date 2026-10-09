@@ -7,8 +7,8 @@ This package contains everything needed to deploy **Admin Panel**, **Vendor Pane
 | Folder / file | Purpose |
 |---------------|---------|
 | `Backend/` | Node.js API (run with PM2 on port **5001** internally) |
-| `AdminPannel/dist/` | Built admin website (web root) |
-| `AdminPannel/dist/vendor/` | Built vendor website at `/vendor/` |
+| `AdminPannel/dist/` | Built admin website, deployed as `public_html/admin/` |
+| `VenueVendorPanel/dist/` | Built vendor website, deployed as `public_html/vendor/` |
 | `VenueVendorPanel/` | Vendor source (only if IT must rebuild frontends) |
 | `AdminPannel/` | Admin source (only if IT must rebuild frontends) |
 | `deploy/apache-ohoecom-combined.conf` | Apache vhost for **single-domain** setup |
@@ -19,7 +19,7 @@ This package contains everything needed to deploy **Admin Panel**, **Vendor Pane
 
 | App | URL |
 |-----|-----|
-| Admin | `https://ohoecom.developmentalphawizz.com/` |
+| Admin | `https://ohoecom.developmentalphawizz.com/admin/` |
 | Vendor | `https://ohoecom.developmentalphawizz.com/vendor/` |
 | API | `https://ohoecom.developmentalphawizz.com/api` |
 | Uploads | `https://ohoecom.developmentalphawizz.com/uploads` |
@@ -77,13 +77,14 @@ Use `deploy/apache-ohoecom-combined.conf` as the starting template.
 ### 4. Document root layout
 
 ```text
-/var/www/ohoecom/
-  AdminPannel/dist/          ← Apache DocumentRoot
-    index.html               ← Admin SPA
+/var/www/ohoecom/public_html/ ← Apache DocumentRoot
+  index.html, assets/...     ← Public website
+  admin/                     ← AdminPannel/dist
+    index.html
     assets/...
-    vendor/                  ← Vendor SPA (from VenueVendorPanel build)
-      index.html
-      assets/...
+  vendor/                    ← VenueVendorPanel/dist
+    index.html
+    assets/...
   Backend/                   ← Node app (not served by Apache directly)
     server.js
     uploads/                 ← Must be writable; back up regularly
@@ -157,8 +158,9 @@ VITE_API_URL=https://YOUR-DOMAIN.com
 
 cd AdminPannel && npm install && npm run build
 cd ../VenueVendorPanel && npm install && npm run build
-mkdir -p ../AdminPannel/dist/vendor
-cp -r dist/* ../AdminPannel/dist/vendor/
+mkdir -p ../public_html/admin ../public_html/vendor
+cp -r ../AdminPannel/dist/* ../public_html/admin/
+cp -r dist/* ../public_html/vendor/
 ```
 
 ---

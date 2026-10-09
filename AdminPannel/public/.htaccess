@@ -6,10 +6,10 @@
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /
+  RewriteBase /admin/
 
-  # Combined deployment: admin panel at domain root, vendor panel in /vendor/
-  # Upload AdminPannel/dist/* to web root and VenueVendorPanel/dist/* to /vendor/
+  # This file is used when the admin build is deployed at /admin/.
+  # For a combined deployment, use deploy/public_html.htaccess at the document root.
 
   # Serve real files first (favicon, SPA assets, logos copied into web root).
   RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -34,8 +34,7 @@
   RewriteRule ^api(/.*)?$ - [L]
   RewriteRule ^uploads(/.*)?$ - [L]
 
-  RewriteRule ^vendor(/.*)?$ /vendor/index.html [L]
-  RewriteRule ^ /index.html [L]
+  RewriteRule ^ index.html [L]
 </IfModule>
 
 # php -- BEGIN cPanel-generated handler, do not edit
