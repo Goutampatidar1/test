@@ -333,7 +333,12 @@ export function FeatureSettingsPage() {
 
       <Section title="Videos, hot deals & alerts">
         <div className="row g-3">
-          <ToggleField label="Videos in the user app" checked={form.videoEnabledUser} onChange={set("videoEnabledUser")} />
+          <ToggleField
+            label="Videos in the user app"
+            hint="On: the video section and reels show for every user. Off: all video sections, buttons and reels are hidden in the user app."
+            checked={form.videoEnabledUser}
+            onChange={set("videoEnabledUser")}
+          />
           <ToggleField label="Video uploads for vendors" checked={form.videoEnabledVendor} onChange={set("videoEnabledVendor")} />
           <ToggleField label="Hot deals section" checked={form.hotDealsEnabled} onChange={set("hotDealsEnabled")} />
           <NumberField label="Hot deals shown" value={form.hotDealsLimit} onChange={set("hotDealsLimit")} min={1} max={50} />
@@ -399,6 +404,11 @@ export function FeatureSettingsPage() {
                   </td>
                   <td>
                     <Toggle checked={row.enabled !== false} label={`Show ${row.key}`} onChange={(v) => updateSection(idx, { enabled: v })} />
+                    {row.key === "video" && !form.videoEnabledUser ? (
+                      <small className="data-table__muted" style={{ display: "block" }}>
+                        Hidden — "Videos in the user app" is off
+                      </small>
+                    ) : null}
                   </td>
                 </tr>
               ))}

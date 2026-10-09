@@ -163,11 +163,12 @@ Response root:
 - Do not autoplay on cellular data if the app has a data-saver setting; mute by default, tap to unmute.
 - Cache thumbnails, not videos.
 
-**User on/off switch:** in Settings add "Show videos" toggle.
-- `GET /user/video-settings` → `data[0] = { adminEnabled, enabled, effective, lockedByAdmin }`
-- `PATCH /user/video-settings` body `{ "videoEnabled": true|false }`
-- If `lockedByAdmin` is true, show the toggle disabled with text "Videos are turned off by OHO".
-- When `effective` is false, hide every video UI in the app.
+**On/off is controlled by admin only** (Admin panel → App Feature Controls → "Videos in the user app"). There is no user-side toggle — remove any "Show videos" switch/button from the user app.
+- Source of truth: `features.videoEnabledUser` from `GET /user/app-settings` (or `/public/app-settings`, `/public/app-config`). Re-fetch on app start and on resume so admin changes apply without an app update.
+- `true` → show the video section on home, the videos tab/button and the reels player directly (no extra tap to enable).
+- `false` → hide every video UI (home strip, tab, bottom-nav item, reels entry points, "watch video" buttons on product/venue pages).
+- The backend enforces it too: when off, `/public/home/feed` omits the `video` section and `/public/video-feeds`, `/public/video-feed/:id` return `videoEnabled: false` with empty `data`.
+- `GET /user/video-settings` still works for old builds and returns the admin state (`effective` = admin switch, `managedByAdmin: true`); `PATCH` no longer changes anything.
 
 Each item keeps the existing like/shop-now/book-now behaviour (`isLiked`, `shopNow`, `bookNow`, `product`, `venue`).
 
@@ -456,7 +457,7 @@ If the app supports vendors who are both ecom and service (`vendorPanelType: "bo
 - [ ] App works when every feature flag is off (no crashes, sections hidden).
 - [ ] Home sections render in the API order; disabled sections absent.
 - [ ] Changing area reloads home + vendors; guest area persists locally.
-- [ ] Reels: only one active player, next one preloaded, cursor pagination stops at `hasMore=false`, user toggle hides videos everywhere.
+- [ ] Reels: only one active player, next one preloaded, cursor pagination stops at `hasMore=false`, admin `videoEnabledUser=false` hides videos everywhere.
 - [ ] Banner images keep correct ratio; timers tick and remove expired banners.
 - [ ] Search "shiv shakti" shows the shop row and its products.
 - [ ] Enquiry: send → vendor accepts (push) → user pays token → booking appears in My bookings; expired/declined states handled; `ENQUIRY_REQUIRED` redirects.

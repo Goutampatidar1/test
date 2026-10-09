@@ -33,7 +33,10 @@ async function safe(label, fn, fallback) {
 exports.getHomeFeed = asyncHandler(async (req, res) => {
   const baseUrl = getPublicBaseUrl(req);
   const features = await getFeatureSettings();
-  const order = (features.homeSections || []).filter((s) => s.enabled !== false);
+  const videoAllowed = features.videoEnabledUser !== false;
+  const order = (features.homeSections || []).filter(
+    (s) => s.enabled !== false && (s.key !== "video" || videoAllowed)
+  );
   const wants = new Set(order.map((s) => s.key));
 
   const area = await safe(
@@ -53,7 +56,6 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
   const perCategory = Math.min(Math.max(parseInt(req.query.perCategory, 10) || 8, 1), 20);
   const maxCategories = Math.min(Math.max(parseInt(req.query.maxCategories, 10) || 8, 1), 20);
   const videoLimit = Math.min(Math.max(parseInt(req.query.videoLimit, 10) || 6, 1), 20);
-  const videoAllowed = features.videoEnabledUser !== false && req.user?.videoEnabled !== false;
 
   const needCategories = wants.has("categories") || wants.has("products");
 
@@ -64,7 +66,7 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
     needCategories
       ? safe("categories", () => loadCategorySections(req, { baseUrl, perCategory, maxCategories }), [])
       : [],
-    wants.has("video") && videoAllowed
+    wants.has("video")
       ? safe("video", () => loadVideoPage({ feedType: "all", limit: videoLimit, lite: true, baseUrl, userId: req.user?._id }), {
           items: [],
           hasMore: false,
@@ -90,7 +92,7 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
     banners: () => ({ items: banners }),
     categories: () => ({ items: categorySections.map((s) => s.category) }),
     video: () => ({
-      enabled: videoAllowed,
+      enabled: true,
       items: video.items,
       hasMore: video.hasMore,
       nextCursor: video.nextCursor,
