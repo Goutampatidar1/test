@@ -16,19 +16,19 @@
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # Backend Node for ohoebazar.com listens on 5012
+  # Backend Node for ohoebazar.com listens on 5017
   # Prefer ProxyPass in Apache vhost if [P] fails on this host.
   <IfModule mod_proxy.c>
-    RewriteRule ^api(/.*)?$ http://127.0.0.1:5012/api$1 [P,L]
-    RewriteRule ^uploads(/.*)?$ http://127.0.0.1:5012/uploads$1 [P,L]
-    RewriteRule ^privacy-policy/?$ http://127.0.0.1:5012/privacy-policy [P,L]
-    RewriteRule ^vendor/privacy-policy/?$ http://127.0.0.1:5012/vendor/privacy-policy [P,L]
-    RewriteRule ^delivery/privacy-policy/?$ http://127.0.0.1:5012/delivery/privacy-policy [P,L]
-    RewriteRule ^driver/privacy-policy/?$ http://127.0.0.1:5012/driver/privacy-policy [P,L]
-    RewriteRule ^delete-account/?$ http://127.0.0.1:5012/delete-account [P,L]
-    RewriteRule ^vendor/delete-account/?$ http://127.0.0.1:5012/vendor/delete-account [P,L]
-    RewriteRule ^delivery/delete-account/?$ http://127.0.0.1:5012/delivery/delete-account [P,L]
-    RewriteRule ^driver/delete-account/?$ http://127.0.0.1:5012/driver/delete-account [P,L]
+    RewriteRule ^api(/.*)?$ http://127.0.0.1:5017/api$1 [P,L]
+    RewriteRule ^uploads(/.*)?$ http://127.0.0.1:5017/uploads$1 [P,L]
+    RewriteRule ^privacy-policy/?$ http://127.0.0.1:5017/privacy-policy [P,L]
+    RewriteRule ^vendor/privacy-policy/?$ http://127.0.0.1:5017/vendor/privacy-policy [P,L]
+    RewriteRule ^delivery/privacy-policy/?$ http://127.0.0.1:5017/delivery/privacy-policy [P,L]
+    RewriteRule ^driver/privacy-policy/?$ http://127.0.0.1:5017/driver/privacy-policy [P,L]
+    RewriteRule ^delete-account/?$ http://127.0.0.1:5017/delete-account [P,L]
+    RewriteRule ^vendor/delete-account/?$ http://127.0.0.1:5017/vendor/delete-account [P,L]
+    RewriteRule ^delivery/delete-account/?$ http://127.0.0.1:5017/delivery/delete-account [P,L]
+    RewriteRule ^driver/delete-account/?$ http://127.0.0.1:5017/driver/delete-account [P,L]
   </IfModule>
 
   RewriteRule ^api(/.*)?$ - [L]

@@ -26,7 +26,7 @@ At the end, produce a checklist of what you implemented and anything you could n
 
 ## GLOBAL RULES (read first)
 
-- **Base URL:** `https://ohoebazar.com:5012/api` — use the existing base-URL config, do not hardcode it again.
+- **Base URL:** `https://ohoebazar.com:5017/api` — use the existing base-URL config, do not hardcode it again.
 - **Auth:** `Authorization: Bearer <accessToken>` (existing token handling + refresh flow). Public routes work without a token, but **send the token when the user is logged in** — responses get personalised (wishlist flags, liked videos, suggestions).
 - **Response envelope (most endpoints):**
   ```json
