@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — {{APP_ROLE}} | {{APP_NAME}}</title>
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --ink: #1c1917;
+      --muted: #57534e;
+      --card: #ffffff;
+      --accent: #c2410c;
+      --line: #e7e5e4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #fed7aa 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #ffedd5 0%, transparent 50%),
+        var(--bg);
+      line-height: 1.65;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+    header { margin-bottom: 28px; }
+    .brand {
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+    h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 4vw, 2.4rem); line-height: 1.2; }
+    .lead { color: var(--muted); margin: 0; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: 0 10px 30px rgba(28, 25, 23, 0.04);
+    }
+    h2 { font-size: 1.15rem; margin: 28px 0 10px; }
+    h2:first-child { margin-top: 0; }
+    p, li { color: #44403c; }
+    ul { padding-left: 1.2rem; }
+    a { color: var(--accent); }
+    footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="brand">{{APP_NAME}} · {{APP_ROLE}}</p>
+      <h1>Privacy Policy</h1>
+      <p class="lead">{{LEAD_TEXT}}</p>
+    </header>
+
+    <article class="card">
+      <h2>1. Information we collect</h2>
+      <p>{{COLLECT_INTRO}}</p>
+      <ul>
+        {{COLLECT_ITEMS}}
+      </ul>
+
+      <h2>2. How we use your information</h2>
+      <ul>
+        {{USE_ITEMS}}
+      </ul>
+
+      <h2>3. Sharing of information</h2>
+      <p>{{SHARE_TEXT}}</p>
+
+      <h2>4. Data retention</h2>
+      <p>We keep your {{APP_ROLE_LOWER}} data while your account is active and as needed for legal, accounting, or dispute purposes. You can request deletion of your account at any time.</p>
+
+      <h2>5. Delete your account</h2>
+      <p>You can request permanent {{APP_ROLE_LOWER}} account deletion from the app or from our <a href="{{DELETE_ACCOUNT_URL}}">Delete Account</a> page. After deletion, your profile and login access are removed.</p>
+
+      <h2>6. Contact</h2>
+      <p>
+        For privacy questions about the {{APP_ROLE_LOWER}} app, contact {{APP_NAME}}
+        support{{SUPPORT_CONTACT}}.
+      </p>
+    </article>
+
+    <footer>
+      <p>&copy; {{YEAR}} {{APP_NAME}}. {{APP_ROLE}} Privacy Policy.</p>
+    </footer>
+  </div>
+</body>
+</html>

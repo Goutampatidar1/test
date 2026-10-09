@@ -16,11 +16,19 @@
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # NOTE: [P] proxy in .htaccess often does NOT work on cPanel/shared hosting.
-  # Prefer ProxyPass in the Apache vhost — see deploy/apache-ohoecom-combined.conf
+  # Backend Node for ohoebazar.com listens on 5012
+  # Prefer ProxyPass in Apache vhost if [P] fails on this host.
   <IfModule mod_proxy.c>
-    RewriteRule ^api(/.*)?$ http://127.0.0.1:5001/api$1 [P,L]
-    RewriteRule ^uploads(/.*)?$ http://127.0.0.1:5001/uploads$1 [P,L]
+    RewriteRule ^api(/.*)?$ http://127.0.0.1:5012/api$1 [P,L]
+    RewriteRule ^uploads(/.*)?$ http://127.0.0.1:5012/uploads$1 [P,L]
+    RewriteRule ^privacy-policy/?$ http://127.0.0.1:5012/privacy-policy [P,L]
+    RewriteRule ^vendor/privacy-policy/?$ http://127.0.0.1:5012/vendor/privacy-policy [P,L]
+    RewriteRule ^delivery/privacy-policy/?$ http://127.0.0.1:5012/delivery/privacy-policy [P,L]
+    RewriteRule ^driver/privacy-policy/?$ http://127.0.0.1:5012/driver/privacy-policy [P,L]
+    RewriteRule ^delete-account/?$ http://127.0.0.1:5012/delete-account [P,L]
+    RewriteRule ^vendor/delete-account/?$ http://127.0.0.1:5012/vendor/delete-account [P,L]
+    RewriteRule ^delivery/delete-account/?$ http://127.0.0.1:5012/delivery/delete-account [P,L]
+    RewriteRule ^driver/delete-account/?$ http://127.0.0.1:5012/driver/delete-account [P,L]
   </IfModule>
 
   RewriteRule ^api(/.*)?$ - [L]
@@ -29,3 +37,10 @@
   RewriteRule ^vendor(/.*)?$ /vendor/index.html [L]
   RewriteRule ^ /index.html [L]
 </IfModule>
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php74” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php74 .php .php7 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

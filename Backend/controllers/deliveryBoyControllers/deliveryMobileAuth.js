@@ -15,7 +15,7 @@ const {
 const { toMobileDeliveryProfile, maskPhone } = require("../../utils/toPublicProfile");
 const { sendSuccess } = require("../../utils/apiResponse");
 const { normalizePhone } = require("../../utils/phone");
-const { generateOtp, otpExpiryDate, isOtpExpired, OTP_TTL_MS, devOnlyOtp } = require("../../utils/otp");
+const { resolveOtpForPhone, otpExpiryDate, isOtpExpired, OTP_TTL_MS, devOnlyOtp } = require("../../utils/otp");
 
 const MIN_CHANGE_PASSWORD_LENGTH = 8;
 const OTP_PURPOSE_FORGOT_PASSWORD = "delivery_forgot_password";
@@ -226,7 +226,7 @@ exports.sendForgotPasswordOtp = asyncHandler(async (req, res) => {
   assertDeliveryBoyCanRecoverPassword(deliveryBoy);
   await assertCanResendForgotPasswordOtp(phoneNorm);
 
-  const otp = generateOtp();
+  const otp = resolveOtpForPhone(phoneNorm);
   const otpExpire = otpExpiryDate();
   await saveForgotPasswordOtp(phoneNorm, otp, otpExpire);
 

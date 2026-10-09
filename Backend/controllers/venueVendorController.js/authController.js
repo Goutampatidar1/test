@@ -14,7 +14,7 @@ const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
 const { normalizePhone, phoneLookupValues } = require("../../utils/phone");
 const PhoneOtp = require("../../models/other/phoneOtp");
-const { generateOtp, otpExpiryDate, isOtpExpired, OTP_TTL_MS, devOnlyOtp } = require("../../utils/otp");
+const { resolveOtpForPhone, otpExpiryDate, isOtpExpired, OTP_TTL_MS, devOnlyOtp } = require("../../utils/otp");
 const { sendSuccess } = require("../../utils/apiResponse");
 const {
   resolveVenueVendorDocumentUploads,
@@ -323,7 +323,7 @@ exports.sendOtp = asyncHandler(async (req, res) => {
 
   await assertCanResendVenueVendorOtp(phoneNorm);
 
-  const otp = generateOtp();
+  const otp = resolveOtpForPhone(phoneNorm);
   const otpExpire = otpExpiryDate();
   await saveVenueVendorPhoneOtp(phoneNorm, otp, otpExpire);
 

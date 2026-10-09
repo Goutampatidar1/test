@@ -16,7 +16,7 @@ const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { normalizePhone } = require("../../utils/phone");
 const { resolveVendorApprovalRequired } = require("../../utils/vendorApproval");
 const { queueNotifyAllAdmins } = require("../../utils/adminInbox");
-const { generateOtp, otpExpiryDate, registrationSessionExpiryDate, isOtpExpired, OTP_TTL_MS, REGISTER_SESSION_TTL_MS, devOnlyOtp } = require("../../utils/otp");
+const { resolveOtpForPhone, otpExpiryDate, registrationSessionExpiryDate, isOtpExpired, OTP_TTL_MS, REGISTER_SESSION_TTL_MS, devOnlyOtp } = require("../../utils/otp");
 const { sendSuccess } = require("../../utils/apiResponse");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
@@ -336,7 +336,7 @@ exports.sendOtp = asyncHandler(async (req, res) => {
     throw new AppError("Phone number is already registered. Please log in", 409);
   }
 
-  const otp = generateOtp();
+  const otp = resolveOtpForPhone(phoneNorm);
   const otpExpire = otpExpiryDate();
   await saveVendorPhoneOtp(phoneNorm, otpPurpose, otp, otpExpire);
 
