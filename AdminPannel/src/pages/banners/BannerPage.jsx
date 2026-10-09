@@ -47,7 +47,46 @@ function emptyForm() {
     endDate: "",
     cities: "",
     status: "active",
+    subtitle: "",
+    description: "",
+    ctaText: "",
+    badge: "",
+    bgColor: "",
+    textColor: "",
+    displayOrder: "0",
+    showTimer: false,
+    timerLabel: "",
+    timerEndsAt: "",
   };
+}
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+
+function toDateTimeLocalValue(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function validateBannerContent(form) {
+  for (const [key, label] of [
+    ["bgColor", "Background colour"],
+    ["textColor", "Text colour"],
+  ]) {
+    const v = String(form[key] || "").trim();
+    if (v && !HEX_COLOR_RE.test(v)) return `${label} must be a hex colour like #FF6600.`;
+  }
+  if (form.displayOrder !== "" && !Number.isFinite(Number(form.displayOrder))) {
+    return "Display order must be a number.";
+  }
+  if (form.showTimer) {
+    if (!form.timerEndsAt) return "Pick when the countdown timer should end.";
+    const end = new Date(form.timerEndsAt);
+    if (Number.isNaN(end.getTime()) || end <= new Date()) return "Timer end must be in the future.";
+  }
+  return "";
 }
 
 const TITLE_MAX_LEN = 60;
@@ -121,7 +160,7 @@ function validateBannerForm(form, dateOptions = {}) {
   if (mode === "city" && cities.length === 0) {
     return "At least one city is required for city mode.";
   }
-  return "";
+  return validateBannerContent(form);
 }
 
 export function BannerPage() {
@@ -298,6 +337,16 @@ export function BannerPage() {
       ...(form.endDate ? { endDate: form.endDate } : {}),
       cities: form.mode === "city" ? normalizeCitiesInput(form.cities) : [],
       status: form.status || "active",
+      subtitle: form.subtitle,
+      description: form.description,
+      ctaText: form.ctaText,
+      badge: form.badge,
+      bgColor: form.bgColor,
+      textColor: form.textColor,
+      displayOrder: form.displayOrder,
+      showTimer: form.showTimer,
+      timerLabel: form.showTimer ? form.timerLabel : "",
+      timerEndsAt: form.showTimer && form.timerEndsAt ? new Date(form.timerEndsAt).toISOString() : "",
     };
 
     setSaving(true);
@@ -332,6 +381,16 @@ export function BannerPage() {
       endDate: row.endDate ? String(row.endDate).slice(0, 10) : "",
       cities: Array.isArray(row.cities) ? row.cities.join(", ") : "",
       status: row.status || "active",
+      subtitle: row.subtitle || "",
+      description: row.description || "",
+      ctaText: row.ctaText || "",
+      badge: row.badge || "",
+      bgColor: row.bgColor || "",
+      textColor: row.textColor || "",
+      displayOrder: String(row.displayOrder ?? 0),
+      showTimer: Boolean(row.showTimer),
+      timerLabel: row.timerLabel || "",
+      timerEndsAt: toDateTimeLocalValue(row.timerEndsAt),
     });
     setInitialStartDate(row.startDate ? String(row.startDate).slice(0, 10) : "");
     setImageFile(null);
@@ -709,7 +768,160 @@ export function BannerPage() {
               />
               <small className="data-table__muted">{bannerImageHint(form.targetType)}</small>
             </label>
+
+            <div className="col-12">
+              <span className="user-field__label" style={{ display: "block", marginTop: 6 }}>
+                Banner content (shown on the app card, all optional)
+              </span>
+            </div>
+            <label className="user-field col-12 col-md-6">
+              <span className="user-field__label">Subtitle</span>
+              <input
+                className="user-field__input"
+                value={form.subtitle}
+                maxLength={120}
+                onChange={(e) => setForm((p) => ({ ...p, subtitle: e.target.value }))}
+                placeholder="e.g. Up to 50% off on festive wear"
+              />
+            </label>
+            <label className="user-field col-12 col-md-6">
+              <span className="user-field__label">Badge</span>
+              <input
+                className="user-field__input"
+                value={form.badge}
+                maxLength={120}
+                onChange={(e) => setForm((p) => ({ ...p, badge: e.target.value }))}
+                placeholder="e.g. Limited time"
+              />
+            </label>
+            <label className="user-field col-12">
+              <span className="user-field__label" style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span>Description</span>
+                <small>{form.description.length}/400</small>
+              </span>
+              <textarea
+                className="user-field__input"
+                rows={2}
+                value={form.description}
+                maxLength={400}
+                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              />
+            </label>
+            <label className="user-field col-12 col-md-4">
+              <span className="user-field__label">Button text (CTA)</span>
+              <input
+                className="user-field__input"
+                value={form.ctaText}
+                maxLength={120}
+                onChange={(e) => setForm((p) => ({ ...p, ctaText: e.target.value }))}
+                placeholder="e.g. Shop now"
+              />
+            </label>
+            {[
+              ["bgColor", "Background colour", "#FF6600"],
+              ["textColor", "Text colour", "#FFFFFF"],
+            ].map(([key, label, placeholder]) => (
+              <label key={key} className="user-field col-12 col-md-4">
+                <span className="user-field__label">{label}</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="color"
+                    value={HEX_COLOR_RE.test(form[key]) && form[key].length === 7 ? form[key] : "#000000"}
+                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value.toUpperCase() }))}
+                    style={{ width: 42, height: 38, padding: 0, border: "1px solid #e5e7eb", borderRadius: 6 }}
+                    aria-label={`${label} picker`}
+                  />
+                  <input
+                    className="user-field__input"
+                    value={form[key]}
+                    maxLength={9}
+                    onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value.trim() }))}
+                    placeholder={placeholder}
+                  />
+                </div>
+              </label>
+            ))}
+            <label className="user-field col-12 col-md-4">
+              <span className="user-field__label">Display order</span>
+              <input
+                type="number"
+                className="user-field__input"
+                value={form.displayOrder}
+                onChange={(e) => setForm((p) => ({ ...p, displayOrder: e.target.value }))}
+              />
+              <small className="data-table__muted">Lower numbers show first in the slider.</small>
+            </label>
+            <div className="user-field col-12 col-md-4">
+              <span className="user-field__label">Show countdown timer</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.showTimer}
+                className={`settings-switch${form.showTimer ? " settings-switch--on" : ""}`}
+                onClick={() => setForm((p) => ({ ...p, showTimer: !p.showTimer }))}
+              >
+                <span className="settings-switch__knob" aria-hidden />
+              </button>
+              <small className="data-table__muted">The banner hides itself automatically when the timer ends.</small>
+            </div>
+            {form.showTimer ? (
+              <>
+                <label className="user-field col-12 col-md-4">
+                  <span className="user-field__label">Timer label</span>
+                  <input
+                    className="user-field__input"
+                    value={form.timerLabel}
+                    maxLength={120}
+                    onChange={(e) => setForm((p) => ({ ...p, timerLabel: e.target.value }))}
+                    placeholder="e.g. Sale ends in"
+                  />
+                </label>
+                <label className="user-field col-12 col-md-4">
+                  <span className="user-field__label">
+                    Timer ends at <span className="required-dot">*</span>
+                  </span>
+                  <input
+                    type="datetime-local"
+                    className="user-field__input"
+                    value={form.timerEndsAt}
+                    min={toDateTimeLocalValue(new Date())}
+                    onChange={(e) => setForm((p) => ({ ...p, timerEndsAt: e.target.value }))}
+                    required
+                  />
+                </label>
+              </>
+            ) : null}
           </div>
+          {form.subtitle || form.badge || form.ctaText || form.bgColor ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "12px 16px",
+                borderRadius: 10,
+                maxWidth: 420,
+                background: form.bgColor || "#111827",
+                color: form.textColor || "#FFFFFF",
+              }}
+            >
+              {form.badge ? (
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, border: "1px solid currentColor" }}>
+                  {form.badge}
+                </span>
+              ) : null}
+              <div style={{ fontWeight: 700, marginTop: 6 }}>{form.title || "Banner title"}</div>
+              {form.subtitle ? <div style={{ fontSize: 13, opacity: 0.9 }}>{form.subtitle}</div> : null}
+              {form.showTimer && form.timerEndsAt ? (
+                <div style={{ fontSize: 12, marginTop: 6 }}>
+                  {form.timerLabel || "Ends in"} · {new Date(form.timerEndsAt).toLocaleString()}
+                </div>
+              ) : null}
+              {form.ctaText ? (
+                <span style={{ display: "inline-block", marginTop: 8, fontSize: 12, fontWeight: 700, textDecoration: "underline" }}>
+                  {form.ctaText}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           {imagePreview ? (
             <div style={{ marginTop: 10 }}>
               <img
@@ -912,6 +1124,23 @@ export function BannerPage() {
               <div className="col-6"><strong>Start Date:</strong> {viewRow.startDate ? new Date(viewRow.startDate).toLocaleDateString() : "—"}</div>
               <div className="col-6"><strong>End Date:</strong> {viewRow.endDate ? new Date(viewRow.endDate).toLocaleDateString() : "—"}</div>
               <div className="col-12"><strong>Cities:</strong> {Array.isArray(viewRow.cities) && viewRow.cities.length > 0 ? viewRow.cities.join(", ") : "—"}</div>
+              <div className="col-12"><strong>Subtitle:</strong> {viewRow.subtitle || "—"}</div>
+              {viewRow.description ? <div className="col-12"><strong>Description:</strong> {viewRow.description}</div> : null}
+              <div className="col-6"><strong>Badge:</strong> {viewRow.badge || "—"}</div>
+              <div className="col-6"><strong>Button:</strong> {viewRow.ctaText || "—"}</div>
+              <div className="col-6"><strong>Colours:</strong> {viewRow.bgColor || "—"} / {viewRow.textColor || "—"}</div>
+              <div className="col-6"><strong>Display order:</strong> {viewRow.displayOrder ?? 0}</div>
+              <div className="col-12">
+                <strong>Timer:</strong>{" "}
+                {viewRow.showTimer && viewRow.timerEndsAt
+                  ? `${viewRow.timerLabel || "Ends in"} · ${new Date(viewRow.timerEndsAt).toLocaleString()}`
+                  : "Off"}
+              </div>
+              {viewRow.autoExpired ? (
+                <div className="col-12" style={{ color: "#b45309" }}>
+                  <strong>Auto-expired</strong> {viewRow.expiredAt ? `on ${new Date(viewRow.expiredAt).toLocaleString()}` : ""}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

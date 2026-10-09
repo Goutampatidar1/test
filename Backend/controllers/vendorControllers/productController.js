@@ -13,7 +13,14 @@ const { getPublicBaseUrl, toUploadStoragePath } = require("../../utils/mediaUrl"
 const { toVendorProduct } = require("../../utils/mobilePresenters");
 const { resolveAttributePair } = require("../../utils/attributeEnsure");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
-const { resolveVendorApprovalRequired } = require("../../utils/vendorApproval");
+const { resolveItemApprovalForVendor } = require("../../utils/vendorApproval");
+const { applyHotDealOptIn, notifyAdminsHotDealPending } = require("../../utils/hotDeals");
+const { queueRefreshProfileScore } = require("../../utils/profileCompletion");
+const {
+  alertProductDiscount,
+  queueDiscountAlert,
+  productPercentOff,
+} = require("../../utils/discountAlerts");
 const { queueNotifyAllAdmins } = require("../../utils/adminInbox");
 
 const PRODUCT_FOLDER = "product";
@@ -1086,7 +1093,7 @@ exports.createProduct = asyncHandler(async (req, res) => {
     throw new AppError("Product SKU already exists, retry", 409);
   }
 
-  const { approvalRequired, adminApproved } = await resolveVendorApprovalRequired();
+  const { approvalRequired, adminApproved } = await resolveItemApprovalForVendor(req.user);
 
   const product = await Product.create({
     name,
@@ -1115,6 +1122,16 @@ exports.createProduct = asyncHandler(async (req, res) => {
     adminApproved,
     status: "active",
   });
+
+  queueRefreshProfileScore("ecom", req.user._id);
+
+  // "Do you want this product in Hot Deals?" — vendor opt-in at creation time
+  const hotDealOptIn = req.body.hotDealOptIn ?? req.body.hotDeal ?? req.body.addToHotDeals;
+  if (hotDealOptIn !== undefined && ["true", "1", "yes", "on"].includes(String(hotDealOptIn).toLowerCase())) {
+    const state = await applyHotDealOptIn(product, true);
+    await product.save();
+    if (state.status === "pending") notifyAdminsHotDealPending(product, req.user._id);
+  }
 
   const fresh = await Product.findById(product._id)
     .populate("category", "name mode status")
@@ -1563,6 +1580,7 @@ exports.getMyProductById = asyncHandler(async (req, res) => {
 exports.updateProduct = asyncHandler(async (req, res) => {
   const product = await findVendorOwnedProduct(req.user._id, req.params.id);
   const wasApproved = Boolean(product.adminApproved);
+  const previousDiscountPercent = productPercentOff(product);
   let needsReapproval = false;
 
   const originalCategoryId = String(product.category);
@@ -1855,14 +1873,28 @@ exports.updateProduct = asyncHandler(async (req, res) => {
   }
 
   if (needsReapproval && wasApproved) {
-    const productApproval = await resolveVendorApprovalRequired();
+    const productApproval = await resolveItemApprovalForVendor(req.user);
     product.adminApproved = productApproval.approvalRequired ? false : productApproval.adminApproved;
   }
 
   assertVariantCombinationRules(product.variantType, product.combinations);
 
+  const hotDealInput = req.body.hotDealOptIn ?? req.body.hotDeal ?? req.body.addToHotDeals;
+  let hotDealPending = false;
+  if (hotDealInput !== undefined) {
+    const wantsIn = ["true", "1", "yes", "on"].includes(String(hotDealInput).toLowerCase());
+    const state = await applyHotDealOptIn(product, wantsIn);
+    hotDealPending = wantsIn && state.status === "pending";
+  }
+
   markProductMediaModified(product);
   await product.save();
+  if (hotDealPending) notifyAdminsHotDealPending(product, req.user._id);
+
+  // A bigger discount on a live product → alert shoppers who wishlisted / carted it.
+  if (product.adminApproved && productPercentOff(product) > previousDiscountPercent) {
+    queueDiscountAlert(() => alertProductDiscount(product._id));
+  }
 
   const fresh = await Product.findById(product._id)
     .populate("category", "name mode status")
@@ -1879,6 +1911,34 @@ exports.updateProduct = asyncHandler(async (req, res) => {
       : "Product updated successfully";
 
   sendSuccess(res, message, toVendorProduct(fresh, baseUrl));
+});
+
+/**
+ * POST|PATCH /vendor/products/:id/hot-deal
+ * Body: { "optIn": true|false } — opt a product in/out of Hot Deals (admin approval may apply).
+ */
+exports.setHotDealOptIn = asyncHandler(async (req, res) => {
+  const product = await findVendorOwnedProduct(req.user._id, req.params.id);
+  const raw = req.body.optIn ?? req.body.hotDealOptIn ?? req.body.enabled;
+  if (raw === undefined) throw new AppError("optIn is required (true or false)", 400);
+  const wantsIn = ["true", "1", "yes", "on"].includes(String(raw).toLowerCase());
+
+  const state = await applyHotDealOptIn(product, wantsIn);
+  await product.save();
+  if (wantsIn && state.status === "pending") notifyAdminsHotDealPending(product, req.user._id);
+
+  const message = !wantsIn
+    ? "Product removed from Hot Deals"
+    : state.status === "approved"
+      ? "Product added to Hot Deals"
+      : "Hot Deals request sent for admin approval";
+  sendSuccess(res, message, {
+    productId: product._id,
+    hotDeal: {
+      optIn: Boolean(product.hotDeal?.optIn),
+      status: product.hotDeal?.status || "none",
+    },
+  });
 });
 
 /**

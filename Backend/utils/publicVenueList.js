@@ -1,17 +1,18 @@
 const VenueVendor = require("../models/entity/venueVendor");
 const { getVenueDisplayPrice } = require("./venuePricing");
 
-/** Venues shown on the user app must have enough data for a useful listing card. */
+/**
+ * Venues shown on the user app need only the essentials: approved, active, a name, a photo,
+ * a category and a price. Address, city and amenities are optional so a vendor's service is
+ * visible (and can receive enquiries) without a fully completed profile.
+ */
 function activePublicVenueListingFilter(extra = {}) {
   return {
     status: "active",
     adminApproved: { $eq: true },
     name: { $exists: true, $nin: ["", null] },
     thumbnail: { $exists: true, $nin: ["", null] },
-    address: { $exists: true, $nin: ["", null] },
-    city: { $exists: true, $nin: ["", null] },
     category: { $exists: true, $ne: null },
-    amenities: { $exists: true, $type: "array", $not: { $size: 0 } },
     $or: [{ dayPrice: { $gt: 0 } }, { hourlyPrice: { $gt: 0 } }, { basePrice: { $gt: 0 } }],
     ...extra,
   };
@@ -22,9 +23,7 @@ function isVenueListable(doc) {
   if (doc.status !== "active" || doc.adminApproved !== true) return false;
   if (!String(doc.name || "").trim()) return false;
   if (!String(doc.thumbnail || "").trim()) return false;
-  if (!String(doc.address || "").trim()) return false;
   if (!doc.category) return false;
-  if (!Array.isArray(doc.amenities) || doc.amenities.length === 0) return false;
   return getVenueDisplayPrice(doc).amount > 0;
 }
 

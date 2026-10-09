@@ -40,6 +40,10 @@ exports.errorHandler = (err, req, res, _next) => {
     data: [],
   };
 
+  if (err.errorCode) {
+    payload.code = err.errorCode;
+  }
+
   if (config.nodeEnv === "development" && err.stack) {
     payload.stack = err.stack;
   }

@@ -5,7 +5,7 @@ const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPagination, searchFilter } = require("../../utils/listQuery");
 
 const ALLOWED_STATUS = new Set(["active", "inactive"]);
-const ALLOWED_PLAN_TYPES = new Set(["banner", "get_verified", "product_presence_first"]);
+const ALLOWED_PLAN_TYPES = new Set(["banner", "get_verified", "product_presence_first", "show_phone"]);
 const ALLOWED_VENDOR_TYPES = new Set(["ecom", "venue", "both"]);
 const ALLOWED_PRESENCE_MODES = new Set(["random"]);
 
@@ -112,6 +112,38 @@ function buildPlanPayload(body, { partial = false } = {}) {
     payload.status = status;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "durationDays")) {
+    const days = parseNonNegativeNumber(body.durationDays, "Duration days");
+    payload.durationDays = days === null ? 0 : Math.floor(days);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "description")) {
+    payload.description = normalizeRequired(body.description).slice(0, 500);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "badge")) {
+    payload.badge = normalizeRequired(body.badge).slice(0, 40);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "benefits")) {
+    let list = body.benefits;
+    if (typeof list === "string") {
+      try {
+        list = JSON.parse(list);
+      } catch {
+        list = list.split("\n");
+      }
+    }
+    payload.benefits = (Array.isArray(list) ? list : [])
+      .map((row) => normalizeRequired(row).slice(0, 160))
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "isRecommended")) {
+    payload.isRecommended = body.isRecommended === true || body.isRecommended === "true";
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "sortOrder")) {
+    const order = Number(body.sortOrder);
+    payload.sortOrder = Number.isFinite(order) ? order : 0;
+  }
+
   return payload;
 }
 
@@ -150,7 +182,7 @@ exports.listPlans = asyncHandler(async (req, res) => {
   if (searchOr) Object.assign(filter, searchOr);
 
   const [plans, total] = await Promise.all([
-    VendorPlan.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    VendorPlan.find(filter).sort({ sortOrder: 1, createdAt: -1 }).skip(skip).limit(limit).lean(),
     VendorPlan.countDocuments(filter),
   ]);
 
@@ -175,6 +207,9 @@ exports.getPlanById = asyncHandler(async (req, res) => {
 exports.createPlan = asyncHandler(async (req, res) => {
   const payload = buildPlanPayload(req.body, { partial: false });
   resolveDateRange(null, payload);
+  if (payload.planType === "show_phone" && !(payload.durationDays > 0)) {
+    throw new AppError("Show Number plans need durationDays greater than 0", 400);
+  }
   if (payload.planType !== "product_presence_first") {
     payload.presenceTopLimit = payload.presenceTopLimit ?? 100;
     payload.presenceMode = payload.presenceMode || "random";

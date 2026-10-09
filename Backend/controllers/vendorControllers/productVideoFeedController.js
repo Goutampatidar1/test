@@ -17,6 +17,14 @@ const {
 
 const FEED_FOLDER = "product-video-feed";
 
+const videoSettings = require("../../utils/videoFeatures").makeVideoSettingsHandlers(
+  () => require("../../models/entity/vendor"),
+  "vendor"
+);
+/** Vendor — personal video on/off switch */
+exports.getVideoSettings = videoSettings.get;
+exports.updateVideoSettings = videoSettings.update;
+
 /** Vendor — list own product video feeds */
 exports.listMyVideoFeeds = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);

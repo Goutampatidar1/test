@@ -440,7 +440,8 @@ async function listNearbyVendors(options = {}) {
 
   const vendors = await Vendor.find(filter)
     .populate("category", "name mode status")
-    .sort(sortBy === "name" ? { businessName: 1 } : { createdAt: -1 })
+    // complete profiles rank first; name sort stays purely alphabetical
+    .sort(sortBy === "name" ? { businessName: 1 } : { profileScore: -1, createdAt: -1 })
     .lean();
 
   const vendorIds = vendors.map((vendor) => vendor._id);
@@ -484,4 +485,6 @@ module.exports = {
   resolveNearbyLocation,
   toNearbyVendorCard,
   getVendorRatingStatsMap,
+  getVendorProductStatsMap,
+  getActiveVendorIdsWithProducts,
 };

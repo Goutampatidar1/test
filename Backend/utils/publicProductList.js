@@ -245,7 +245,43 @@ function toPublicProductListCard(product, vendor, baseUrl, { isWishlisted = fals
     card.cart_detail = cartDetail;
   }
 
+  applyCardHighlights(card, product);
+
   return card;
+}
+
+const NEW_PRODUCT_DAYS = 14;
+const LOW_STOCK_THRESHOLD = 5;
+
+/** Discount %, savings, stock state and badges so the app can render richer cards without maths. */
+function applyCardHighlights(card, product) {
+  const hasDiscount = card.mrp > card.price && card.mrp > 0;
+  const discountPercent = hasDiscount ? Math.round(((card.mrp - card.price) / card.mrp) * 100) : 0;
+  const savings = hasDiscount ? Math.round((card.mrp - card.price) * 100) / 100 : 0;
+  const stock = Number(product.stock);
+  const trackedStock = Number.isFinite(stock);
+  const isNew =
+    product.createdAt &&
+    Date.now() - new Date(product.createdAt).getTime() < NEW_PRODUCT_DAYS * 24 * 60 * 60 * 1000;
+  const isHotDeal = product.hotDeal?.status === "approved";
+
+  card.hasDiscount = hasDiscount;
+  card.discountPercent = discountPercent;
+  card.discountLabel = discountPercent > 0 ? `${discountPercent}% OFF` : null;
+  card.savings = savings;
+  card.savingsLabel = savings > 0 ? `Save ${formatInrAmount(savings)}` : null;
+  card.inStock = !trackedStock || stock > 0;
+  card.lowStock = trackedStock && stock > 0 && stock <= LOW_STOCK_THRESHOLD;
+  card.isNew = Boolean(isNew);
+  card.isHotDeal = Boolean(isHotDeal);
+
+  const badges = [];
+  if (isHotDeal) badges.push({ key: "hot_deal", label: "Hot Deal", tone: "danger" });
+  if (discountPercent >= 5) badges.push({ key: "discount", label: `${discountPercent}% OFF`, tone: "success" });
+  if (card.isNew) badges.push({ key: "new", label: "New", tone: "info" });
+  if (card.lowStock) badges.push({ key: "low_stock", label: `Only ${stock} left`, tone: "warning" });
+  if (!card.inStock) badges.push({ key: "out_of_stock", label: "Out of stock", tone: "muted" });
+  card.badges = badges;
 }
 
 async function getCategoryIdsWithPublicProducts(ProductModel, { categoryIds } = {}) {

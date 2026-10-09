@@ -7,10 +7,11 @@
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.js",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node scripts/seed.js",
+    "migrate:phone-plan": "node scripts/migratePhonePlan.js",
     "check-admin": "node scripts/checkAdmin.js",
     "reset-admin": "node scripts/resetAdminPassword.js"
   },
@@ -22,6 +23,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.8.0",
     "multer": "^1.4.5-lts.1",
-    "pdfkit": "^0.19.1"
+    "node-cron": "^4.6.0",
+    "pdfkit": "^0.19.1",
+    "sharp": "^0.35.5"
   }
 }

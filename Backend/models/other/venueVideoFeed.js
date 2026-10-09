@@ -47,5 +47,7 @@ const venueVideoFeedSchema = new mongoose.Schema(
 
 venueVideoFeedSchema.index({ venueVendor: 1, createdAt: -1 });
 venueVideoFeedSchema.index({ venue: 1, createdAt: -1 });
+// public feed: newest active videos first (cursor pagination)
+venueVideoFeedSchema.index({ status: 1, createdAt: -1, _id: -1 });
 
 module.exports = mongoose.model("VenueVideoFeed", venueVideoFeedSchema);

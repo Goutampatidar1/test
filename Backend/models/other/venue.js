@@ -31,6 +31,17 @@ const venueSchema = new mongoose.Schema(
       default: "full",
     },
     /** Flat advance/token amount due at booking (₹). Preferred over percentage when set. */
+    /** Vendor-offered discount, applied automatically while within its window. */
+    discountType: { type: String, enum: ["percentage", "flat"], default: "percentage" },
+    discountValue: { type: Number, default: 0, min: 0 },
+    discountLabel: { type: String, default: "", trim: true, maxlength: 60 },
+    discountStartsAt: { type: Date, default: null },
+    discountEndsAt: { type: Date, default: null, index: true },
+    lastDiscountNotifiedAt: { type: Date, default: null },
+    /** Owner vendor's profile completion (0-100), denormalised to rank search results. */
+    vendorProfileScore: { type: Number, default: 0, min: 0, max: 100, index: true },
+    /** Sub-district for area-wise search/header (additive; address text stays as is). */
+    subDistrict: { type: mongoose.Schema.Types.ObjectId, ref: "SubDistrict", default: null },
     tokenAmount: { type: Number, default: 0, min: 0 },
     /** Advance/token due at booking confirmation (% of grand total, 1–99). */
     tokenAmountPercentage: { type: Number, min: 1, max: 99 },

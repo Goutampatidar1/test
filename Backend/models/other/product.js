@@ -41,6 +41,26 @@ const productSchema = new mongoose.Schema(
     sku: { type: String, required: true, trim: true, unique: true },
     discountType: { type: String, enum: ALLOWED_DISCOUNT_TYPES, default: "percentage" },
     discountValue: { type: Number, default: 0, min: 0 },
+    lastDiscountNotifiedAt: { type: Date, default: null },
+    /** Owner vendor's profile completion (0-100), denormalised to rank search results. */
+    vendorProfileScore: { type: Number, default: 0, min: 0, max: 100, index: true },
+    /**
+     * Hot-deal opt-in. Vendor opts in at product create/update; admin approval (or an
+     * auto-qualifying HotDealRule) moves status to "approved" and the product appears in Hot Deals.
+     */
+    hotDeal: {
+      optIn: { type: Boolean, default: false, index: true },
+      status: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none",
+        index: true,
+      },
+      requestedAt: { type: Date, default: null },
+      reviewedAt: { type: Date, default: null },
+      rejectionReason: { type: String, default: "", trim: true },
+      rule: { type: mongoose.Schema.Types.ObjectId, ref: "HotDealRule", default: null },
+    },
     taxType: { type: String, enum: ALLOWED_TAX_TYPES, default: "inclusive" },
     taxValue: { type: Number, default: 0, min: 0 },
     description: { type: String, required: false, default: "", trim: true },

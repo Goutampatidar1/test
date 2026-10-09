@@ -200,6 +200,18 @@ const venueOrderSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    /** Set when the booking was created from an accepted enquiry. */
+    enquiry: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "VenueEnquiry",
+      default: null,
+      index: true,
+    },
+    source: {
+      type: String,
+      enum: ["direct", "enquiry"],
+      default: "direct",
+    },
   },
   {
     timestamps: true,

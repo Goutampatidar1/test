@@ -8,6 +8,7 @@ const {
 } = require("./appCommerceSettings");
 const { toPublicVendorDocuments } = require("./vendorDocumentSettings");
 const { formatInrAmount } = require("./publicProductList");
+const { normalizeFeatureSettings, toPublicFeatureSettings } = require("./appFeatureSettings");
 const {
   normalizeStaticPageApp,
   buildStaticPageAppFilter,
@@ -166,6 +167,7 @@ async function buildMobileAppSettings(app, baseUrl) {
     paymentGateways,
     razorpay,
     ecomFlow: toPublicEcomFlow(config),
+    features: toPublicFeatureSettings(normalizeFeatureSettings(config.feature_settings)),
     staticPages: await listStaticPagesForApp(normalizedApp, baseUrl),
     faqs: await listActiveFaqs(),
     updatedAt: config.updatedAt,

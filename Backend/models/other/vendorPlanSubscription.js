@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const OWNER_TYPES = ["ecom", "venue"];
-const PLAN_TYPES = ["banner", "get_verified", "product_presence_first"];
+const PLAN_TYPES = ["banner", "get_verified", "product_presence_first", "show_phone"];
 const STATUS = ["pending", "active", "expired", "cancelled"];
 const PAID_VIA = ["razorpay", "free", "wallet", "manual"];
 const PRESENCE_MODES = ["random"];
@@ -58,6 +58,8 @@ const vendorPlanSubscriptionSchema = new mongoose.Schema(
       default: "pending",
       index: true,
     },
+    /** Set once the "plan expiring soon" reminder has been sent */
+    expiryNotifiedAt: { type: Date, default: null },
     /** Banner plan: exactly one image (replace allowed) */
     bannerImage: {
       type: String,

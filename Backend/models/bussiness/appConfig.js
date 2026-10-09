@@ -228,6 +228,14 @@ const appConfigSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /**
+     * Admin-controlled feature switches (booking mode, phone plan, video on/off,
+     * home section order, profile benefits…). See utils/appFeatureSettings.js.
+     */
+    feature_settings: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
+    },
   },
   { timestamps: true }
 );

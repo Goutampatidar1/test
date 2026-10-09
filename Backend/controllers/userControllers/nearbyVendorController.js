@@ -2,6 +2,7 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 const { getPublicBaseUrl } = require("../../utils/mediaUrl");
 const { getPagination } = require("../../utils/listQuery");
 const { listNearbyVendors } = require("../../utils/nearbyVendors");
+const { loadSuggestedVendors } = require("../../utils/homeFeed");
 
 function readVendorListQuery(query = {}) {
   return {
@@ -69,12 +70,31 @@ async function handleVendorList(req, res, options = {}) {
     }
   }
 
+  // "Suggested vendors" strip for the vendor list screen (page 1, no search term)
+  let suggested = [];
+  if (options.includeSuggested && result.page === 1 && !req.query.search && !req.query.q) {
+    try {
+      const shown = new Set(result.vendors.map((v) => String(v._id)));
+      suggested = (
+        await loadSuggestedVendors(req, {
+          limit: 8,
+          baseUrl,
+          city: result.city,
+          subDistrict: result.subDistrict,
+        })
+      ).filter((v) => !shown.has(String(v._id)));
+    } catch {
+      suggested = [];
+    }
+  }
+
   return res.status(200).json({
     status: result.vendors.length > 0,
     message: options.message ?? "Vendors fetched",
     title,
     screen: options.screen ?? "vendors",
     data: result.vendors,
+    suggestedVendors: suggested,
     location: {
       city: result.city,
       state: result.state,
@@ -107,6 +127,7 @@ exports.listAllVendors = asyncHandler(async (req, res) => {
     message: "All vendors fetched",
     screen: "view_all",
     sortBy: "name",
+    includeSuggested: true,
     locationOptional: true,
   });
 });

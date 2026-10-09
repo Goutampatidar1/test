@@ -59,6 +59,8 @@ async function start() {
 
     app.listen(config.port, "0.0.0.0", () => {
       console.log(`Server running on port ${config.port}`);
+      // background jobs: enquiry/banner/plan expiry, plan reminders, nightly profile scores
+      require("./utils/scheduler").startScheduler();
     });
   } catch (err) {
     console.error("Error starting server:", err.message);

@@ -11,6 +11,18 @@ const NOTIFICATION_TYPES = [
   "admin_broadcast",
   "delivery_order_assigned",
   "delivery_order_status_updated",
+  "enquiry_received",
+  "enquiry_accepted",
+  "enquiry_rejected",
+  "enquiry_expired",
+  "enquiry_cancelled",
+  "enquiry_converted",
+  "discount_alert",
+  "hot_deal_pending_approval",
+  "hot_deal_approved",
+  "hot_deal_rejected",
+  "plan_expiring",
+  "profile_reminder",
 ];
 
 const appNotificationSchema = new mongoose.Schema(

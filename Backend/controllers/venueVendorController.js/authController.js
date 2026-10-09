@@ -1,6 +1,11 @@
 const crypto = require("crypto");
 const { VenueVendor } = require("../../models");
 const AppError = require("../../utils/AppError");
+const {
+  assertCanShowPhone,
+  canSetPhoneVisible,
+  describePhonePlanState,
+} = require("../../utils/phonePlan");
 const { asyncHandler } = require("../../utils/asyncHandler");
 const { hashPassword, comparePassword } = require("../../utils/password");
 const {
@@ -16,6 +21,12 @@ const { normalizePhone, phoneLookupValues } = require("../../utils/phone");
 const PhoneOtp = require("../../models/other/phoneOtp");
 const { resolveOtpForPhone, otpExpiryDate, isOtpExpired, OTP_TTL_MS, devOnlyOtp } = require("../../utils/otp");
 const { sendSuccess } = require("../../utils/apiResponse");
+const { getPublicBaseUrl } = require("../../utils/mediaUrl");
+const {
+  computeProfileCompletion,
+  refreshProfileScore,
+  queueRefreshProfileScore,
+} = require("../../utils/profileCompletion");
 const {
   resolveVenueVendorDocumentUploads,
   listVenueVendorUploadedPaths,
@@ -500,16 +511,19 @@ exports.getShopStatus = asyncHandler(async (req, res) => {
 /** GET /api/venue-vendor/auth/phone-visibility */
 exports.getPhoneVisibility = asyncHandler(async (req, res) => {
   const venueVendor = await VenueVendor.findById(req.user._id)
-    .select("showPhoneOnApp businessPhone phone")
+    .select("showPhoneOnApp businessPhone phone phonePlanUntil")
     .lean();
   if (!venueVendor) {
     throw new AppError("Account not found", 404);
   }
   const showPhoneOnApp = venueVendor.showPhoneOnApp !== false;
+  const plan = describePhonePlanState(venueVendor);
   res.json({
     message: "Phone visibility fetched",
     showPhoneOnApp,
     statusLabel: showPhoneOnApp ? "visible" : "hidden",
+    phonePlan: plan,
+    phoneVisibleToUsers: plan.phoneVisibleToUsers,
   });
 });
 
@@ -528,6 +542,7 @@ exports.updatePhoneVisibility = asyncHandler(async (req, res) => {
     throw new AppError("Account not found", 404);
   }
 
+  assertCanShowPhone(venueVendor, parsed);
   venueVendor.showPhoneOnApp = parsed;
   await venueVendor.save();
 
@@ -702,7 +717,10 @@ exports.updateMe = asyncHandler(async (req, res) => {
     if (parsed === null) {
       throw new AppError("Invalid showPhoneOnApp value", 400);
     }
-    venueVendor.showPhoneOnApp = parsed;
+    // General profile saves must not fail when no Show Number plan is active; keep the old value instead.
+    if (canSetPhoneVisible(venueVendor, parsed)) {
+      venueVendor.showPhoneOnApp = parsed;
+    }
   }
 
   try {
@@ -718,10 +736,35 @@ exports.updateMe = asyncHandler(async (req, res) => {
     }
     throw err;
   }
+  queueRefreshProfileScore("venue", venueVendor._id);
   res.json({
     message: "Profile updated",
     user: toPublicProfile(await VenueVendor.findById(venueVendor._id)),
   });
+});
+
+/**
+ * GET /api/venue-vendor/auth/profile-completion
+ * Completion %, per-module checklist (icon/colour/image) and benefit tiers.
+ */
+exports.getProfileCompletion = asyncHandler(async (req, res) => {
+  const service = await VenueVendor.findById(req.user._id).lean();
+  if (!service) throw new AppError("Account not found", 404);
+
+  const baseUrl = getPublicBaseUrl(req);
+  const result = await refreshProfileScore("venue", service._id);
+  let ecom = null;
+  if (service.vendorPanelType === "both") {
+    const { Vendor } = require("../../models");
+    ecom = await Vendor.findOne({ phone: service.phone }).lean();
+  }
+  const completion = await computeProfileCompletion({
+    ecom,
+    service,
+    variant: service.vendorPanelType === "both" ? "both" : "service",
+    baseUrl,
+  });
+  sendSuccess(res, "Profile completion fetched", { ...completion, score: result?.percent ?? completion.percent });
 });
 
 exports.deleteMe = asyncHandler(async (req, res) => {

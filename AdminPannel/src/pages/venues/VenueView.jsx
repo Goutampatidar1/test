@@ -26,6 +26,32 @@ function titleCase(value) {
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 }
 
+function venueDiscountSummary(venue) {
+  const value = Number(venue?.discountValue) || 0;
+  if (!value) return "No discount";
+  const amount = venue.discountType === "flat" ? `₹${value.toLocaleString("en-IN")} off` : `${value}% off`;
+  const now = Date.now();
+  const starts = venue.discountStartsAt ? new Date(venue.discountStartsAt) : null;
+  const ends = venue.discountEndsAt ? new Date(venue.discountEndsAt) : null;
+  let state = "Active";
+  if (starts && starts.getTime() > now) state = "Scheduled";
+  else if (ends && ends.getTime() < now) state = "Expired";
+  const range = [
+    starts ? `from ${starts.toLocaleDateString()}` : "",
+    ends ? `until ${ends.toLocaleDateString()}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <span>
+      <span className={state === "Active" ? "pill pill--active" : "pill pill--inactive"}>{state}</span>{" "}
+      {venue.discountLabel ? `${venue.discountLabel} · ` : ""}
+      {amount}
+      {range ? <span className="text-muted small"> ({range})</span> : null}
+    </span>
+  );
+}
+
 function ViewRow({ label, value }) {
   return (
     <div className="row g-2 venue-view__detail-row align-items-start">
@@ -304,6 +330,8 @@ export function VenueView() {
                     <ViewRow label="Added by" value={venue.addedById?.name || venue.addedById?.businessName || "—"} />
                     <ViewRow label={resolvedPrice.label} value={priceDisplay} />
                     <ViewRow label="Token amount" value={tokenDisplay} />
+                    <ViewRow label="Discount" value={venueDiscountSummary(venue)} />
+                    <ViewRow label="Vendor profile score" value={`${Number(venue.vendorProfileScore) || 0}%`} />
                     <ViewRow label="Address" value={venue.address || "—"} />
                     <ViewRow label="City / Sub-district" value={locationValue || "—"} />
                   </div>

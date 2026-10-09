@@ -30,7 +30,10 @@ const PLAN_TYPE_OPTIONS = [
     value: "product_presence_first",
     label: "Product Presence First (Top 100, random)",
   },
+  { value: "show_phone", label: "Show Number (phone visible to users)" },
 ];
+
+const BENEFITS_MAX = 12;
 
 const VENDOR_TYPE_OPTIONS = [
   { value: "both", label: "Both (Ecom + Service)" },
@@ -49,7 +52,21 @@ function emptyForm() {
     presenceTopLimit: "100",
     presenceMode: "random",
     status: "active",
+    durationDays: "",
+    description: "",
+    benefits: "",
+    badge: "",
+    isRecommended: false,
+    sortOrder: "0",
   };
+}
+
+function benefitsFromText(text) {
+  return String(text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, BENEFITS_MAX);
 }
 
 function planTypeLabel(value) {
@@ -91,6 +108,14 @@ function validatePlanForm(form, dateOptions = {}) {
     const top = parseInt(String(form.presenceTopLimit), 10);
     if (!Number.isFinite(top) || top < 1) return "Top limit must be at least 1.";
   }
+  if (form.durationDays !== "") {
+    const days = Number(form.durationDays);
+    if (!Number.isInteger(days) || days < 0) return "Duration must be a whole number of days.";
+  }
+  if (form.planType === "show_phone" && !(Number(form.durationDays) > 0)) {
+    return "Show Number plans need a duration in days (for example 30).";
+  }
+  if (form.sortOrder !== "" && !Number.isFinite(Number(form.sortOrder))) return "Sort order must be a number.";
   return "";
 }
 
@@ -172,6 +197,12 @@ export function VendorPlanPage() {
       presenceTopLimit: parseInt(String(form.presenceTopLimit), 10) || 100,
       presenceMode: "random",
       status: form.status || "active",
+      durationDays: Number(form.durationDays) || 0,
+      description: form.description.trim(),
+      benefits: benefitsFromText(form.benefits),
+      badge: form.badge.trim(),
+      isRecommended: Boolean(form.isRecommended),
+      sortOrder: Number(form.sortOrder) || 0,
     };
 
     setSaving(true);
@@ -207,6 +238,12 @@ export function VendorPlanPage() {
       presenceTopLimit: String(row.presenceTopLimit ?? 100),
       presenceMode: row.presenceMode || "random",
       status: row.status || "active",
+      durationDays: row.durationDays ? String(row.durationDays) : "",
+      description: row.description || "",
+      benefits: Array.isArray(row.benefits) ? row.benefits.join("\n") : "",
+      badge: row.badge || "",
+      isRecommended: Boolean(row.isRecommended),
+      sortOrder: String(row.sortOrder ?? 0),
     });
   };
 
@@ -257,6 +294,9 @@ export function VendorPlanPage() {
   const hint = useMemo(() => {
     if (form.planType === "banner") return "Vendor can get a promotional banner slot within the plan dates.";
     if (form.planType === "get_verified") return "Vendor gets a verified badge / trust mark within the plan dates.";
+    if (form.planType === "show_phone") {
+      return "Users can see the vendor's phone number for the plan duration. Without it the number stays hidden.";
+    }
     return "Vendor products/services get priority presence in the top list and are shown randomly among featured items.";
   }, [form.planType]);
 
@@ -267,7 +307,8 @@ export function VendorPlanPage() {
           <h2 className="page-card__title">{editId ? "Edit Plan" : "Create Plan"}</h2>
         </div>
         <p className="data-table__muted" style={{ marginBottom: 12 }}>
-          Create paid boost plans for e-commerce and service vendors: Banner, Get Verified, and Product Presence First.
+          Create paid plans for e-commerce and service vendors: Banner, Get Verified, Product Presence First, and Show
+          Number. Start/end dates are when the plan can be bought; duration is how long a purchase stays active.
         </p>
         <form onSubmit={onSubmit}>
           <div className="row g-3">
@@ -381,6 +422,78 @@ export function VendorPlanPage() {
               </>
             ) : null}
             <label className="user-field col-12 col-md-6">
+              <span className="user-field__label">
+                Duration (days) {form.planType === "show_phone" ? <span className="required-dot">*</span> : null}
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                className="user-field__input"
+                value={form.durationDays}
+                onChange={(e) => setForm((p) => ({ ...p, durationDays: e.target.value }))}
+                placeholder={form.planType === "show_phone" ? "e.g. 30" : "Leave empty to run until end date"}
+                required={form.planType === "show_phone"}
+              />
+              <small className="data-table__muted">How long the plan stays active after a vendor buys it.</small>
+            </label>
+            <label className="user-field col-12 col-md-6">
+              <span className="user-field__label">Badge</span>
+              <input
+                className="user-field__input"
+                value={form.badge}
+                maxLength={40}
+                onChange={(e) => setForm((p) => ({ ...p, badge: e.target.value }))}
+                placeholder="e.g. Best value"
+              />
+            </label>
+            <label className="user-field col-12">
+              <span className="user-field__label" style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span>Description</span>
+                <small>{form.description.length}/500</small>
+              </span>
+              <textarea
+                className="user-field__input"
+                rows={2}
+                maxLength={500}
+                value={form.description}
+                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              />
+            </label>
+            <label className="user-field col-12">
+              <span className="user-field__label">Benefits (one per line, up to {BENEFITS_MAX})</span>
+              <textarea
+                className="user-field__input"
+                rows={4}
+                value={form.benefits}
+                onChange={(e) => setForm((p) => ({ ...p, benefits: e.target.value }))}
+                placeholder={"Your number shown on every listing\nMore calls from nearby customers"}
+              />
+            </label>
+            <label className="user-field col-12 col-md-6">
+              <span className="user-field__label">Sort order</span>
+              <input
+                type="number"
+                className="user-field__input"
+                value={form.sortOrder}
+                onChange={(e) => setForm((p) => ({ ...p, sortOrder: e.target.value }))}
+              />
+              <small className="data-table__muted">Lower numbers are listed first in the vendor app.</small>
+            </label>
+            <div className="user-field col-12 col-md-6">
+              <span className="user-field__label">Recommended plan</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.isRecommended}
+                className={`settings-switch${form.isRecommended ? " settings-switch--on" : ""}`}
+                onClick={() => setForm((p) => ({ ...p, isRecommended: !p.isRecommended }))}
+              >
+                <span className="settings-switch__knob" aria-hidden />
+              </button>
+              <small className="data-table__muted">Highlighted as the suggested choice in the vendor app.</small>
+            </div>
+            <label className="user-field col-12 col-md-6">
               <span className="user-field__label">Status</span>
               <select
                 className="user-field__input"
@@ -452,6 +565,7 @@ export function VendorPlanPage() {
                 <th>Type</th>
                 <th>Vendors</th>
                 <th>Price</th>
+                <th>Duration</th>
                 <th>Date Range</th>
                 <th>Status</th>
                 <th className="data-table__actions-col">Actions</th>
@@ -460,20 +574,29 @@ export function VendorPlanPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8}>Loading…</td>
+                  <td colSpan={9}>Loading…</td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>No plans found.</td>
+                  <td colSpan={9}>No plans found.</td>
                 </tr>
               ) : (
                 rows.map((row, idx) => (
                   <ClickableTableRow key={row._id} onOpen={() => setViewRow(row)}>
                     <td className="data-table__muted">{(page - 1) * LIST_LIMIT + idx + 1}</td>
-                    <td>{row.name || "—"}</td>
+                    <td>
+                      {row.name || "—"}
+                      {row.isRecommended ? (
+                        <span className="pill pill--active" style={{ marginLeft: 6 }}>
+                          Recommended
+                        </span>
+                      ) : null}
+                      {row.badge ? <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>{row.badge}</span> : null}
+                    </td>
                     <td>{planTypeLabel(row.planType)}</td>
                     <td>{vendorTypeLabel(row.vendorType)}</td>
                     <td>{formatInr(row.price)}</td>
+                    <td className="data-table__muted">{row.durationDays ? `${row.durationDays} days` : "Till end date"}</td>
                     <td className="data-table__muted">
                       {formatDate(row.startDate)} - {formatDate(row.endDate)}
                     </td>
@@ -577,6 +700,33 @@ export function VendorPlanPage() {
                     <strong>Show mode:</strong> {viewRow.presenceMode || "random"}
                   </div>
                 </>
+              ) : null}
+              <div className="col-6">
+                <strong>Duration:</strong> {viewRow.durationDays ? `${viewRow.durationDays} days` : "Till end date"}
+              </div>
+              <div className="col-6">
+                <strong>Sort order:</strong> {viewRow.sortOrder ?? 0}
+              </div>
+              <div className="col-6">
+                <strong>Badge:</strong> {viewRow.badge || "—"}
+              </div>
+              <div className="col-6">
+                <strong>Recommended:</strong> {viewRow.isRecommended ? "Yes" : "No"}
+              </div>
+              {viewRow.description ? (
+                <div className="col-12">
+                  <strong>Description:</strong> {viewRow.description}
+                </div>
+              ) : null}
+              {Array.isArray(viewRow.benefits) && viewRow.benefits.length > 0 ? (
+                <div className="col-12">
+                  <strong>Benefits:</strong>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                    {viewRow.benefits.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
             </div>
           </div>

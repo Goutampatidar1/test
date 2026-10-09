@@ -2,6 +2,8 @@ const express = require("express");
 const publicAppConfigController = require("../controllers/publicControllers/publicAppConfigController");
 const mobileAppSettingsController = require("../controllers/publicControllers/mobileAppSettingsController");
 const publicCatalogController = require("../controllers/publicControllers/publicCatalogController");
+const publicHotDealsController = require("../controllers/publicControllers/publicHotDealsController");
+const publicHomeFeedController = require("../controllers/publicControllers/publicHomeFeedController");
 const publicVideoFeedController = require("../controllers/publicControllers/publicVideoFeedController");
 const publicProductRatingController = require("../controllers/publicControllers/publicProductRatingController");
 const publicVenueRatingController = require("../controllers/publicControllers/publicVenueRatingController");
@@ -19,6 +21,9 @@ router.get("/ecom-availability", publicAppConfigController.getEcomAvailability);
 
 // Mobile / storefront catalog (no auth)
 router.get("/home", publicCatalogController.getHome);
+router.get("/home/feed", optionalProtectUser, publicHomeFeedController.getHomeFeed);
+router.get("/hot-deals", optionalProtectUser, publicHotDealsController.listHotDeals);
+router.get("/home/hot-deals", optionalProtectUser, publicHotDealsController.listHotDeals);
 router.get("/banners", publicCatalogController.listBanners);
 router.get("/home/banners", publicCatalogController.listBanners);
 router.get("/venue-types", publicCatalogController.listVenueTypes);

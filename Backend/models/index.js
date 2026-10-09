@@ -24,6 +24,9 @@ const ShippingAddress = require("./other/shippingAddress");
 const Wishlist = require("./other/wishlist");
 const VenueCart = require("./other/venueCart");
 const VenueOrder = require("./other/venueOrder");
+const VenueEnquiry = require("./other/venueEnquiry");
+const HotDealRule = require("./other/hotDealRule");
+const RecentView = require("./other/recentView");
 const VenueTransaction = require("./other/venueTransaction");
 const VenueWishlist = require("./other/venueWishlist");
 const WalletTransaction = require("./other/walletTransaction");
@@ -63,6 +66,9 @@ module.exports = {
   Wishlist,
   VenueCart,
   VenueOrder,
+  VenueEnquiry,
+  HotDealRule,
+  RecentView,
   VenueTransaction,
   VenueWishlist,
   WalletTransaction,

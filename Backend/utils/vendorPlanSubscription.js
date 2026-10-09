@@ -7,8 +7,11 @@ const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { normalizeAmount } = require("./vendorWallet");
 const { PLAN_TYPE_LABELS } = require("./vendorPlans");
 const { createRazorpayOrder, verifyRazorpayCheckoutPayment } = require("./razorpay");
+const { syncPhonePlanState, PHONE_PLAN_TYPE } = require("./phonePlan");
 
-const ALLOWED_PLAN_TYPES = new Set(["banner", "get_verified", "product_presence_first"]);
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const ALLOWED_PLAN_TYPES = new Set(["banner", "get_verified", "product_presence_first", "show_phone"]);
 
 function startOfUtcDay(value) {
   const d = new Date(value);
@@ -48,6 +51,10 @@ function toPublicSubscription(doc, baseUrl = "") {
     bannerImage: doc.bannerImage ? toAbsoluteUploadUrl(doc.bannerImage, baseUrl) : null,
     bannerTitle: doc.bannerTitle || "",
     hasBanner: Boolean(doc.bannerImage),
+    daysRemaining:
+      doc.status === "active" && doc.endDate
+        ? Math.max(0, Math.ceil((new Date(doc.endDate).getTime() - Date.now()) / DAY_MS))
+        : 0,
   };
 }
 
@@ -60,6 +67,18 @@ async function expireOutOfWindowSubscriptions(ownerType, ownerId) {
   if (ownerType) filter.ownerType = ownerType;
   if (ownerId) filter.owner = ownerId;
   await VendorPlanSubscription.updateMany(filter, { $set: { status: "expired" } });
+  if (ownerType && ownerId) {
+    await syncPhonePlanState(ownerType, ownerId).catch(() => {});
+  }
+}
+
+/** Duration plans (Show Number tiers) run from activation, not from the plan's sale window. */
+function resolveSubscriptionWindow(plan, from = new Date()) {
+  const days = Math.floor(Number(plan?.durationDays) || 0);
+  if (days > 0) {
+    return { startDate: from, endDate: new Date(from.getTime() + days * DAY_MS) };
+  }
+  return { startDate: plan.startDate, endDate: plan.endDate };
 }
 
 async function findActiveSubscription(ownerType, ownerId, planType) {
@@ -170,8 +189,7 @@ async function createPlanCheckout({ ownerType, ownerId, planId, baseUrl = "" }) 
     plan: plan._id,
     planType,
     planName: plan.name,
-    startDate: plan.startDate,
-    endDate: plan.endDate,
+    ...resolveSubscriptionWindow(plan),
     bannerImage: null,
     bannerTitle: "",
     presenceTopLimit,
@@ -187,6 +205,7 @@ async function createPlanCheckout({ ownerType, ownerId, planId, baseUrl = "" }) 
       paidVia: "free",
       paidAt: new Date(),
     });
+    if (planType === PHONE_PLAN_TYPE) await syncPhonePlanState(normalizedOwner, ownerId);
 
     return {
       requiresPayment: false,
@@ -297,7 +316,18 @@ async function confirmPlanPayment({
   pending.razorpayPaymentId = paymentId;
   pending.razorpaySignature = signature;
   pending.paidAt = new Date();
+
+  const paidPlan = await VendorPlan.findById(pending.plan).select("durationDays").lean();
+  if (Number(paidPlan?.durationDays) > 0) {
+    // the clock starts when payment succeeds, not when checkout was opened
+    const window = resolveSubscriptionWindow(paidPlan, pending.paidAt);
+    pending.startDate = window.startDate;
+    pending.endDate = window.endDate;
+  }
   await pending.save();
+  if (pending.planType === PHONE_PLAN_TYPE) {
+    await syncPhonePlanState(normalizedOwner, ownerId);
+  }
 
   return toPublicSubscription(pending.toObject(), baseUrl);
 }

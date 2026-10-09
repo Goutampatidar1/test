@@ -57,9 +57,38 @@ function activeBannerFilter(city, targetType = "ecom") {
           { endDate: { $gte: startOfUtcDay(now) } },
         ],
       },
+      // exact-time expiry for timer banners
+      {
+        $or: [
+          { timerEndsAt: { $exists: false } },
+          { timerEndsAt: null },
+          { timerEndsAt: { $gt: now } },
+        ],
+      },
       visibilityCondition,
     ],
   };
+}
+
+/** Switch off banners whose end date / timer has passed. Returns the number expired. */
+async function expireFinishedBanners(now = new Date()) {
+  const dayStart = startOfUtcDay(now);
+  const result = await Banner.updateMany(
+    {
+      status: "active",
+      $or: [
+        { timerEndsAt: { $ne: null, $lte: now } },
+        {
+          $and: [
+            { $or: [{ timerEndsAt: null }, { timerEndsAt: { $exists: false } }] },
+            { endDate: { $ne: null, $lt: dayStart } },
+          ],
+        },
+      ],
+    },
+    { $set: { status: "inactive", autoExpired: true, expiredAt: now } }
+  );
+  return result.modifiedCount ?? 0;
 }
 
 function resolveRequestCity(req) {
@@ -144,7 +173,7 @@ async function listActiveBanners({ city = "", targetType = "ecom", baseUrl = "" 
   const normalizedTarget = String(targetType ?? "ecom").trim().toLowerCase();
   const adminBanners = await Banner.find(activeBannerFilter(city, normalizedTarget))
     .populate("category", "name image mode status")
-    .sort({ createdAt: -1 })
+    .sort({ displayOrder: 1, createdAt: -1 })
     .lean();
   const fromAdmin = (await resolveRelatedEntities(adminBanners, baseUrl)).filter(Boolean);
 
@@ -167,6 +196,7 @@ async function listActiveBanners({ city = "", targetType = "ecom", baseUrl = "" 
 
 module.exports = {
   activeBannerFilter,
+  expireFinishedBanners,
   listActiveBanners,
   resolveRequestCity,
 };
