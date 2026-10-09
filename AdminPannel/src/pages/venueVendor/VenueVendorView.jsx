@@ -9,6 +9,7 @@ import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholde
 import { promptRejectionReason } from "../../utils/promptRejectionReason.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 import { VendorOrdersSection } from "../../components/VendorOrdersSection.jsx";
+import { VendorTypeBadge } from "../../components/VendorTypeBadge.jsx";
 
 function DetailRow({ label, value }) {
   return <div className="user-detail-row"><span className="user-detail-row__label">{label}</span><span className="user-detail-row__value">{value ?? "—"}</span></div>;
@@ -158,6 +159,7 @@ export function VenueVendorView() {
             <DetailRow label="Full Name" value={venueVendor.name} />
             <DetailRow label="Email ID" value={venueVendor.email} />
             <DetailRow label="Mobile Number" value={venueVendor.phone} />
+            <DetailRow label="Vendor Type" value={<VendorTypeBadge type={venueVendor.vendorPanelType} fallback="service" />} />
             <DetailRow label="Business Name" value={venueVendor.businessName} />
             <DetailRow label="Business Mobile Number" value={venueVendor.businessPhone} />
             <DetailRow label="Business Email ID" value={venueVendor.businessEmail} />
