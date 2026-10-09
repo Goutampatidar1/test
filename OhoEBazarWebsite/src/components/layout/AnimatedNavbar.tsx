@@ -77,22 +77,32 @@ export function AnimatedNavbar() {
   const menuButton = useRef<HTMLButtonElement>(null);
   const firstLink = useRef<HTMLAnchorElement>(null);
 
-  // Sections declare `data-nav="dark" | "light"`; the last one in document order under the bar is the one on top.
+  // Sections declare `data-nav="dark" | "light"`. Keep current value when no section is under the bar
+  // (e.g. while scrolling through ArtisanBridge which intentionally has no data-nav).
   const probe = () => {
-    let theme = null as string | null;
+    let theme: string | null = null;
     document.querySelectorAll<HTMLElement>("[data-nav]").forEach((el) => {
       const r = el.getBoundingClientRect();
-      if (r.top <= 36 && r.bottom > 36) theme = el.dataset.nav ?? null;
+      if (r.top <= 60 && r.bottom > 60) theme = el.dataset.nav ?? null;
     });
-    setOnDark(theme === "dark");
+    if (theme !== null) setOnDark(theme === "dark");
   };
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const prev = scrollY.getPrevious() ?? 0;
+    const delta = y - prev;
     setSolid(y > 40);
-    setHidden(y > 640 && y > prev + 2 && !open);
-    if (y < prev - 2) setHidden(false);
     probe();
+    // Always visible near top of page
+    if (y < 80) { setHidden(false); return; }
+    if (open) return;
+    // Hide only on deliberate downward scroll (delta > 4 px per frame, past 300 px total)
+    if (delta > 4 && y > 300) {
+      setHidden(true);
+    } else if (delta < -8) {
+      // Show on deliberate upward scroll — micro-movements do nothing
+      setHidden(false);
+    }
   });
 
   useEffect(() => {

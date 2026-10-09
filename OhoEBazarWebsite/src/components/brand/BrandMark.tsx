@@ -51,7 +51,7 @@ export function BrandLogo({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center bg-white",
+        "inline-flex shrink-0 items-center bg-white shadow-sm ring-1 ring-black/[.07]",
         s.wrap,
         className,
       )}
