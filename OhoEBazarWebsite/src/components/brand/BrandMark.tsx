@@ -20,29 +20,46 @@ export function BrandGlyph({ className }: { className?: string }) {
   );
 }
 
-type BrandLogoProps = {
-  className?: string;
-  /** Height of the logo image. Defaults to `h-8`. */
-  height?: string;
-};
-
 /**
  * Full OHO E-Bazar logo image (oho-logo.png).
- * The PNG has a white background, so this component wraps it in a white
- * pill — looks intentional on any background colour.
+ *
+ * The PNG has a white background so this component wraps it in a tight
+ * white rounded container — this looks intentional on any background
+ * (dark header, dark footer, light section).
+ *
+ * `size`:
+ *   "sm"  → h-7  (28 px) — compact use, e.g. mobile menu header
+ *   "md"  → h-9  (36 px) — desktop navbar  (default)
+ *   "lg"  → h-11 (44 px) — footer brand block
  */
-export function BrandLogo({ className, height = "h-8" }: BrandLogoProps) {
+type BrandLogoSize = "sm" | "md" | "lg";
+
+const SIZE: Record<BrandLogoSize, { wrap: string; img: string }> = {
+  sm: { wrap: "h-7  px-1.5 rounded-lg",  img: "h-5" },
+  md: { wrap: "h-9  px-2   rounded-[10px]", img: "h-6" },
+  lg: { wrap: "h-11 px-3   rounded-xl",  img: "h-7" },
+};
+
+export function BrandLogo({
+  className,
+  size = "md",
+}: {
+  className?: string;
+  size?: BrandLogoSize;
+}) {
+  const s = SIZE[size];
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center overflow-hidden rounded-xl bg-white px-2 py-1",
+        "inline-flex shrink-0 items-center bg-white",
+        s.wrap,
         className,
       )}
     >
       <img
         src="/oho-logo.png"
         alt="OHO E-Bazar"
-        className={cn("w-auto object-contain", height)}
+        className={cn("w-auto object-contain", s.img)}
         draggable={false}
       />
     </span>
@@ -51,12 +68,11 @@ export function BrandLogo({ className, height = "h-8" }: BrandLogoProps) {
 
 type BrandMarkProps = {
   className?: string;
-  /** Wordmark colour scheme. */
   tone?: "dark" | "light";
   label: string;
 };
 
-/** Legacy BrandMark — used in Footer. Renders the actual logo image. */
+/** Used in Footer — renders the actual logo image at lg size. */
 export function BrandMark({ className }: BrandMarkProps) {
-  return <BrandLogo className={className} height="h-9" />;
+  return <BrandLogo size="lg" className={className} />;
 }

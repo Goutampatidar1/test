@@ -165,7 +165,7 @@ export function AnimatedNavbar() {
               transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.2 }}
               className="inline-flex transition-transform duration-500 group-hover:scale-105"
             >
-              <BrandLogo height="h-8 sm:h-9" />
+              <BrandLogo size="md" />
             </motion.span>
           </a>
 
@@ -238,7 +238,7 @@ export function AnimatedNavbar() {
             className="grain fixed inset-0 z-[60] flex flex-col bg-charcoal px-6 pb-8 pt-5 text-ivory lg:hidden"
           >
             <div className="relative z-10 flex items-center justify-between">
-              <BrandLogo height="h-8" />
+              <BrandLogo size="sm" />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
