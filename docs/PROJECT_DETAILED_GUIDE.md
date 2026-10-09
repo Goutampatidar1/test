@@ -166,7 +166,8 @@ The **authoritative route list** is assembled in `Backend/routes/index.js`. For 
   - **`bussiness/`** — `AppConfig`, `Page`, `StaticPageLayout` (CMS, payment gateways, commissions, feature flags)
   - **`other/`** — catalog, orders, carts, wallets, promotions, venues, recharges, notifications, hot deals, …
 
-Exported model index: `Backend/models/index.js`.
+Exported 
+model index: `Backend/models/index.js`.
 
 ### 6.4 Global configuration (`AppConfig`)
 
