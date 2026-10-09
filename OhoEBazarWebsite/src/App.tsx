@@ -4,6 +4,7 @@ import { AnimatedNavbar } from "@/components/layout/AnimatedNavbar";
 import { Footer } from "@/components/layout/Footer";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { SmoothScroll } from "@/components/layout/SmoothScroll";
+import { ArtisanBridge } from "@/components/sections/ArtisanBridge";
 import { BrandStory } from "@/components/sections/BrandStory";
 import { CategoryWorld } from "@/components/sections/CategoryWorld";
 import { EventsSection } from "@/components/sections/EventsSection";
@@ -45,6 +46,7 @@ function Landing() {
           <>
             <CategoryWorld categories={data.ecomCategories} />
             <ProductGallery products={data.products} fixtures={data.source === "fixtures"} />
+            <ArtisanBridge />
             <PeopleSection vendors={data.vendors} />
             <EventsSection
               categories={data.venueCategories}
