@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 
-/** The OHO bag mark used across the admin and vendor panels' favicon. */
+/** The OHO bag mark — SVG glyph used as a small decorative icon (e.g. hero eyebrow). */
 export function BrandGlyph({ className }: { className?: string }) {
   const id = useId();
   return (
@@ -20,6 +20,35 @@ export function BrandGlyph({ className }: { className?: string }) {
   );
 }
 
+type BrandLogoProps = {
+  className?: string;
+  /** Height of the logo image. Defaults to `h-8`. */
+  height?: string;
+};
+
+/**
+ * Full OHO E-Bazar logo image (oho-logo.png).
+ * The PNG has a white background, so this component wraps it in a white
+ * pill — looks intentional on any background colour.
+ */
+export function BrandLogo({ className, height = "h-8" }: BrandLogoProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center overflow-hidden rounded-xl bg-white px-2 py-1",
+        className,
+      )}
+    >
+      <img
+        src="/oho-logo.png"
+        alt="OHO E-Bazar"
+        className={cn("w-auto object-contain", height)}
+        draggable={false}
+      />
+    </span>
+  );
+}
+
 type BrandMarkProps = {
   className?: string;
   /** Wordmark colour scheme. */
@@ -27,18 +56,7 @@ type BrandMarkProps = {
   label: string;
 };
 
-export function BrandMark({ className, tone = "dark", label }: BrandMarkProps) {
-  return (
-    <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <BrandGlyph className="size-9" />
-      <span
-        className={cn(
-          "font-display text-[1.15rem] font-semibold leading-none tracking-tight",
-          tone === "dark" ? "text-charcoal" : "text-ivory",
-        )}
-      >
-        {label}
-      </span>
-    </span>
-  );
+/** Legacy BrandMark — used in Footer. Renders the actual logo image. */
+export function BrandMark({ className }: BrandMarkProps) {
+  return <BrandLogo className={className} height="h-9" />;
 }

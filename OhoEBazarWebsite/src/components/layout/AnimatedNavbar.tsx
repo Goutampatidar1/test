@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "motion/react";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { BrandGlyph } from "@/components/brand/BrandMark";
+import { BrandLogo } from "@/components/brand/BrandMark";
 import { useI18n } from "@/i18n/LanguageProvider";
 import type { Lang } from "@/i18n/dictionary";
 import { cn } from "@/lib/utils";
@@ -156,28 +156,17 @@ export function AnimatedNavbar() {
           <a
             href="#top"
             onClick={go("top")}
-            className="group flex items-center gap-2.5 rounded-full pr-2"
+            className="group flex items-center rounded-full pr-2"
             aria-label={brand}
           >
             <motion.span
-              initial={{ scale: 0, rotate: -120 }}
-              animate={introDone ? { scale: 1, rotate: 0 } : undefined}
-              transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.2 }}
-              className="inline-flex transition-transform duration-500 group-hover:-rotate-12"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={introDone ? { scale: 1, opacity: 1 } : undefined}
+              transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.2 }}
+              className="inline-flex transition-transform duration-500 group-hover:scale-105"
             >
-              <BrandGlyph className="size-9" />
+              <BrandLogo height="h-8 sm:h-9" />
             </motion.span>
-            <span className="overflow-hidden">
-              <motion.span
-                key={lang}
-                initial={{ y: "110%" }}
-                animate={introDone ? { y: 0 } : undefined}
-                transition={{ duration: 0.8, ease: EASE, delay: 0.3 }}
-                className="block font-display text-[1.12rem] font-semibold tracking-tight"
-              >
-                {brand}
-              </motion.span>
-            </span>
           </a>
 
           <ul className="hidden items-center gap-1 lg:flex">
@@ -249,10 +238,7 @@ export function AnimatedNavbar() {
             className="grain fixed inset-0 z-[60] flex flex-col bg-charcoal px-6 pb-8 pt-5 text-ivory lg:hidden"
           >
             <div className="relative z-10 flex items-center justify-between">
-              <span className="flex items-center gap-2.5 font-display text-lg font-semibold">
-                <BrandGlyph className="size-9" />
-                {brand}
-              </span>
+              <BrandLogo height="h-8" />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
