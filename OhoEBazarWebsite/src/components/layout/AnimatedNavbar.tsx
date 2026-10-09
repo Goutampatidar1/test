@@ -93,16 +93,14 @@ export function AnimatedNavbar() {
     const delta = y - prev;
     setSolid(y > 40);
     probe();
-    // Always visible near top of page
-    if (y < 80) { setHidden(false); return; }
     if (open) return;
-    // Hide only on deliberate downward scroll (delta > 4 px per frame, past 300 px total)
-    if (delta > 4 && y > 300) {
-      setHidden(true);
-    } else if (delta < -8) {
-      // Show on deliberate upward scroll — micro-movements do nothing
-      setHidden(false);
-    }
+    // Always visible in the first 80px (hero entrance)
+    if (y < 80) { setHidden(false); return; }
+    // Hide on meaningful downward scroll; show on any upward movement.
+    // Lenis smooth-scroll produces small per-frame deltas, so delta < 0 catches
+    // even gentle upward intent without requiring a large threshold.
+    if (delta > 5) setHidden(true);
+    else if (delta < 0) setHidden(false);
   });
 
   useEffect(() => {
