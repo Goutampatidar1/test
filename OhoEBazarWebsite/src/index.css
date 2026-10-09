@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* OHO E-Bazar design tokens. Brand orange and charcoal come from the admin/vendor panels. */
+@theme {
+  --color-ivory: #f5eee3;
+  --color-paper: #faf6ef;
+  --color-sand: #e9dcc8;
+  --color-charcoal: #151311;
+  --color-ink: #221d18;
+  --color-night: #0e0b09;
+  --color-ember-night: #1a0e0a;
+  --color-smoke: #6d645b;
+  --color-oho: #fe7000;
+  --color-oho-deep: #c75400;
+  --color-ember: #ff9a3c;
+  --color-sun: #fde309;
+  --color-brass: #c8952e;
+
+  --font-display: "Fraunces", "Noto Serif Devanagari", "Iowan Old Style", serif;
+  --font-sans: "Instrument Sans", "Noto Sans Devanagari", "Segoe UI", system-ui, sans-serif;
+
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-quart: cubic-bezier(0.76, 0, 0.24, 1);
+
+  --shadow-float: 0 50px 70px -45px rgb(40 20 4 / 0.55);
+  --shadow-panel: 0 40px 80px -50px rgb(0 0 0 / 0.65);
+
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-ribbon: ribbon 14s linear infinite;
+  --animate-glow: glow 12s ease-in-out infinite;
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(var(--float-rot, 0deg));
+    }
+    50% {
+      transform: translate3d(0, -12px, 0) rotate(calc(var(--float-rot, 0deg) * -1));
+    }
+  }
+  @keyframes ribbon {
+    to {
+      stroke-dashoffset: -2000;
+    }
+  }
+  @keyframes glow {
+    0%,
+    100% {
+      transform: translate3d(-4%, 2%, 0) scale(1);
+      opacity: 0.85;
+    }
+    50% {
+      transform: translate3d(5%, -3%, 0) scale(1.12);
+      opacity: 1;
+    }
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: auto;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-night font-sans text-charcoal antialiased;
+    overflow-x: clip;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    @apply bg-oho text-white;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-oho);
+    outline-offset: 3px;
+  }
+
+  img {
+    -webkit-user-drag: none;
+  }
+}
+
+/* One shared layout frame: 12 columns inside 1440px with 20/32/48px gutters. */
+@utility frame {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (width >= 40rem) {
+    padding-inline: 2rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 3rem;
+  }
+}
+
+/* Type scale. Display sizes are fluid; Devanagari overrides live below, unlayered. */
+@utility t-mega {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 8.6vw, 9rem);
+  line-height: 0.94;
+  letter-spacing: -0.04em;
+}
+@utility t-display {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 5.6vw, 5.75rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+@utility t-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 3.4vw, 3.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+@utility t-lead {
+  font-size: clamp(1rem, 1.15vw, 1.15rem);
+  line-height: 1.7;
+}
+@utility eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Fill is cleared separately so the stroke can still use the element's text colour. */
+@utility text-outline {
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 1px currentColor;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Unlayered so it wins over utilities: Devanagari needs taller lines, no negative tracking and a slightly smaller size. */
+html[lang="hi"] .t-mega {
+  font-size: clamp(2.6rem, 7.4vw, 7.8rem);
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+html[lang="hi"] .t-display {
+  font-size: clamp(2.2rem, 4.9vw, 5rem);
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+html[lang="hi"] .t-title {
+  font-size: clamp(1.75rem, 3vw, 3rem);
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+html[lang="hi"] .t-lead {
+  line-height: 1.85;
+}
+/* Tracking breaks Devanagari conjunct shaping. */
+html[lang="hi"] .eyebrow {
+  letter-spacing: 0.02em;
+  font-size: 0.82rem;
+}
+
+/* Single page-wide film grain instead of per-section overlays. */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Masked word used by SplitTextReveal; padding leaves room for Devanagari matras. */
+.split-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding: 0.14em 0.06em 0.2em;
+  margin: -0.14em -0.06em -0.2em;
+}
+.split-inner {
+  display: inline-block;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
