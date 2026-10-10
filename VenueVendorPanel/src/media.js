@@ -17,6 +17,13 @@ function toAbsolute(urlLike) {
   }
 }
 
+const BACKEND_DEV_PORT = "5001";
+
+/** Port the Node backend is reached on (from VITE_API_URL, e.g. :5017 on live), or "" when proxied on 443. */
+function backendPort() {
+  return toAbsolute(getApiBase())?.port || "";
+}
+
 /** Same-origin on live (iPhone-safe). Keep :5001 only on local/LAN. */
 export function mediaUrl(path) {
   if (!path) return "";
@@ -31,7 +38,7 @@ export function mediaUrl(path) {
   if (!absolute) return raw;
 
   if (!isDevHost(absolute.hostname) && (absolute.port === "5001" || absolute.port === "5000")) {
-    absolute.port = "";
+    absolute.port = backendPort();
   }
   return absolute.toString();
 }
@@ -41,8 +48,9 @@ export function mediaUrlOnNodePort(path) {
   const primary = mediaUrl(path);
   const parsed = toAbsolute(primary || path);
   if (!parsed || !/^https?:$/i.test(parsed.protocol)) return "";
-  if (parsed.port === "5001") return "";
-  parsed.port = "5001";
+  const nodePort = backendPort() || BACKEND_DEV_PORT;
+  if (parsed.port === nodePort) return "";
+  parsed.port = nodePort;
   return parsed.toString();
 }
 
