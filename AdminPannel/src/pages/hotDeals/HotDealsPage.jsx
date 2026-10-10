@@ -754,21 +754,22 @@ export function HotDealsPage({ initialTab = "rules" }) {
           <div className="settings-tab-panel">
             <div className="page-card__head" style={{ marginTop: 12 }}>
               <h3 className="page-card__title" style={{ fontSize: "1rem" }}>Vendor requests</h3>
-              <select
-                className="user-field__input"
-                style={{ maxWidth: 200 }}
-                value={queueStatus}
-                onChange={(e) => {
-                  setQueueStatus(e.target.value);
-                  setQueuePage(1);
-                }}
-                aria-label="Filter by request status"
-              >
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="all">All</option>
-              </select>
+              <label className="user-field" style={{ margin: 0, width: 200 }}>
+                <select
+                  className="user-field__input"
+                  value={queueStatus}
+                  onChange={(e) => {
+                    setQueueStatus(e.target.value);
+                    setQueuePage(1);
+                  }}
+                  aria-label="Filter by request status"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
             </div>
             <div className="table-scroll">
               <table className="data-table">
