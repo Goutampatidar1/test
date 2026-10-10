@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { adminGetAmenityById } from "../../api/adminAmenities.js";
 import { mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { logout } from "../../store/authSlice.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 
@@ -121,11 +122,7 @@ export function AmenitiesView() {
           <DetailRow
             label="Icon"
             value={
-              amenity.icon ? (
-                <img src={mediaUrl(amenity.icon)} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 10 }} />
-              ) : (
-                "—"
-              )
+              <img src={imageOrDefault(amenity.icon)} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 10 }} />
             }
           />
           <DetailRow label="Description" value={amenity.description || "—"} />

@@ -13,18 +13,12 @@ const PERK_OPTIONS = [
 ];
 
 const TABS = [
-  { id: "booking", label: "Booking & enquiries" },
-  { id: "phone", label: "Phone number" },
   { id: "media", label: "Videos & hot deals" },
   { id: "alerts", label: "Alerts & approval" },
-  { id: "home", label: "Home screen" },
   { id: "benefits", label: "Profile benefits" },
 ];
 
 const NUMBER_LIMITS = {
-  enquiryBookingWindowHours: [1, 336, "Booking window", "booking"],
-  enquiryResponseHours: [1, 720, "Vendor reply time", "booking"],
-  phoneTrialDaysOnFullProfile: [0, 365, "Free trial days", "phone"],
   hotDealsLimit: [1, 50, "Hot deals shown", "media"],
   discountAlertMinPercent: [0, 100, "Discount alert minimum", "alerts"],
   discountAlertCooldownHours: [0, 720, "Discount alert cooldown", "alerts"],
@@ -33,12 +27,6 @@ const NUMBER_LIMITS = {
 function toForm(fs) {
   const s = fs || {};
   return {
-    venueBookingMode: s.venueBookingMode === "direct" ? "direct" : "enquiry",
-    enquiryBookingWindowHours: String(s.enquiryBookingWindowHours ?? 24),
-    enquiryResponseHours: String(s.enquiryResponseHours ?? 48),
-    enquiryHoldDatesEnabled: s.enquiryHoldDatesEnabled !== false,
-    phonePlanRequired: s.phonePlanRequired !== false,
-    phoneTrialDaysOnFullProfile: String(s.phoneTrialDaysOnFullProfile ?? 7),
     videoEnabledUser: s.videoEnabledUser !== false,
     videoEnabledVendor: s.videoEnabledVendor !== false,
     hotDealsEnabled: s.hotDealsEnabled !== false,
@@ -46,7 +34,6 @@ function toForm(fs) {
     discountAlertMinPercent: String(s.discountAlertMinPercent ?? 5),
     discountAlertCooldownHours: String(s.discountAlertCooldownHours ?? 24),
     autoApproveTrustedVendors: s.autoApproveTrustedVendors !== false,
-    homeSections: Array.isArray(s.homeSections) ? s.homeSections.map((r) => ({ ...r })) : [],
     profileBenefits: Array.isArray(s.profileBenefits)
       ? s.profileBenefits.map((r) => ({
           minPercent: String(r.minPercent ?? 0),
@@ -68,9 +55,6 @@ function validate(form) {
       return { tab, text: `${label} must be between ${min} and ${max}.` };
     }
   }
-  for (const row of form.homeSections) {
-    if (!String(row.title || "").trim()) return { tab: "home", text: "Every home section needs a title." };
-  }
   for (const [idx, row] of form.profileBenefits.entries()) {
     if (!row.title.trim()) return { tab: "benefits", text: `Profile benefit #${idx + 1} needs a title.` };
     const pct = Number(row.minPercent);
@@ -83,12 +67,6 @@ function validate(form) {
 
 function toPayload(form) {
   return {
-    venueBookingMode: form.venueBookingMode,
-    enquiryBookingWindowHours: Number(form.enquiryBookingWindowHours),
-    enquiryResponseHours: Number(form.enquiryResponseHours),
-    enquiryHoldDatesEnabled: form.enquiryHoldDatesEnabled,
-    phonePlanRequired: form.phonePlanRequired,
-    phoneTrialDaysOnFullProfile: Number(form.phoneTrialDaysOnFullProfile),
     videoEnabledUser: form.videoEnabledUser,
     videoEnabledVendor: form.videoEnabledVendor,
     hotDealsEnabled: form.hotDealsEnabled,
@@ -96,7 +74,6 @@ function toPayload(form) {
     discountAlertMinPercent: Number(form.discountAlertMinPercent),
     discountAlertCooldownHours: Number(form.discountAlertCooldownHours),
     autoApproveTrustedVendors: form.autoApproveTrustedVendors,
-    homeSections: form.homeSections.map((r) => ({ key: r.key, title: String(r.title).trim(), enabled: Boolean(r.enabled) })),
     profileBenefits: form.profileBenefits.map((r) => ({
       minPercent: Number(r.minPercent),
       title: r.title.trim(),
@@ -181,18 +158,6 @@ export function FeatureSettingsPage() {
 
   const set = (key) => (value) => setForm((p) => ({ ...p, [key]: value }));
 
-  const moveSection = (idx, delta) =>
-    setForm((p) => {
-      const next = [...p.homeSections];
-      const target = idx + delta;
-      if (target < 0 || target >= next.length) return p;
-      [next[idx], next[target]] = [next[target], next[idx]];
-      return { ...p, homeSections: next };
-    });
-
-  const updateSection = (idx, patch) =>
-    setForm((p) => ({ ...p, homeSections: p.homeSections.map((r, i) => (i === idx ? { ...r, ...patch } : r)) }));
-
   const updateBenefit = (idx, patch) =>
     setForm((p) => ({ ...p, profileBenefits: p.profileBenefits.map((r, i) => (i === idx ? { ...r, ...patch } : r)) }));
 
@@ -265,68 +230,6 @@ export function FeatureSettingsPage() {
           ))}
         </div>
 
-        {tab === "booking" ? (
-          <div className="settings-tab-panel" role="tabpanel">
-            <TabIntro>
-              Enquiry mode: the customer sends an enquiry, the vendor accepts, then the customer books within the booking
-              window.
-            </TabIntro>
-            <div className="row g-3">
-              <label className="user-field col-12 col-md-6">
-                <span className="user-field__label">Booking mode</span>
-                <select className="user-field__input" value={form.venueBookingMode} onChange={(e) => set("venueBookingMode")(e.target.value)}>
-                  <option value="enquiry">Enquiry first (vendor accepts, then booking)</option>
-                  <option value="direct">Direct booking</option>
-                </select>
-              </label>
-              <ToggleField
-                label="Hold dates for accepted enquiries"
-                hint="Blocks the dates for other customers while the accepted customer pays."
-                checked={form.enquiryHoldDatesEnabled}
-                onChange={set("enquiryHoldDatesEnabled")}
-              />
-              <NumberField
-                label="Booking window after accept (hours)"
-                hint="How long the customer has to book once the vendor accepts."
-                value={form.enquiryBookingWindowHours}
-                onChange={set("enquiryBookingWindowHours")}
-                min={1}
-                max={336}
-              />
-              <NumberField
-                label="Vendor reply time (hours)"
-                hint="Unanswered enquiries expire after this."
-                value={form.enquiryResponseHours}
-                onChange={set("enquiryResponseHours")}
-                min={1}
-                max={720}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {tab === "phone" ? (
-          <div className="settings-tab-panel" role="tabpanel">
-            <TabIntro>Controls when vendor phone numbers are visible to customers.</TabIntro>
-            <div className="row g-3">
-              <ToggleField
-                label="Require Show Number plan"
-                hint="On: numbers stay hidden until the vendor buys a Show Number plan. Off: numbers are always visible."
-                checked={form.phonePlanRequired}
-                onChange={set("phonePlanRequired")}
-              />
-              <NumberField
-                label="Free trial at 100% profile (days)"
-                hint="0 disables the free trial."
-                value={form.phoneTrialDaysOnFullProfile}
-                onChange={set("phoneTrialDaysOnFullProfile")}
-                min={0}
-                max={365}
-              />
-            </div>
-          </div>
-        ) : null}
-
         {tab === "media" ? (
           <div className="settings-tab-panel" role="tabpanel">
             <TabIntro>Switch the video (reels) feature and the Hot Deals home section on or off.</TabIntro>
@@ -370,68 +273,6 @@ export function FeatureSettingsPage() {
                 checked={form.autoApproveTrustedVendors}
                 onChange={set("autoApproveTrustedVendors")}
               />
-            </div>
-          </div>
-        ) : null}
-
-        {tab === "home" ? (
-          <div className="settings-tab-panel" role="tabpanel">
-            <TabIntro>Order and visibility of the user app home sections. Top of the list shows first.</TabIntro>
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Order</th>
-                    <th>Section</th>
-                    <th>Title shown</th>
-                    <th>Visible</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.homeSections.map((row, idx) => (
-                    <tr key={row.key}>
-                      <td>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button type="button" className="btn btn--ghost" style={{ padding: "2px 8px" }} disabled={idx === 0} onClick={() => moveSection(idx, -1)} aria-label="Move up">
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--ghost"
-                            style={{ padding: "2px 8px" }}
-                            disabled={idx === form.homeSections.length - 1}
-                            onClick={() => moveSection(idx, 1)}
-                            aria-label="Move down"
-                          >
-                            ↓
-                          </button>
-                        </div>
-                      </td>
-                      <td className="data-table__muted">{row.key}</td>
-                      <td>
-                        <label className="user-field" style={{ margin: 0, minWidth: 220 }}>
-                          <input
-                            className="user-field__input"
-                            value={row.title}
-                            maxLength={60}
-                            aria-label={`Title for ${row.key}`}
-                            onChange={(e) => updateSection(idx, { title: e.target.value })}
-                            style={{ height: 40 }}
-                          />
-                        </label>
-                      </td>
-                      <td>
-                        <Toggle checked={row.enabled !== false} label={`Show ${row.key}`} onChange={(v) => updateSection(idx, { enabled: v })} />
-                        {row.key === "video" && !form.videoEnabledUser ? (
-                          <small className="data-table__muted" style={{ display: "block" }}>
-                            Hidden — "Videos in the user app" is off
-                          </small>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         ) : null}

@@ -6,7 +6,7 @@ import { AiFillDelete } from "react-icons/ai";
 import { MdEditSquare } from "react-icons/md";
 import { adminDeletePromotion, adminListPromotions, adminUpdatePromotion } from "../../api/promotionController.js";
 import { logout } from "../../store/authSlice.js";
-import { mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
 
@@ -111,7 +111,7 @@ export function PromotionList() {
                   <ClickableTableRow key={row._id} to={`/admin/promo/${row._id}`}>
                     <td className="data-table__muted">{(page - 1) * LIST_LIMIT + idx + 1}</td>
                     <td>{row.promoCode || "—"}</td>
-                    <td>{row.image ? <img src={mediaUrl(row.image)} alt={row.promoCode} style={{ width: "auto", height: "50px", objectFit: "cover", borderRadius: 6 }} /> : "—"}</td>
+                    <td><img src={imageOrDefault(row.image)} alt={row.promoCode} style={{ width: "auto", height: "50px", objectFit: "cover", borderRadius: 6 }} /></td>
                     <td>{row.discountType === "percentage" ? `${row.discountValue}%` : `Rs ${row.discountValue}`}</td>
                     <td>{row.usedCount ?? 0}/{row.totalUsageLimit ?? 0}</td>
                     <td className="data-table__muted">

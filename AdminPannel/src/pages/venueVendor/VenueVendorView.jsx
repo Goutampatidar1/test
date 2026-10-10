@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import { adminGetVenueVendor, adminUpdateVenueVendor } from "../../api/adminVenueVendors.js";
 import { logout } from "../../store/authSlice.js";
 import { mediaDocumentUrl, mediaUrl } from "../../media.js";
+import { DEFAULT_IMAGE_SRC } from "../../utils/imageFallback.js";
 import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholder.jsx";
 import { promptRejectionReason } from "../../utils/promptRejectionReason.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
@@ -186,7 +187,7 @@ export function VenueVendorView() {
           <div className="vendor-doc-thumbs">
             {docs.map((doc) => (
               <div key={doc.key} className="vendor-doc-thumb">
-                {doc.url ? <img src={doc.url} alt={doc.label} className="vendor-doc-thumb__ph" /> : <div className="vendor-doc-thumb__ph" />}
+                <img src={doc.url || DEFAULT_IMAGE_SRC} alt={doc.label} className="vendor-doc-thumb__ph" />
                 {doc.url ? (
                   <a href={doc.url} target="_blank" rel="noreferrer" className="vendor-doc-thumb__link">{doc.label}</a>
                 ) : (

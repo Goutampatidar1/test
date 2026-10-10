@@ -15,6 +15,7 @@ import { adminListVendors } from "../../api/adminVendors.js";
 import { adminListVenueVendors } from "../../api/adminVenueVendors.js";
 import { logout } from "../../store/authSlice.js";
 import { mediaDocumentUrl, mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
 import { assertVideoMaxDuration, VIDEO_MAX_DURATION_SECONDS } from "../../utils/videoDuration.js";
 
@@ -552,28 +553,24 @@ export function VideoFeedPage() {
                 <tr key={`${row.type}-${row._id}`}>
                   <td>{(page - 1) * LIST_LIMIT + idx + 1}</td>
                   <td>
-                    {row.thumbnail || row.video ? (
-                      row.video ? (
-                        <a href={mediaDocumentUrl(row.video)} target="_blank" rel="noreferrer" title="Open video">
-                          <img
-                            src={mediaUrl(row.thumbnail || row.video)}
-                            alt=""
-                            width={56}
-                            height={56}
-                            style={{ objectFit: "cover", borderRadius: 8, display: "block" }}
-                          />
-                        </a>
-                      ) : (
+                    {row.video ? (
+                      <a href={mediaDocumentUrl(row.video)} target="_blank" rel="noreferrer" title="Open video">
                         <img
-                          src={mediaUrl(row.thumbnail)}
+                          src={imageOrDefault(row.thumbnail)}
                           alt=""
                           width={56}
                           height={56}
-                          style={{ objectFit: "cover", borderRadius: 8 }}
+                          style={{ objectFit: "cover", borderRadius: 8, display: "block" }}
                         />
-                      )
+                      </a>
                     ) : (
-                      "—"
+                      <img
+                        src={imageOrDefault(row.thumbnail)}
+                        alt=""
+                        width={56}
+                        height={56}
+                        style={{ objectFit: "cover", borderRadius: 8 }}
+                      />
                     )}
                   </td>
                   <td>

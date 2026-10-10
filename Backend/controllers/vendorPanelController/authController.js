@@ -285,32 +285,47 @@ exports.register = asyncHandler(async (req, res) => {
   try {
     if (wantsEcom) {
       vendor = await createEcomAccount(req, phoneNorm, body, vendorPanelType);
-      queueNotifyAllAdmins({
-        type: "vendor_registered",
-        title: "New e-commerce vendor registered",
-        message: `${vendor.businessName || vendor.name || "A vendor"} submitted a registration request.`,
-        metadata: {
-          vendorId: String(vendor._id),
-          linkPath: `/admin/vendors/${vendor._id}`,
-        },
-      });
     }
-
     if (wantsService) {
       venueVendor = await createServiceAccount(req, phoneNorm, body, vendorPanelType);
-      queueNotifyAllAdmins({
-        type: "venue_vendor_registered",
-        title: "New service provider registered",
-        message: `${venueVendor.businessName || venueVendor.name || "A service provider"} submitted a registration request.`,
-        metadata: {
-          venueVendorId: String(venueVendor._id),
-          linkPath: `/admin/venue-vendors/${venueVendor._id}`,
-        },
-      });
     }
   } catch (err) {
     cleanupAllUploadedFiles(req);
     throw err;
+  }
+
+  if (vendor && venueVendor) {
+    queueNotifyAllAdmins({
+      type: "vendor_registered",
+      title: "New vendor registered (E-commerce + Service)",
+      message: `${vendor.businessName || vendor.name || "A vendor"} submitted a registration request for both e-commerce and service.`,
+      metadata: {
+        vendorId: String(vendor._id),
+        venueVendorId: String(venueVendor._id),
+        vendorPanelType,
+        linkPath: `/admin/vendors/${vendor._id}`,
+      },
+    });
+  } else if (vendor) {
+    queueNotifyAllAdmins({
+      type: "vendor_registered",
+      title: "New e-commerce vendor registered",
+      message: `${vendor.businessName || vendor.name || "A vendor"} submitted a registration request.`,
+      metadata: {
+        vendorId: String(vendor._id),
+        linkPath: `/admin/vendors/${vendor._id}`,
+      },
+    });
+  } else if (venueVendor) {
+    queueNotifyAllAdmins({
+      type: "venue_vendor_registered",
+      title: "New service provider registered",
+      message: `${venueVendor.businessName || venueVendor.name || "A service provider"} submitted a registration request.`,
+      metadata: {
+        venueVendorId: String(venueVendor._id),
+        linkPath: `/admin/venue-vendors/${venueVendor._id}`,
+      },
+    });
   }
 
   if (vendor) {

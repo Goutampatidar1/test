@@ -12,6 +12,7 @@ import {
 import { adminListCategories } from "../../api/adminCategories.js";
 import { logout } from "../../store/authSlice.js";
 import { mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
 import { AdminSearchField } from "../../components/AdminSearchField.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
@@ -1000,20 +1001,16 @@ export function BannerPage() {
                   <ClickableTableRow key={row._id} onOpen={() => setViewRow(row)}>
                     <td className="data-table__muted">{(page - 1) * LIST_LIMIT + idx + 1}</td>
                     <td>
-                      {row.image ? (
-                        <img
-                          src={mediaUrl(row.image)}
-                          alt=""
-                          style={{
-                            width: row.targetType === "venue" ? 84 : 56,
-                            height: row.targetType === "venue" ? 28 : 22,
-                            objectFit: "cover",
-                            borderRadius: 6,
-                          }}
-                        />
-                      ) : (
-                        "—"
-                      )}
+                      <img
+                        src={imageOrDefault(row.image)}
+                        alt=""
+                        style={{
+                          width: row.targetType === "venue" ? 84 : 56,
+                          height: row.targetType === "venue" ? 28 : 22,
+                          objectFit: "cover",
+                          borderRadius: 6,
+                        }}
+                      />
                     </td>
                     <td>{row.title || "—"}</td>
                     <td>{bannerTargetLabel(row.targetType)}</td>
