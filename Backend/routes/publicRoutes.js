@@ -71,7 +71,31 @@ router.get("/amenities", publicCatalogController.listAmenities);
 router.get("/faq", publicCatalogController.listFaqs);
 
 const publicStaticPageController = require("../controllers/publicControllers/publicStaticPageController");
+const publicAccountController = require("../controllers/publicControllers/publicAccountController");
+const legalPageController = require("../controllers/publicControllers/legalPageController");
+
 router.get("/pages", publicStaticPageController.listPages);
 router.get("/pages/:slug", publicStaticPageController.getPageBySlug);
+
+/** Play Store legal HTML pages (served via /api proxy — works without Apache root rewrite). */
+router.get("/privacy-policy", legalPageController.renderPrivacyPolicy);
+router.get("/vendor/privacy-policy", legalPageController.renderVendorPrivacyPolicy);
+router.get("/delivery/privacy-policy", legalPageController.renderDeliveryPrivacyPolicy);
+router.get("/driver/privacy-policy", legalPageController.renderDeliveryPrivacyPolicy);
+
+router.get("/delete-account", legalPageController.renderDeleteAccount);
+router.get("/vendor/delete-account", legalPageController.renderVendorDeleteAccount);
+router.get("/delivery/delete-account", legalPageController.renderDeliveryDeleteAccount);
+router.get("/driver/delete-account", legalPageController.renderDeliveryDeleteAccount);
+
+/** Play Store: delete accounts by mobile (no auth token). */
+router.post("/account/delete", publicAccountController.deleteAccountByMobile);
+router.post("/delete-account", publicAccountController.deleteAccountByMobile);
+router.post("/vendor/account/delete", publicAccountController.deleteVendorAccountByMobile);
+router.post("/vendor/delete-account", publicAccountController.deleteVendorAccountByMobile);
+router.post("/delivery/account/delete", publicAccountController.deleteDeliveryAccountByMobile);
+router.post("/delivery/delete-account", publicAccountController.deleteDeliveryAccountByMobile);
+router.post("/driver/account/delete", publicAccountController.deleteDeliveryAccountByMobile);
+router.post("/driver/delete-account", publicAccountController.deleteDeliveryAccountByMobile);
 
 module.exports = router;

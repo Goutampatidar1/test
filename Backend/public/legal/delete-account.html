@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Delete Account | {{APP_NAME}}</title>
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --ink: #1c1917;
+      --muted: #57534e;
+      --card: #ffffff;
+      --accent: #b91c1c;
+      --accent-dark: #991b1b;
+      --line: #e7e5e4;
+      --ok: #166534;
+      --ok-bg: #dcfce7;
+      --err: #991b1b;
+      --err-bg: #fee2e2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 420px at 0% 0%, #fecaca 0%, transparent 50%),
+        radial-gradient(800px 360px at 100% 10%, #ffedd5 0%, transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+      line-height: 1.55;
+    }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 40px 20px 64px; }
+    .brand {
+      font-size: 0.8rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+    h1 { margin: 0 0 8px; font-size: clamp(1.7rem, 4vw, 2.1rem); line-height: 1.2; }
+    .lead { color: var(--muted); margin: 0 0 24px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 12px 32px rgba(28, 25, 23, 0.06);
+    }
+    label {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input[type="tel"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 14px;
+      font-size: 1rem;
+      outline: none;
+      background: #fff;
+    }
+    input[type="tel"]:focus {
+      border-color: #f87171;
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
+    }
+    .hint { margin: 8px 0 0; color: var(--muted); font-size: 0.85rem; }
+    .warn {
+      margin: 18px 0 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      font-size: 0.9rem;
+    }
+    button {
+      width: 100%;
+      margin-top: 20px;
+      border: 0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+    .msg {
+      display: none;
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 0.92rem;
+    }
+    .msg.show { display: block; }
+    .msg.ok { background: var(--ok-bg); color: var(--ok); }
+    .msg.err { background: var(--err-bg); color: var(--err); }
+    footer {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="brand">{{APP_NAME}}</p>
+    <h1>Delete account</h1>
+    <p class="lead">Enter the mobile number registered with your {{ACCOUNT_TYPE}} account. This action permanently deletes your {{ACCOUNT_TYPE}} account.</p>
+
+    <div class="card">
+      <form id="deleteForm" novalidate>
+        <label for="mobileNo">Mobile number</label>
+        <input
+          id="mobileNo"
+          name="mobileNo"
+          type="tel"
+          inputmode="numeric"
+          autocomplete="tel"
+          maxlength="15"
+          placeholder="10-digit mobile number"
+          required
+        />
+        <p class="hint">Example: 9876543210</p>
+
+        <div class="warn">
+          Deleting your account removes your profile and login access. This cannot be undone.
+        </div>
+
+        <button type="submit" id="submitBtn">Delete my account</button>
+        <div id="message" class="msg" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+
+    <footer>
+      <p><a href="{{PRIVACY_POLICY_URL}}">Privacy Policy</a></p>
+      <p>&copy; {{YEAR}} {{APP_NAME}}</p>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var form = document.getElementById("deleteForm");
+      var input = document.getElementById("mobileNo");
+      var button = document.getElementById("submitBtn");
+      var message = document.getElementById("message");
+      var apiUrl = {{API_DELETE_URL_JSON}};
+
+      function showMessage(text, type) {
+        message.textContent = text;
+        message.className = "msg show " + type;
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var mobileNo = String(input.value || "").trim();
+        if (!mobileNo) {
+          showMessage("Please enter your mobile number.", "err");
+          input.focus();
+          return;
+        }
+
+        if (!window.confirm("Are you sure you want to permanently delete this account?")) {
+          return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Deleting...";
+        message.className = "msg";
+
+        try {
+          var response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ mobileNo: mobileNo }),
+          });
+          var payload = {};
+          try {
+            payload = await response.json();
+          } catch (_) {}
+
+          if (!response.ok || payload.status === false) {
+            throw new Error(payload.message || "Unable to delete account. Please try again.");
+          }
+
+          showMessage(payload.message || "Account deleted successfully.", "ok");
+          form.reset();
+        } catch (error) {
+          showMessage(error.message || "Something went wrong.", "err");
+        } finally {
+          button.disabled = false;
+          button.textContent = "Delete my account";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

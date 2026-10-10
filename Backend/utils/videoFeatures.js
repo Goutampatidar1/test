@@ -3,19 +3,27 @@ const { getFeatureSettings } = require("./appFeatureSettings");
 
 /**
  * Video (reels) on/off switches.
- *  - Admin: feature_settings.videoEnabledUser / videoEnabledVendor
- *  - Personal: videoEnabled on the User / Vendor / VenueVendor document
+ *  - User app: only the admin switch feature_settings.videoEnabledUser decides.
+ *  - Vendor apps: admin feature_settings.videoEnabledVendor + personal videoEnabled on the Vendor / VenueVendor document
  */
-async function isVideoEnabledForUser(user) {
+async function isVideoEnabledForUser() {
   const features = await getFeatureSettings();
-  if (features.videoEnabledUser === false) return false;
-  return user?.videoEnabled !== false;
+  return features.videoEnabledUser !== false;
 }
 
 async function describeVideoState(accountType, account) {
   const features = await getFeatureSettings();
-  const adminEnabled =
-    accountType === "user" ? features.videoEnabledUser !== false : features.videoEnabledVendor !== false;
+  if (accountType === "user") {
+    const adminEnabled = features.videoEnabledUser !== false;
+    return {
+      adminEnabled,
+      enabled: adminEnabled,
+      effective: adminEnabled,
+      lockedByAdmin: !adminEnabled,
+      managedByAdmin: true,
+    };
+  }
+  const adminEnabled = features.videoEnabledVendor !== false;
   const personal = account?.videoEnabled !== false;
   return {
     adminEnabled,
@@ -52,6 +60,10 @@ function makeVideoSettingsHandlers(getModel, accountType) {
   });
 
   const update = asyncHandler(async (req, res) => {
+    if (accountType === "user") {
+      sendSuccess(res, "Videos are managed by admin", await describeVideoState(accountType, null));
+      return;
+    }
     const raw = req.body?.videoEnabled ?? req.body?.enabled;
     const value =
       typeof raw === "boolean"

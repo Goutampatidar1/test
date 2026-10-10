@@ -6,26 +6,40 @@
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /
+  RewriteBase /admin/
 
-  # Combined deployment: admin panel at domain root, vendor panel in /vendor/
-  # Upload AdminPannel/dist/* to web root and VenueVendorPanel/dist/* to /vendor/
+  # This file is used when the admin build is deployed at /admin/.
+  # For a combined deployment, use deploy/public_html.htaccess at the document root.
 
   # Serve real files first (favicon, SPA assets, logos copied into web root).
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
-  # NOTE: [P] proxy in .htaccess often does NOT work on cPanel/shared hosting.
-  # Prefer ProxyPass in the Apache vhost — see deploy/apache-ohoecom-combined.conf
+  # Backend Node for ohoebazar.com listens on 5017
+  # Prefer ProxyPass in Apache vhost if [P] fails on this host.
   <IfModule mod_proxy.c>
-    RewriteRule ^api(/.*)?$ http://127.0.0.1:5001/api$1 [P,L]
-    RewriteRule ^uploads(/.*)?$ http://127.0.0.1:5001/uploads$1 [P,L]
+    RewriteRule ^api(/.*)?$ http://127.0.0.1:5017/api$1 [P,L]
+    RewriteRule ^uploads(/.*)?$ http://127.0.0.1:5017/uploads$1 [P,L]
+    RewriteRule ^privacy-policy/?$ http://127.0.0.1:5017/privacy-policy [P,L]
+    RewriteRule ^vendor/privacy-policy/?$ http://127.0.0.1:5017/vendor/privacy-policy [P,L]
+    RewriteRule ^delivery/privacy-policy/?$ http://127.0.0.1:5017/delivery/privacy-policy [P,L]
+    RewriteRule ^driver/privacy-policy/?$ http://127.0.0.1:5017/driver/privacy-policy [P,L]
+    RewriteRule ^delete-account/?$ http://127.0.0.1:5017/delete-account [P,L]
+    RewriteRule ^vendor/delete-account/?$ http://127.0.0.1:5017/vendor/delete-account [P,L]
+    RewriteRule ^delivery/delete-account/?$ http://127.0.0.1:5017/delivery/delete-account [P,L]
+    RewriteRule ^driver/delete-account/?$ http://127.0.0.1:5017/driver/delete-account [P,L]
   </IfModule>
 
   RewriteRule ^api(/.*)?$ - [L]
   RewriteRule ^uploads(/.*)?$ - [L]
 
-  RewriteRule ^vendor(/.*)?$ /vendor/index.html [L]
-  RewriteRule ^ /index.html [L]
+  RewriteRule ^ index.html [L]
 </IfModule>
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php74” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php74 .php .php7 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

@@ -14,6 +14,7 @@ import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholde
 import { promptRejectionReason } from "../../utils/promptRejectionReason.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 import { VendorOrdersSection } from "../../components/VendorOrdersSection.jsx";
+import { VendorTypeBadge } from "../../components/VendorTypeBadge.jsx";
 function DetailRow({ label, value }) {
   return <div className="user-detail-row"><span className="user-detail-row__label">{label}</span><span className="user-detail-row__value">{value ?? "—"}</span></div>;
 }
@@ -249,6 +250,7 @@ export function VendorView() {
             <DetailRow label="Vendor Name" value={vendor.name} />
             <DetailRow label="Email ID" value={vendor.email} />
             <DetailRow label="Mobile Number" value={vendor.phone} />
+            <DetailRow label="Vendor Type" value={<VendorTypeBadge type={vendor.vendorPanelType} fallback="ecom" />} />
             <DetailRow label="Shop Name" value={vendor.businessName} />
             <DetailRow label="Business Mobile Number" value={vendor.businessPhone} />
             <DetailRow label="GSTIN" value={vendor.gstin} />

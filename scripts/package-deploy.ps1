@@ -14,14 +14,6 @@ Push-Location (Join-Path $Root "VenueVendorPanel")
 npm run build
 Pop-Location
 
-Write-Host "==> Merging vendor build into admin dist/vendor/..."
-$AdminDist = Join-Path $Root "AdminPannel\dist"
-$VendorDist = Join-Path $Root "VenueVendorPanel\dist"
-$VendorTarget = Join-Path $AdminDist "vendor"
-if (Test-Path $VendorTarget) { Remove-Item $VendorTarget -Recurse -Force }
-New-Item -ItemType Directory -Path $VendorTarget -Force | Out-Null
-Copy-Item -Path (Join-Path $VendorDist "*") -Destination $VendorTarget -Recurse -Force
-
 Write-Host "==> Staging deploy files..."
 if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
 New-Item -ItemType Directory -Path $Stage | Out-Null
@@ -36,6 +28,7 @@ $Include = @(
   "AdminPannel\package.json",
   "AdminPannel\package-lock.json",
   "AdminPannel\vite.config.js",
+  "VenueVendorPanel\dist",
   "VenueVendorPanel\.env.production.example",
   "VenueVendorPanel\package.json",
   "VenueVendorPanel\package-lock.json",

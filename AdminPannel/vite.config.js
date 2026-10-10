@@ -13,7 +13,9 @@ function safariHtmlPlugin() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // Production admin panel is deployed under /admin/ on the shared domain.
+  base: mode === "production" ? "/admin/" : "/",
   plugins: [react(), safariHtmlPlugin()],
   build: {
     target: ["es2019", "safari13"],
@@ -35,4 +37,4 @@ export default defineConfig({
       ignored: ["**/*.zip", "**/dist/**", "**/node_modules/**"],
     },
   },
-});
+}));
