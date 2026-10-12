@@ -77,7 +77,10 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
       ? safe("hotDeals", () => loadHotDealCards(req, { limit: features.hotDealsLimit }), [])
       : [],
     wants.has("suggestions")
-      ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl }), { items: [], personalised: false })
+      ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl, city: area.city }), {
+          items: [],
+          personalised: false,
+        })
       : { items: [], personalised: false },
     wants.has("suggestions")
       ? safe(

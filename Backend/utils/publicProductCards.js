@@ -31,7 +31,7 @@ async function buildProductCards(products, req, { baseUrl, decorate } = {}) {
       approvalStatus: "approved",
       isOpen: { $ne: false },
     })
-      .select("businessName shopLogo")
+      .select("businessName shopLogo city subDistrict")
       .lean(),
     getRatingStatsForProducts(productIds),
   ]);

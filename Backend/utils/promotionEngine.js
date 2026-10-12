@@ -718,7 +718,7 @@ async function listPromotedProducts({ cityId, subDistrictId, search = "", baseUr
     ...activePublicVendorFilter(),
     _id: { $in: vendorIds },
   })
-    .select("_id businessName shopLogo")
+    .select("_id businessName shopLogo city subDistrict")
     .lean();
   const vendorMap = new Map(vendors.map((v) => [String(v._id), v]));
 

@@ -231,6 +231,8 @@ function toPublicProductListCard(product, vendor, baseUrl, { isWishlisted = fals
           _id: vendor._id,
           name: vendor.businessName,
           shopLogo: vendor.shopLogo ? toAbsoluteUploadUrl(vendor.shopLogo, baseUrl) : "",
+          city: vendor.city ?? "",
+          subDistrict: vendor.subDistrict ?? "",
         }
       : null,
     rating: formatRatingValue(product.averageRating, product.ratingCount),

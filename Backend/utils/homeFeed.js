@@ -13,6 +13,7 @@ const { activePublicVendorFilter } = require("./publicVendorVisibility");
 const { listHotDealProducts } = require("./hotDeals");
 const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { getFeatureSettings } = require("./appFeatureSettings");
+const { exactRx } = require("./areaFilter");
 
 const MAX_RECENT_VIEWS = 30;
 
@@ -142,11 +143,20 @@ async function listRecentlyViewed(req, { limit = 12, baseUrl } = {}) {
 /**
  * "Suggested for you": products from categories the user wishlisted / viewed, minus what they
  * already saved or opened. Anonymous users (or users with no history) get popular products.
+ * With a `city`, vendor products are limited to shops of that city (platform products stay).
  */
-async function loadSuggestions(req, { limit = 12, baseUrl } = {}) {
+async function loadSuggestions(req, { limit = 12, baseUrl, city } = {}) {
   const userId = req.user?._id;
   let seedCategoryIds = [];
   const excludeIds = new Set();
+
+  let areaScope = {};
+  if (city) {
+    const areaVendorIds = await Vendor.distinct("_id", activePublicVendorFilter({ city: exactRx(city) }));
+    areaScope = {
+      $or: [{ role: { $in: ["Admin", "admin"] } }, { role: "Vendor", addedById: { $in: areaVendorIds } }],
+    };
+  }
 
   if (userId) {
     const [wishlist, views] = await Promise.all([
@@ -181,6 +191,7 @@ async function loadSuggestions(req, { limit = 12, baseUrl } = {}) {
   if (seedCategoryIds.length) {
     const docs = await Product.find(
       activePublicProductBaseFilter({
+        ...areaScope,
         category: { $in: seedCategoryIds },
         ...(exclude.length ? { _id: { $nin: exclude } } : {}),
       })
@@ -195,6 +206,7 @@ async function loadSuggestions(req, { limit = 12, baseUrl } = {}) {
   if (collected.length < limit) {
     const popular = await Product.find(
       activePublicProductBaseFilter({
+        ...areaScope,
         _id: { $nin: [...exclude, ...[...seen].map(oid).filter(Boolean)] },
       })
     )
@@ -212,7 +224,8 @@ async function loadSuggestions(req, { limit = 12, baseUrl } = {}) {
 // Vendor suggestions (user vendor list + home)
 // ---------------------------------------------------------------------------
 /**
- * Suggested vendors for the user app: Get Verified first, then best profile completion, same area boosted.
+ * Suggested vendors for the user app. With a known area only shops of that city are returned
+ * (the user's tehsil first); then Get Verified, then best profile completion.
  */
 async function loadSuggestedVendors(req, { limit = 6, baseUrl, city, subDistrict } = {}) {
   const { listGetVerifiedVendors } = require("./publicHome");
@@ -225,10 +238,11 @@ async function loadSuggestedVendors(req, { limit = 6, baseUrl, city, subDistrict
   if (!vendorIdsWithProducts.length) return [];
   const verifiedIds = new Set(verified.map((v) => String(v._id)));
 
-  const vendors = await Vendor.find(activePublicVendorFilter({ _id: { $in: vendorIdsWithProducts } }))
+  const areaClause = city ? { city: exactRx(city) } : subDistrict ? { subDistrict: exactRx(subDistrict) } : {};
+  const vendors = await Vendor.find(activePublicVendorFilter({ _id: { $in: vendorIdsWithProducts }, ...areaClause }))
     .populate("category", "name mode status")
     .sort({ profileScore: -1, createdAt: -1 })
-    .limit(Math.max(limit * 4, 24))
+    .limit(city ? 500 : Math.max(limit * 4, 24))
     .lean();
 
   const sameArea = (vendor) => {
@@ -242,8 +256,8 @@ async function loadSuggestedVendors(req, { limit = 6, baseUrl, city, subDistrict
     .map((vendor) => ({
       vendor,
       score:
+        sameArea(vendor) * 1000 +
         (verifiedIds.has(String(vendor._id)) ? 100 : 0) +
-        sameArea(vendor) * 20 +
         (Number(vendor.profileScore) || 0) / 5,
     }))
     .sort((a, b) => b.score - a.score)

@@ -46,6 +46,7 @@ const { buildProductCards } = require("../../utils/publicProductCards");
 const { findVendorsMatchingSearch, nameTokenClause, recordRecentView } = require("../../utils/homeFeed");
 const { toAbsoluteUploadUrl } = require("../../utils/mediaUrl");
 const { activePublicVenueListingFilter, activePublicVenueListingFilterOpen, isVenueListable } = require("../../utils/publicVenueList");
+const { resolveRequestArea, venueAreaClause, andClause } = require("../../utils/areaFilter");
 
 const ALLOWED_MODES = new Set(["ecom", "venue"]);
 
@@ -106,15 +107,12 @@ async function assertActiveVenueCategory(categoryId) {
   return cat;
 }
 
-async function venueCountByCategoryIds(categoryIds) {
+async function venueCountByCategoryIds(categoryIds, areaClause = null) {
   if (!categoryIds.length) return new Map();
   const listingFilter = await activePublicVenueListingFilterOpen();
   const rows = await Venue.aggregate([
     {
-      $match: {
-        ...listingFilter,
-        category: { $in: categoryIds },
-      },
+      $match: andClause({ ...listingFilter, category: { $in: categoryIds } }, areaClause),
     },
     { $group: { _id: "$category", venueCount: { $sum: 1 } } },
   ]);
@@ -172,9 +170,10 @@ exports.listVenueTypes = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const baseUrl = getPublicBaseUrl(req);
   const filter = activeVenueCategoryFilter(search);
+  const areaClause = await venueAreaClause(await resolveRequestArea(req));
 
   let categories = await Category.find(filter).sort({ name: 1 }).lean();
-  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id));
+  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id), areaClause);
   categories = categories.filter((c) => (countMap.get(String(c._id)) || 0) > 0);
 
   const total = categories.length;
@@ -205,9 +204,10 @@ exports.listAllVenueTypes = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const baseUrl = getPublicBaseUrl(req);
   const filter = activeVenueCategoryFilter(search);
+  const areaClause = await venueAreaClause(await resolveRequestArea(req));
 
   let categories = await Category.find(filter).sort({ name: 1 }).lean();
-  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id));
+  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id), areaClause);
   categories = categories.filter((c) => (countMap.get(String(c._id)) || 0) > 0);
 
   const items = categories
@@ -224,11 +224,11 @@ exports.listAllVenueTypes = asyncHandler(async (req, res) => {
 /** Venues list when user taps a category (no auth) */
 exports.listVenues = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
-  const { subCategory, city, search, sort } = req.query;
+  const { subCategory, search, sort } = req.query;
   const categoryId = req.params.categoryId ?? req.query.category;
   const baseUrl = getPublicBaseUrl(req);
 
-  const filter = await activePublicVenueFilter();
+  let filter = await activePublicVenueFilter();
 
   if (categoryId) {
     await assertActiveVenueCategory(categoryId);
@@ -238,14 +238,6 @@ exports.listVenues = asyncHandler(async (req, res) => {
     assertObjectId(subCategory, "Invalid subCategory id");
     filter.subCategory = subCategory;
   }
-  if (city && String(city).trim()) {
-    const cityRx = new RegExp(
-      `^${String(city).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-      "i"
-    );
-    filter.city = cityRx;
-  }
-
   const searchOr = searchFilter(search, [
     "name",
     "description",
@@ -254,6 +246,9 @@ exports.listVenues = asyncHandler(async (req, res) => {
     "city",
   ]);
   if (searchOr) Object.assign(filter, searchOr);
+
+  const area = await resolveRequestArea(req);
+  filter = andClause(filter, await venueAreaClause(area));
 
   const sortSpec = resolveVenueListSort(sort);
 
@@ -277,6 +272,7 @@ exports.listVenues = asyncHandler(async (req, res) => {
     status: venueList.length > 0,
     message: "Venues fetched",
     data: venueList,
+    location: { city: area.city || null, subDistrict: area.subDistrict || null },
     pagination: {
       page,
       limit,

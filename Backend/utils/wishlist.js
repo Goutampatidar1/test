@@ -109,7 +109,7 @@ async function hydrateWishlistProducts(productIds, baseUrl) {
       approvalStatus: "approved",
       isOpen: { $ne: false },
     })
-      .select("businessName shopLogo")
+      .select("businessName shopLogo city subDistrict")
       .lean(),
     getRatingStatsForProducts(products.map((product) => product._id)),
   ]);

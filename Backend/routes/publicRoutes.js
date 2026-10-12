@@ -26,15 +26,15 @@ router.get("/hot-deals", optionalProtectUser, publicHotDealsController.listHotDe
 router.get("/home/hot-deals", optionalProtectUser, publicHotDealsController.listHotDeals);
 router.get("/banners", publicCatalogController.listBanners);
 router.get("/home/banners", publicCatalogController.listBanners);
-router.get("/venue-types", publicCatalogController.listVenueTypes);
-router.get("/home/venue-types", publicCatalogController.listVenueTypes);
-router.get("/venue-types/all", publicCatalogController.listAllVenueTypes);
-router.get("/available-venues", publicCatalogController.listAllVenueTypes);
-router.get("/venues", publicCatalogController.listVenues);
+router.get("/venue-types", optionalProtectUser, publicCatalogController.listVenueTypes);
+router.get("/home/venue-types", optionalProtectUser, publicCatalogController.listVenueTypes);
+router.get("/venue-types/all", optionalProtectUser, publicCatalogController.listAllVenueTypes);
+router.get("/available-venues", optionalProtectUser, publicCatalogController.listAllVenueTypes);
+router.get("/venues", optionalProtectUser, publicCatalogController.listVenues);
 // Category id at end of path (preferred for mobile)
-router.get("/category-venues/:categoryId", publicCatalogController.listVenues);
+router.get("/category-venues/:categoryId", optionalProtectUser, publicCatalogController.listVenues);
 // Legacy — id between /categories/ and /venues
-router.get("/categories/:categoryId/venues", publicCatalogController.listVenues);
+router.get("/categories/:categoryId/venues", optionalProtectUser, publicCatalogController.listVenues);
 router.get("/venues/:id", publicCatalogController.getVenueById);
 router.get("/states", locationController.listStates);
 router.get("/cities", locationController.listCities);

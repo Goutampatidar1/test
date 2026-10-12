@@ -11,6 +11,7 @@ const { getPagination, searchFilter } = require("../../utils/listQuery");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { resolveItemApprovalForVendor } = require("../../utils/vendorApproval");
 const { queueRefreshProfileScore } = require("../../utils/profileCompletion");
+const { readVenueSubDistrictInput } = require("../../utils/areaFilter");
 
 const ALLOWED_STATUS = new Set(["active", "inactive"]);
 const ALLOWED_ROLES = new Set(["Admin", "VenueVendor", "Vendor"]);
@@ -246,7 +247,8 @@ exports.createVenue = asyncHandler(async (req, res) => {
   const category = normalizeRequired(req.body.category);
   const subCategory = normalizeOptional(req.body.subCategory);
   const address = normalizeOptional(req.body.address) || "";
-  const city = normalizeOptional(req.body.city) || "";
+  const subDistrictInput = await readVenueSubDistrictInput(req.body);
+  const city = subDistrictInput?.city || normalizeOptional(req.body.city) || "";
   const state = normalizeOptional(req.body.state) || "";
   const pincode = normalizeOptional(req.body.pincode) || "";
   const latitude = req.body.latitude === "" || req.body.latitude === undefined ? null : Number(req.body.latitude);
@@ -349,6 +351,7 @@ exports.createVenue = asyncHandler(async (req, res) => {
     ...(subCategory ? { subCategory } : {}),
     address,
     city,
+    ...(subDistrictInput ? { subDistrict: subDistrictInput.subDistrictId } : {}),
     state,
     pincode,
     latitude,
@@ -418,6 +421,13 @@ exports.updateVenue = asyncHandler(async (req, res) => {
   }
   if (Object.prototype.hasOwnProperty.call(req.body, "city")) {
     venue.city = normalizeOptional(req.body.city) || "";
+  }
+  const subDistrictInput = await readVenueSubDistrictInput(req.body);
+  if (subDistrictInput === null) {
+    venue.subDistrict = null;
+  } else if (subDistrictInput) {
+    venue.subDistrict = subDistrictInput.subDistrictId;
+    if (subDistrictInput.city) venue.city = subDistrictInput.city;
   }
   if (Object.prototype.hasOwnProperty.call(req.body, "state")) {
     venue.state = normalizeOptional(req.body.state) || "";

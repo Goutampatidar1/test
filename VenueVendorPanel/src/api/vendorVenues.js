@@ -9,6 +9,7 @@ function appendFields(fd, fields = {}) {
     "subCategory",
     "address",
     "city",
+    "subDistrictId",
     "state",
     "pincode",
     "latitude",
