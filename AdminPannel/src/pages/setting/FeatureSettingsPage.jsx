@@ -269,7 +269,7 @@ export function FeatureSettingsPage() {
               />
               <ToggleField
                 label="Auto-approve listings from approved vendors"
-                hint="When product approval is on, approved vendors' new listings go live immediately."
+                hint="When approval is on, approved vendors' new services go live immediately. Products never need approval."
                 checked={form.autoApproveTrustedVendors}
                 onChange={set("autoApproveTrustedVendors")}
               />

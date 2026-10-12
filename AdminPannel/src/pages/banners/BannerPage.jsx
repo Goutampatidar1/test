@@ -20,7 +20,6 @@ import {City } from 'country-state-city'
 import {
   applyPromotionStartDateChange,
   endDateMinForPromotion,
-  startDateMinForEdit,
   todayDateInputValue,
   validateOptionalDateRange,
 } from "../promotion/promotionFormUtils.js";
@@ -130,6 +129,10 @@ function validateBannerForm(form, dateOptions = {}) {
   }
   const dateError = validateOptionalDateRange(form, dateOptions);
   if (dateError) return dateError;
+  const endDate = String(form.endDate ?? "").trim();
+  if (endDate && endDate < todayDateInputValue()) {
+    return "End date cannot be in the past.";
+  }
   if (mode === "city" && cities.length === 0) {
     return "At least one city is required for city mode.";
   }
@@ -268,7 +271,7 @@ export function BannerPage() {
     if (!adminToken) return;
 
     const validationError = validateBannerForm(form, {
-      allowExistingPastStart: Boolean(editId),
+      allowExistingPastStart: Boolean(editId && initialStartDate),
       initialStartDate,
     });
     if (validationError) {
@@ -306,8 +309,8 @@ export function BannerPage() {
       related,
       relatedId: related === "product" || related === "vendor" ? form.relatedId || "" : "",
       category: related === "category" || !supportsRelated ? form.category || "" : "",
-      ...(form.startDate ? { startDate: form.startDate } : {}),
-      ...(form.endDate ? { endDate: form.endDate } : {}),
+      startDate: form.startDate || "",
+      endDate: form.endDate || "",
       cities: form.mode === "city" ? normalizeCitiesInput(form.cities) : [],
       status: form.status || "active",
       subtitle: form.subtitle,
@@ -424,8 +427,9 @@ export function BannerPage() {
     setForm((p) => ({ ...p, cities: "" }));
   };
 
-  const startDateMin = editId ? startDateMinForEdit(initialStartDate) : todayDateInputValue();
-  const endDateMin = endDateMinForPromotion(form.startDate, startDateMin);
+  const today = todayDateInputValue();
+  const startAlreadyRunning = Boolean(editId && initialStartDate && initialStartDate < today);
+  const endDateMin = endDateMinForPromotion(form.startDate, today);
   const activeSpec = BANNER_SPECS[form.targetType] ?? BANNER_SPECS.ecom;
 
   const handleImageChange = async (e) => {
@@ -615,12 +619,17 @@ export function BannerPage() {
             </label>
             <label className="user-field col-12 col-md-6">
               <span className="user-field__label">Start date (optional)</span>
-              <small className="data-table__muted">Vendor panel only shows banners whose dates include today.</small>
+              <small className="data-table__muted">
+                {startAlreadyRunning
+                  ? "This banner has already started, so its start date cannot be changed."
+                  : "Vendor panel only shows banners whose dates include today."}
+              </small>
               <input
                 type="date"
                 className="user-field__input"
                 value={form.startDate}
-                min={startDateMin}
+                min={today}
+                disabled={startAlreadyRunning}
                 onChange={(e) => setForm((p) => applyPromotionStartDateChange(p, e.target.value))}
               />
             </label>

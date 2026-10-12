@@ -12,8 +12,8 @@ exports.listHotDeals = asyncHandler(async (req, res) => {
   const cards = await loadHotDealCards(req, { limit: req.query.limit });
 
   res.status(200).json({
-    status: cards.length > 0,
-    message: "Hot deals fetched",
+    status: true,
+    message: cards.length > 0 ? "Hot deals fetched" : "No hot deals right now",
     data: cards,
     enabled: true,
   });

@@ -11,4 +11,15 @@ async function ensureAdminProductsApproved() {
   }
 }
 
-module.exports = { ensureAdminProductsApproved };
+/** Vendor products go live without review; releases rows left pending. Admin rejections stay locked. */
+async function ensureVendorProductsApproved() {
+  const result = await Product.updateMany(
+    { role: "Vendor", adminApproved: { $ne: true }, statusLockedByAdmin: { $ne: true } },
+    { $set: { adminApproved: true } }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`[products] Marked ${result.modifiedCount} pending vendor product(s) as approved`);
+  }
+}
+
+module.exports = { ensureAdminProductsApproved, ensureVendorProductsApproved };

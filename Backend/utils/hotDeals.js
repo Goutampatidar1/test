@@ -6,6 +6,13 @@ const { getFeatureSettings } = require("./appFeatureSettings");
 const { queueNotifyAllAdmins } = require("./adminInbox");
 
 const CANDIDATE_CAP = 300;
+const DEAL_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Kolkata";
+
+/** Hour (0–23) in the business timezone; the server itself usually runs on UTC. */
+function localHour(now) {
+  const hour = new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: DEAL_TIMEZONE }).format(now);
+  return Number(hour) % 24;
+}
 
 function productDiscountPercent(product) {
   const { price, mrp } = resolveProductSellingPrice(product);
@@ -24,7 +31,7 @@ function isRuleLive(rule, now = new Date()) {
   const start = rule.dailyStartHour;
   const end = rule.dailyEndHour;
   if (Number.isInteger(start) && Number.isInteger(end)) {
-    const hour = now.getHours();
+    const hour = localHour(now);
     const inside = start <= end ? hour >= start && hour < end : hour >= start || hour < end;
     if (!inside) return false;
   }
@@ -128,8 +135,8 @@ function notifyAdminsHotDealPending(product, vendorId) {
 }
 
 /**
- * Live hot deals: products that satisfy at least one live rule (best discount first).
- * With no live rules, falls back to products an admin approved from the opt-in queue.
+ * Live hot deals: products an admin approved from the opt-in queue, plus products that satisfy
+ * at least one live rule (best discount first).
  */
 async function listHotDealProducts({ limit } = {}) {
   const settings = await getFeatureSettings();
@@ -148,31 +155,29 @@ async function listHotDealProducts({ limit } = {}) {
     }
   };
 
-  if (rules.length === 0) {
-    const approved = await Product.find({
-      ...activePublicProductBaseFilter({ role: "Vendor" }),
-      "hotDeal.optIn": true,
-      "hotDeal.status": "approved",
-      stock: { $gte: 1 },
-    })
+  const approved = await Product.find({
+    ...activePublicProductBaseFilter({ role: "Vendor" }),
+    "hotDeal.optIn": true,
+    "hotDeal.status": "approved",
+    stock: { $gte: 1 },
+  })
+    .populate("category", "name mode status")
+    .populate("subCategory", "name status")
+    .limit(CANDIDATE_CAP)
+    .lean();
+  approved.forEach((product) => consider(product, null));
+
+  for (const rule of rules) {
+    const candidates = await Product.find(buildRuleFilter(rule))
       .populate("category", "name mode status")
       .populate("subCategory", "name status")
       .limit(CANDIDATE_CAP)
       .lean();
-    approved.forEach((product) => consider(product, null));
-  } else {
-    for (const rule of rules) {
-      const candidates = await Product.find(buildRuleFilter(rule))
-        .populate("category", "name mode status")
-        .populate("subCategory", "name status")
-        .limit(CANDIDATE_CAP)
-        .lean();
-      candidates
-        .filter((product) => productDiscountPercent(product) >= (Number(rule.minDiscountPercent) || 0))
-        .sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a))
-        .slice(0, Number(rule.limit) || 12)
-        .forEach((product) => consider(product, rule));
-    }
+    candidates
+      .filter((product) => productDiscountPercent(product) >= (Number(rule.minDiscountPercent) || 0))
+      .sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a))
+      .slice(0, Number(rule.limit) || 12)
+      .forEach((product) => consider(product, rule));
   }
 
   return [...picked.values()]
