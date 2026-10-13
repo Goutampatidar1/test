@@ -6,7 +6,11 @@ const Product = require("../models/other/product");
 const AppError = require("./AppError");
 const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { searchFilter } = require("./listQuery");
-const { getCategoryIdsWithPublicProducts, getSubCategoryIdsWithPublicProducts } = require("./publicProductList");
+const {
+  getCategoryIdsWithPublicProducts,
+  getSubCategoryIdsWithPublicProducts,
+  getChildCategoryIdsWithPublicProducts,
+} = require("./publicProductList");
 
 function toObjectId(value) {
   return new mongoose.Types.ObjectId(String(value));
@@ -170,7 +174,14 @@ async function assertEcomSubCategory(subCategoryId, { categoryId } = {}) {
   return subCategory;
 }
 
-async function listEcomChildCategories({ search, skip = 0, limit = 100, categoryId, subCategoryId } = {}) {
+async function listEcomChildCategories({
+  search,
+  skip = 0,
+  limit = 100,
+  categoryId,
+  subCategoryId,
+  onlyWithProducts = true,
+} = {}) {
   if (subCategoryId) {
     await assertEcomSubCategory(subCategoryId, { categoryId });
   } else if (categoryId) {
@@ -191,6 +202,15 @@ async function listEcomChildCategories({ search, skip = 0, limit = 100, category
   const searchOr = searchFilter(search, ["name"]);
   if (searchOr) {
     Object.assign(filter, searchOr);
+  }
+
+  if (onlyWithProducts) {
+    const childCategoryIds = await getChildCategoryIdsWithPublicProducts(Product, {
+      categoryId: categoryId ? toObjectId(categoryId) : undefined,
+      subCategoryId: subCategoryId ? toObjectId(subCategoryId) : undefined,
+    });
+    if (!childCategoryIds.length) return [];
+    filter._id = { $in: childCategoryIds.map((id) => toObjectId(id)) };
   }
 
   return ChildCategory.find(filter)

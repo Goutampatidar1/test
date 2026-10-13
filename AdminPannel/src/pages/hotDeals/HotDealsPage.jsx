@@ -47,7 +47,6 @@ function emptyRule() {
     limit: "12",
     priority: "0",
     requireOptIn: true,
-    autoApprove: false,
     startsAt: "",
     endsAt: "",
     dailyStartHour: "",
@@ -326,7 +325,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
       limit: String(rule.limit ?? 12),
       priority: String(rule.priority ?? 0),
       requireOptIn: rule.requireOptIn !== false,
-      autoApprove: Boolean(rule.autoApprove),
       startsAt: toDateTimeLocalValue(rule.startsAt),
       endsAt: toDateTimeLocalValue(rule.endsAt),
       dailyStartHour: rule.dailyStartHour == null ? "" : String(rule.dailyStartHour),
@@ -362,7 +360,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
       limit: Number(form.limit) || 12,
       priority: Number(form.priority) || 0,
       requireOptIn: form.requireOptIn,
-      autoApprove: form.autoApprove,
       startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
       endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
       dailyStartHour: form.dailyStartHour === "" ? null : Number(form.dailyStartHour),
@@ -597,11 +594,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                       On: only products the vendor asked to put in Hot Deals. Off: every matching product qualifies.
                     </small>
                   </div>
-                  <div className="user-field col-12 col-md-6">
-                    <span className="user-field__label">Auto-approve matching requests</span>
-                    <Toggle checked={form.autoApprove} label="Auto approve" onChange={(v) => setForm((p) => ({ ...p, autoApprove: v }))} />
-                    <small className="data-table__muted">Opt-ins that already meet this rule skip the approval queue.</small>
-                  </div>
                   <label className="user-field col-12 col-md-6">
                     <span className="user-field__label">Starts at (optional)</span>
                     <input
@@ -695,7 +687,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                     <th>Name</th>
                     <th>Conditions</th>
                     <th>Opt-in</th>
-                    <th>Auto-approve</th>
                     <th>Limit</th>
                     <th>Priority</th>
                     <th>Status</th>
@@ -705,11 +696,11 @@ export function HotDealsPage({ initialTab = "rules" }) {
                 <tbody>
                   {rulesLoading ? (
                     <tr>
-                      <td colSpan={8}>Loading…</td>
+                      <td colSpan={7}>Loading…</td>
                     </tr>
                   ) : rules.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>No rules yet. Without an active rule the Hot Deals section stays empty.</td>
+                      <td colSpan={7}>No rules yet. Without an active rule the Hot Deals section stays empty.</td>
                     </tr>
                   ) : (
                     rules.map((rule) => (
@@ -720,7 +711,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                         </td>
                         <td className="data-table__muted">{ruleSummary(rule)}</td>
                         <td>{rule.requireOptIn ? "Required" : "Not needed"}</td>
-                        <td>{rule.autoApprove ? "Yes" : "No"}</td>
                         <td>{rule.limit}</td>
                         <td>{rule.priority}</td>
                         <td>

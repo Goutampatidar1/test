@@ -63,7 +63,7 @@ function normalizeOptionalGender(value) {
   return normalized;
 }
 
-/** Mobile login: allow pending approval; block rejected/suspended/blocked/inactive. */
+/** Allows pending approval; blocks rejected/suspended/blocked/inactive. */
 function assertVendorCanAuthenticate(vendor) {
   if (vendor.status === "blocked") {
     throw new AppError("Account is blocked", 403);
@@ -80,6 +80,14 @@ function assertVendorCanAuthenticate(vendor) {
   }
   if (vendor.approvalStatus === "suspended") {
     throw new AppError("Vendor account is suspended", 403);
+  }
+}
+
+/** OTP login needs an admin-approved account; refresh tokens keep the softer check above. */
+function assertVendorCanLoginWithOtp(vendor) {
+  assertVendorCanAuthenticate(vendor);
+  if (vendor.approvalStatus !== "approved") {
+    throw new AppError("Your account is pending admin approval. You can log in once it is approved.", 403);
   }
 }
 
@@ -329,7 +337,7 @@ exports.sendOtp = asyncHandler(async (req, res) => {
     if (!existing) {
       throw new AppError("No account found with this phone number. Please sign up", 404);
     }
-    assertVendorCanAuthenticate(existing);
+    assertVendorCanLoginWithOtp(existing);
   }
 
   if (otpPurpose === OTP_PURPOSE_REGISTER && existing) {
@@ -368,7 +376,7 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
     if (!vendor) {
       throw new AppError("Account not found", 404);
     }
-    assertVendorCanAuthenticate(vendor);
+    assertVendorCanLoginWithOtp(vendor);
     if (fcm_id !== undefined) {
       vendor.fcm_id = normalizeOptional(fcm_id);
       await vendor.save();

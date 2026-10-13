@@ -42,11 +42,11 @@ router.get("/states/:stateId/cities", locationController.listCities);
 router.get("/sub-districts", locationController.listSubDistricts);
 router.get("/cities/:cityId/sub-districts", locationController.listSubDistricts);
 
-router.get("/categories", publicCatalogController.listCategories);
+router.get("/categories", optionalProtectUser, publicCatalogController.listCategories);
 router.get("/nearby-vendors", optionalProtectUser, nearbyVendorController.listNearbyVendors);
 router.get("/vendors", optionalProtectUser, nearbyVendorController.listAllVendors);
 router.get("/vendors/all", optionalProtectUser, nearbyVendorController.listAllVendors);
-router.get("/sub-categories", publicCatalogController.listSubCategories);
+router.get("/sub-categories", optionalProtectUser, publicCatalogController.listSubCategories);
 router.get("/product-video-feeds", optionalProtectUser, publicVideoFeedController.listVideoFeeds);
 router.get("/video-feeds", optionalProtectUser, publicVideoFeedController.listVideoFeeds);
 router.get("/product-video-feed/:feedId", optionalProtectUser, publicVideoFeedController.getVideoFeedById);

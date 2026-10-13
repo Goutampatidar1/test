@@ -335,7 +335,19 @@ async function getSubCategoryIdsWithPublicProducts(ProductModel, { categoryId, s
   if (Array.isArray(subCategoryIds) && subCategoryIds.length) {
     match.subCategory = { $in: subCategoryIds };
   }
+  return groupPublicProductIds(ProductModel, match, "$subCategory");
+}
 
+async function getChildCategoryIdsWithPublicProducts(ProductModel, { categoryId, subCategoryId } = {}) {
+  const match = activePublicProductBaseFilter({
+    childCategory: { $ne: null },
+  });
+  if (categoryId) match.category = categoryId;
+  if (subCategoryId) match.subCategory = subCategoryId;
+  return groupPublicProductIds(ProductModel, match, "$childCategory");
+}
+
+async function groupPublicProductIds(ProductModel, match, groupField) {
   const rows = await ProductModel.aggregate([
     { $match: match },
     {
@@ -363,7 +375,7 @@ async function getSubCategoryIdsWithPublicProducts(ProductModel, { categoryId, s
         ],
       },
     },
-    { $group: { _id: "$subCategory" } },
+    { $group: { _id: groupField } },
   ]);
 
   return rows.map((row) => row._id).filter(Boolean);
@@ -386,4 +398,5 @@ module.exports = {
   toPublicProductListCard,
   getCategoryIdsWithPublicProducts,
   getSubCategoryIdsWithPublicProducts,
+  getChildCategoryIdsWithPublicProducts,
 };
