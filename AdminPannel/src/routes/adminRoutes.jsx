@@ -54,7 +54,6 @@ import { VendorList } from "../pages/vendor/VendorList.jsx";
 import { VendorView } from "../pages/vendor/VendorView.jsx";
 import { VenueVendorAdd } from "../pages/venueVendor/VenueVendorAdd.jsx";
 import { VenueVendorEdit } from "../pages/venueVendor/VenueVendorEdit.jsx";
-import { VenueVendorList } from "../pages/venueVendor/VenueVendorList.jsx";
 import { VenueVendorView } from "../pages/venueVendor/VenueVendorView.jsx";
 import { OrderAndBookingDetailPage } from "../pages/orderAndBooking/OrderAndBookingDetailPage.jsx";
 import { OrderAndBookingPage } from "../pages/orderAndBooking/OrderAndBookingPage.jsx";
@@ -93,7 +92,7 @@ export const adminRouteTree = (
       <Route path=":vendorId" element={<VendorView />} />
     </Route>
     <Route path="venue-vendors" element={<Outlet />}>
-      <Route index element={<VenueVendorList />} />
+      <Route index element={<Navigate to="/admin/vendors?type=service" replace />} />
       <Route path="new" element={<VenueVendorAdd />} />
       <Route path=":venueVendorId/edit" element={<VenueVendorEdit />} />
       <Route path=":venueVendorId" element={<VenueVendorView />} />

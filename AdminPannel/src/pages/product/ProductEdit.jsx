@@ -255,7 +255,6 @@ const DECIMAL_STEP = "0.01";
 const LIMITS = {
   name: 50,
   description: 2000,
-  shortDescription: 500,
 };
 
 function sanitizeNonNegativeNumericInput(raw) {
@@ -302,7 +301,6 @@ export function ProductEdit() {
     name: "",
     sku: generateProductSku(),
     description: "",
-    shortDescription: "",
     thumbnail: "",
     images: [],
     videos: [],
@@ -412,7 +410,6 @@ export function ProductEdit() {
           name: product.name || "",
           sku: product.sku || generateProductSku(),
           description: product.description || "",
-          shortDescription: product.shortDescription || "",
           thumbnail: product.thumbnail || "",
           images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
           videos: Array.isArray(product.videos) ? product.videos.filter(Boolean) : [],
@@ -779,7 +776,6 @@ export function ProductEdit() {
         slug: toSlug(form.name),
         sku: String(form.sku || "").trim() || generateProductSku(),
         description: form.description.trim(),
-        shortDescription: form.shortDescription.trim(),
         ...(thumbnailFile ? {} : { thumbnail: form.thumbnail.trim() }),
         category: form.category,
         subCategory: form.subCategory,
@@ -965,23 +961,6 @@ export function ProductEdit() {
                 />
                 <div className="form-text">
                   {form.description.length}/{LIMITS.description} characters
-                </div>
-              </div>
-              <div className="col-12">
-                <label htmlFor={fid("shortDescription")} className="form-label">
-                  Short description
-                </label>
-                <textarea
-                  id={fid("shortDescription")}
-                  className="form-control"
-                  rows={2}
-                  value={form.shortDescription}
-                  onChange={(e) => setForm((p) => ({ ...p, shortDescription: e.target.value }))}
-                  placeholder="Optional summary"
-                  maxLength={LIMITS.shortDescription}
-                />
-                <div className="form-text">
-                  {form.shortDescription.length}/{LIMITS.shortDescription} characters
                 </div>
               </div>
 

@@ -1,18 +1,58 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { useDispatch, useSelector } from "react-redux";
-import { IoEyeSharp } from "react-icons/io5";
-import { MdEditSquare } from "react-icons/md";
-import { AiFillDelete } from "react-icons/ai";
-import { adminDeleteVendor, adminListVendors, adminUpdateVendor } from "../../api/adminVendors.js";
+import { adminDeleteVendor, adminListVendorDirectory, adminUpdateVendor } from "../../api/adminVendors.js";
+import { adminDeleteVenueVendor, adminUpdateVenueVendor } from "../../api/adminVenueVendors.js";
 import { logout } from "../../store/authSlice.js";
-import { mediaUrl } from "../../media.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
-import { AdminSearchField } from "../../components/AdminSearchField.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
-import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholder.jsx";
 import { VendorTypeBadge } from "../../components/VendorTypeBadge.jsx";
+import {
+  ListFilterSelect,
+  ListHeader,
+  ListTable,
+  ListTabs,
+  ListToolbar,
+  MediaCell,
+  RowActions,
+  StatusSwitch,
+  TextCell,
+} from "../../components/list/index.js";
+import { useListParams } from "../../hooks/useListParams.js";
+import { exportCsv } from "../../utils/exportCsv.js";
+
+const TABS = [
+  { key: "", label: "All" },
+  { key: "ecom", label: "E-commerce" },
+  { key: "service", label: "Service" },
+  { key: "both", label: "Both" },
+];
+
+const APPROVAL_OPTIONS = [
+  { value: "", label: "All approval" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
+
+const STATUS_OPTIONS = [
+  { value: "", label: "All status" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+];
+
+const COLUMNS = [
+  { key: "sno", label: "S No." },
+  { key: "vendor", label: "Vendor" },
+  { key: "contact", label: "Contact" },
+  { key: "business", label: "Business" },
+  { key: "type", label: "Type" },
+  { key: "tax", label: "PAN / GST" },
+  { key: "approval", label: "Approval" },
+  { key: "status", label: "Status" },
+  { key: "actions", label: "Actions" },
+];
 
 function StatusBadge({ status }) {
   const s = (status || "").toLowerCase();
@@ -20,41 +60,85 @@ function StatusBadge({ status }) {
   return <span className={`pill pill--${cls}`}>{status || "—"}</span>;
 }
 
-export function VendorList() {
-  const dispatch = useDispatch();
-  const [searchParams] = useSearchParams();
-  const adminToken = useSelector((s) => s.auth.adminToken);
-  const [vendors, setVendors] = useState([]);
-  const [page, setPage] = useState(1);
-  const limit = 10;
-  const [total, setTotal] = useState(0);
-  const [pages, setPages] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [approvalStatus, setApprovalStatus] = useState(() => searchParams.get("approvalStatus") || "");
-  const [status, setStatus] = useState(() => searchParams.get("status") || "");
-  const [loadError, setLoadError] = useState("");
-  const [togglingVendorId, setTogglingVendorId] = useState("");
+function AddVendorMenu() {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 400);
-    return () => clearTimeout(t);
-  }, [searchInput]);
+    if (!open) return undefined;
+    const onDoc = (event) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="vendor-add" ref={wrapRef}>
+      <button
+        type="button"
+        className="btn btn--accent"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+      >
+        + Add vendor
+      </button>
+      {open ? (
+        <div className="vendor-add__menu" role="menu">
+          <Link to="/admin/vendors/new" className="vendor-add__item" role="menuitem" onClick={() => setOpen(false)}>
+            <span className="vendor-add__item-label">E-commerce vendor</span>
+            <span className="vendor-add__item-hint">Shop, products and delivery</span>
+          </Link>
+          <Link to="/admin/venue-vendors/new" className="vendor-add__item" role="menuitem" onClick={() => setOpen(false)}>
+            <span className="vendor-add__item-label">Service vendor</span>
+            <span className="vendor-add__item-hint">Venues, bookings and enquiries</span>
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function VendorList() {
+  const dispatch = useDispatch();
+  const adminToken = useSelector((s) => s.auth.adminToken);
+  const { params, setParams, searchInput, setSearchInput, resetFilters } = useListParams({
+    type: "",
+    approvalStatus: "",
+    status: "",
+  });
+  const [vendors, setVendors] = useState([]);
+  const [counts, setCounts] = useState({ all: 0, ecom: 0, service: 0, both: 0 });
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [loadError, setLoadError] = useState("");
+  const [togglingId, setTogglingId] = useState("");
+  const limit = 10;
 
   const loadVendors = useCallback(async () => {
     if (!adminToken) return;
     setLoadError("");
     try {
-      const { vendors: rows, pagination: pg } = await adminListVendors(adminToken, {
-        page,
+      const { vendors: rows, pagination: pg, counts: nextCounts } = await adminListVendorDirectory(adminToken, {
+        page: params.page,
         limit,
-        search: debouncedSearch || undefined,
-        status: status || undefined,
-        approvalStatus: approvalStatus || undefined,
+        search: params.search || undefined,
+        status: params.status || undefined,
+        approvalStatus: params.approvalStatus || undefined,
+        type: params.type || undefined,
       });
       setVendors(rows);
       setTotal(pg.total ?? 0);
       setPages(pg.pages ?? 1);
+      setCounts(nextCounts);
     } catch (e) {
       if (e?.status === 401) {
         dispatch(logout());
@@ -62,16 +146,19 @@ export function VendorList() {
       }
       setLoadError(e.message || "Failed to load vendors.");
     }
-  }, [adminToken, approvalStatus, debouncedSearch, dispatch, page, status]);
+  }, [adminToken, dispatch, params.approvalStatus, params.page, params.search, params.status, params.type]);
 
   useEffect(() => {
     loadVendors();
   }, [loadVendors]);
 
-  const handleDelete = async (v) => {
+  const handleDelete = async (row) => {
+    const both = row.vendorPanelType === "both";
     const { isConfirmed } = await Swal.fire({
-      title: "Delete vendor?",
-      html: `This will remove <strong>${v.businessName || v.name}</strong> permanently.`,
+      title: both ? "Delete both vendor accounts?" : "Delete vendor?",
+      html: both
+        ? `This will remove the e-commerce and service accounts for <strong>${row.businessName || row.name}</strong>.`
+        : `This will remove <strong>${row.businessName || row.name}</strong> permanently.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Yes, delete",
@@ -79,7 +166,13 @@ export function VendorList() {
     });
     if (!isConfirmed || !adminToken) return;
     try {
-      await adminDeleteVendor(adminToken, v._id);
+      if (row.source === "ecom" || row.linkedVendorId) {
+        await adminDeleteVendor(adminToken, row.linkedVendorId || row._id);
+      }
+      if (row.source === "service" || row.linkedVenueVendorId) {
+        const serviceId = row.linkedVenueVendorId || (row.source === "service" ? row._id : null);
+        if (serviceId) await adminDeleteVenueVendor(adminToken, serviceId);
+      }
       await Swal.fire({ icon: "success", title: "Vendor deleted", timer: 1500 });
       loadVendors();
     } catch (e) {
@@ -88,127 +181,156 @@ export function VendorList() {
     }
   };
 
-  const handleToggleStatus = async (v) => {
+  const handleToggleStatus = async (row) => {
     if (!adminToken) return;
+    const nextStatus = row.status === "active" ? "inactive" : "active";
     try {
-      setTogglingVendorId(v._id);
-      await adminUpdateVendor(adminToken, v._id, {
-        status: v.status === "active" ? "inactive" : "active",
-        });
-      await Swal.fire({ icon: "success", title: v.status === "active" ? "Vendor deactivated" : "Vendor activated", timer: 1500 });
+      setTogglingId(row._id);
+      if (row.source === "ecom" || row.linkedVendorId) {
+        await adminUpdateVendor(adminToken, row.linkedVendorId || row._id, { status: nextStatus });
+      }
+      if (row.source === "service" || (row.vendorPanelType === "both" && row.linkedVenueVendorId)) {
+        const serviceId = row.linkedVenueVendorId || (row.source === "service" ? row._id : null);
+        if (serviceId) await adminUpdateVenueVendor(adminToken, serviceId, { status: nextStatus });
+      }
+      await Swal.fire({
+        icon: "success",
+        title: nextStatus === "active" ? "Vendor activated" : "Vendor deactivated",
+        timer: 1500,
+      });
       loadVendors();
     } catch (e) {
       if (e?.status === 401) return dispatch(logout());
       await Swal.fire({ icon: "error", title: "Update failed", text: e.message || "Could not update vendor." });
     } finally {
-      setTogglingVendorId("");
+      setTogglingId("");
     }
   };
 
+  const canReset = Boolean(params.search || params.approvalStatus || params.status || params.type);
+
+  const handleExportCsv = () => {
+    const typeLabel = { ecom: "E-commerce", service: "Service", both: "Both" };
+    exportCsv(
+      "vendors",
+      [
+        "Name",
+        "Email",
+        "Phone",
+        "Business Name",
+        "Business Phone",
+        "Type",
+        "PAN",
+        "GST",
+        "Approval Status",
+        "Status",
+        "Created At",
+        "Vendor ID",
+      ],
+      vendors.map((row) => [
+        row.name || "",
+        row.email || "",
+        row.phone || "",
+        row.businessName || "",
+        row.businessPhone || "",
+        typeLabel[row.vendorPanelType] || row.vendorPanelType || row.source || "",
+        row.panNumber || "",
+        row.gstin || "",
+        row.approvalStatus || "",
+        row.status || "",
+        row.createdAt || "",
+        row._id || "",
+      ])
+    );
+  };
+
   return (
-    <div className="page-card">
-      <div className="page-card__head">
-        <div>
-          <h2 className="page-card__title">Vendor Management</h2>
-        </div>
-        <div className="page-card__actions">
-          <AdminSearchField
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search shop or vendor..."
-            aria-label="Search vendors"
-          />
-          <select className="user-list-status-select" value={approvalStatus} onChange={(e) => { setApprovalStatus(e.target.value); setPage(1); }}>
-            <option value="">All</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-          <Link to="new" className="btn btn--accent">
-            + Add Vendor
-          </Link>
-        </div>
-      </div>
+    <div className="page-card vendor-list-page">
+      <ListHeader
+        title="Vendor management"
+        subtitle="E-commerce, service, and combined vendor accounts in one place."
+        actions={
+          <>
+            <button type="button" className="btn btn--ghost" onClick={handleExportCsv}>
+              Export CSV
+            </button>
+            <AddVendorMenu />
+          </>
+        }
+      />
 
-      {loadError ? <p className="user-list-error">{loadError}</p> : null}
+      <ListToolbar
+        search={searchInput}
+        onSearch={setSearchInput}
+        placeholder="Search shop, vendor, phone or email..."
+        canReset={canReset}
+        onReset={() => resetFilters(["type", "approvalStatus", "status"])}
+      >
+        <ListFilterSelect
+          label="Filter by approval"
+          value={params.approvalStatus}
+          onChange={(value) => setParams({ approvalStatus: value })}
+          options={APPROVAL_OPTIONS}
+        />
+        <ListFilterSelect
+          label="Filter by status"
+          value={params.status}
+          onChange={(value) => setParams({ status: value })}
+          options={STATUS_OPTIONS}
+        />
+      </ListToolbar>
 
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>S No.</th>
-              <th>Vendor Info</th>
-              <th>Contact Info</th>
-              <th>Business Details</th>
-              <th>Vendor Type</th>
-              <th>Gst Number</th>
-              <th>Approval Status</th>
-              <th>Status</th>
-              <th className="data-table__actions-col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vendors.length === 0 ? (
-              <tr><td colSpan={9}><p className="table-placeholder">No vendors found.</p></td></tr>
-            ) : vendors.map((v, idx) => (
-              <ClickableTableRow key={v._id} to={v._id}>
-                <td>{(page - 1) * limit + idx + 1}</td>
-                <td>
-                  <div className="user-cell">
-                    <span className="user-cell__avatar">
-                      {mediaUrl(v.profileImage) ? (
-                        <img src={mediaUrl(v.profileImage)} alt="" className="user-cell__avatar-img" width={40} height={40} />
-                      ) : (
-                        <ProfileImagePlaceholder size={20} />
-                      )}
-                    </span>
-                    <div>
-                      <div className="user-cell__name">{v.name || "—"}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <div className="user-cell__muted">{v.email || "—"}</div>
-                  <div className="user-cell__muted">{v.phone || "—"}</div>
-                </td>
-                <td>
-                  <div className="data-table__strong">{v.businessName || "—"}</div>
-                  <div className="user-cell__muted">{v.businessPhone || "—"}</div>
-                </td>
-                <td>
-                  <VendorTypeBadge type={v.vendorPanelType} fallback="ecom" />
-                </td>
-                <td>
-                  <div className="user-cell__muted">{v.gstin || "—"}</div>
-                </td>
-                {/* <td className="user-cell__muted">{v.bankName || "—"}</td> */}
-                <td>
-                  <StatusBadge status={v.approvalStatus} />
-                </td>
-                <td>
-                  <button type="button" className={`settings-switch${v.status === "active" ? " settings-switch--on" : ""}`} role="switch" aria-checked={v.status === "active"} aria-label={`Toggle status for ${v.name || v.email}`} onClick={() => handleToggleStatus(v)} disabled={togglingVendorId === v._id}>
-                    <span className="settings-switch__knob" aria-hidden />
-                  </button>
-                </td>
-                <td>
-                  <div className="row-actions">
-                    <Link to={v._id} className="icon-btn icon-btn--view" title="View">
-                      <IoEyeSharp size={18} />
-                    </Link>
-                    <Link to={`${v._id}/edit`} className="icon-btn icon-btn--edit" title="Edit">
-                      <MdEditSquare size={18} />
-                    </Link>
-                    <button type="button" className="icon-btn icon-btn--delete" title="Delete" onClick={() => handleDelete(v)}>
-                      <AiFillDelete size={18} />
-                    </button>
-                  </div>
-                </td>
-              </ClickableTableRow>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <ListPagination page={page} pages={pages} total={total} onPageChange={setPage} />
+      <ListTabs
+        tabs={TABS}
+        active={params.type}
+        counts={{
+          "": counts.all,
+          ecom: counts.ecom,
+          service: counts.service,
+          both: counts.both,
+        }}
+        onChange={(type) => setParams({ type })}
+        label="Vendor type"
+      />
+
+      <ListTable columns={COLUMNS} rowCount={vendors.length} error={loadError} emptyText="No vendors match your filters.">
+        {vendors.map((row, idx) => (
+          <ClickableTableRow key={`${row.source}-${row._id}`} to={row.viewPath}>
+            <td className="data-table__muted">{(params.page - 1) * limit + idx + 1}</td>
+            <td>
+              <MediaCell image={row.profileImage} primary={row.name || "—"} />
+            </td>
+            <td>
+              <TextCell primary={row.email || "—"} sub={row.phone || "—"} />
+            </td>
+            <td>
+              <TextCell primary={row.businessName || "—"} sub={row.businessPhone || "—"} />
+            </td>
+            <td>
+              <VendorTypeBadge type={row.vendorPanelType} fallback={row.source} />
+            </td>
+            <td>
+              <TextCell primary={row.panNumber || "—"} sub={row.gstin || "—"} />
+            </td>
+            <td>
+              <StatusBadge status={row.approvalStatus} />
+            </td>
+            <td>
+              <StatusSwitch
+                active={row.status === "active"}
+                onToggle={() => handleToggleStatus(row)}
+                disabled={togglingId === row._id}
+                label={`Toggle status for ${row.name || row.email}`}
+              />
+            </td>
+            <td>
+              <RowActions viewTo={row.viewPath} editTo={row.editPath} onDelete={() => handleDelete(row)} />
+            </td>
+          </ClickableTableRow>
+        ))}
+      </ListTable>
+
+      <ListPagination page={params.page} pages={pages} total={total} onPageChange={(page) => setParams({ page })} />
     </div>
   );
 }

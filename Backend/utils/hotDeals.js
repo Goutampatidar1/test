@@ -139,7 +139,7 @@ function notifyAdminsHotDealPending(product, vendorId) {
 async function listHotDealProducts({ limit } = {}) {
   const settings = await getFeatureSettings();
   if (!settings.hotDealsEnabled) return [];
-  const max = Math.min(Number(limit) || settings.hotDealsLimit, 50);
+  const requested = Math.trunc(Number(limit));
 
   const rules = await listLiveRules();
   const picked = new Map();
@@ -178,9 +178,8 @@ async function listHotDealProducts({ limit } = {}) {
       .forEach((product) => consider(product, rule));
   }
 
-  return [...picked.values()]
-    .sort((a, b) => b.percent - a.percent)
-    .slice(0, max);
+  const sorted = [...picked.values()].sort((a, b) => b.percent - a.percent);
+  return requested > 0 ? sorted.slice(0, requested) : sorted;
 }
 
 module.exports = {

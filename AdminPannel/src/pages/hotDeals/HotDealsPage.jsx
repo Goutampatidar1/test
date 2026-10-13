@@ -235,13 +235,13 @@ export function HotDealsPage({ initialTab = "rules" }) {
     if (!adminToken) return;
     setPreviewLoading(true);
     try {
-      setPreview((await adminPreviewHotDeals(adminToken, { limit: settings?.hotDealsLimit || 12 })) ?? []);
+      setPreview((await adminPreviewHotDeals(adminToken)) ?? []);
     } catch (e) {
       await handleError(e, "Could not load preview");
     } finally {
       setPreviewLoading(false);
     }
-  }, [adminToken, handleError, settings?.hotDealsLimit]);
+  }, [adminToken, handleError]);
 
   useEffect(() => {
     loadSettings();
@@ -469,22 +469,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
               />
               <small className="data-table__muted">{hotDealsOn ? "Section is live on the home screen." : "Section is hidden."}</small>
             </div>
-            <label className="user-field col-12 col-md-4">
-              <span className="user-field__label">Products shown in the section</span>
-              <input
-                type="number"
-                min="1"
-                max="50"
-                className="user-field__input"
-                defaultValue={settings?.hotDealsLimit ?? 12}
-                key={`limit-${settings?.hotDealsLimit ?? 12}`}
-                disabled={!settings || savingSettings}
-                onBlur={(e) => {
-                  const n = Math.trunc(Number(e.target.value));
-                  if (Number.isFinite(n) && n >= 1 && n !== settings?.hotDealsLimit) updateSetting({ hotDealsLimit: n });
-                }}
-              />
-            </label>
           </div>
         )}
         <p className="data-table__muted" style={{ marginTop: 10 }}>

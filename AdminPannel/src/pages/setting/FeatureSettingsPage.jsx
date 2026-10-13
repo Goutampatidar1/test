@@ -19,7 +19,6 @@ const TABS = [
 ];
 
 const NUMBER_LIMITS = {
-  hotDealsLimit: [1, 50, "Hot deals shown", "media"],
   discountAlertMinPercent: [0, 100, "Discount alert minimum", "alerts"],
   discountAlertCooldownHours: [0, 720, "Discount alert cooldown", "alerts"],
 };
@@ -30,7 +29,6 @@ function toForm(fs) {
     videoEnabledUser: s.videoEnabledUser !== false,
     videoEnabledVendor: s.videoEnabledVendor !== false,
     hotDealsEnabled: s.hotDealsEnabled !== false,
-    hotDealsLimit: String(s.hotDealsLimit ?? 12),
     discountAlertMinPercent: String(s.discountAlertMinPercent ?? 5),
     discountAlertCooldownHours: String(s.discountAlertCooldownHours ?? 24),
     autoApproveTrustedVendors: s.autoApproveTrustedVendors !== false,
@@ -70,7 +68,6 @@ function toPayload(form) {
     videoEnabledUser: form.videoEnabledUser,
     videoEnabledVendor: form.videoEnabledVendor,
     hotDealsEnabled: form.hotDealsEnabled,
-    hotDealsLimit: Number(form.hotDealsLimit),
     discountAlertMinPercent: Number(form.discountAlertMinPercent),
     discountAlertCooldownHours: Number(form.discountAlertCooldownHours),
     autoApproveTrustedVendors: form.autoApproveTrustedVendors,
@@ -242,7 +239,6 @@ export function FeatureSettingsPage() {
               />
               <ToggleField label="Video uploads for vendors" checked={form.videoEnabledVendor} onChange={set("videoEnabledVendor")} />
               <ToggleField label="Hot deals section" checked={form.hotDealsEnabled} onChange={set("hotDealsEnabled")} />
-              <NumberField label="Hot deals shown" value={form.hotDealsLimit} onChange={set("hotDealsLimit")} min={1} max={50} />
             </div>
           </div>
         ) : null}
