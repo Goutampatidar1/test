@@ -43,11 +43,9 @@ function buildRuleFilter(rule) {
   const filter = activePublicProductBaseFilter({ role: "Vendor" });
   filter.stock = { $gte: Math.max(1, Number(rule.minStock) || 1) };
   filter.$or = [{ discountValue: { $gt: 0 } }, { "combinations.discountValue": { $gt: 0 } }];
-
-  if (rule.requireOptIn) {
-    filter["hotDeal.optIn"] = true;
-    filter["hotDeal.status"] = "approved";
-  }
+  // Only products the vendor asked for and admin approved; the rule's requireOptIn flag is ignored.
+  filter["hotDeal.optIn"] = true;
+  filter["hotDeal.status"] = "approved";
   if (rule.categories?.length) filter.category = { $in: toIds(rule.categories) };
   if (rule.subCategories?.length) filter.subCategory = { $in: toIds(rule.subCategories) };
   if (rule.vendors?.length) filter.addedById = { $in: toIds(rule.vendors) };

@@ -44,9 +44,7 @@ function emptyRule() {
     minPrice: "0",
     maxPrice: "0",
     minStock: "1",
-    limit: "12",
     priority: "0",
-    requireOptIn: true,
     startsAt: "",
     endsAt: "",
     dailyStartHour: "",
@@ -88,8 +86,6 @@ function validateRule(form) {
   if (Number(form.maxPrice) > 0 && Number(form.maxPrice) < Number(form.minPrice)) {
     return "Maximum price must be greater than minimum price (or 0 for no limit).";
   }
-  const limit = Number(form.limit);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) return "Limit must be between 1 and 100.";
   if (form.startsAt && form.endsAt && new Date(form.endsAt) <= new Date(form.startsAt)) {
     return "End time must be after start time.";
   }
@@ -322,9 +318,7 @@ export function HotDealsPage({ initialTab = "rules" }) {
       minPrice: String(rule.minPrice ?? 0),
       maxPrice: String(rule.maxPrice ?? 0),
       minStock: String(rule.minStock ?? 0),
-      limit: String(rule.limit ?? 12),
       priority: String(rule.priority ?? 0),
-      requireOptIn: rule.requireOptIn !== false,
       startsAt: toDateTimeLocalValue(rule.startsAt),
       endsAt: toDateTimeLocalValue(rule.endsAt),
       dailyStartHour: rule.dailyStartHour == null ? "" : String(rule.dailyStartHour),
@@ -357,9 +351,8 @@ export function HotDealsPage({ initialTab = "rules" }) {
       minPrice: Number(form.minPrice) || 0,
       maxPrice: Number(form.maxPrice) || 0,
       minStock: Number(form.minStock) || 0,
-      limit: Number(form.limit) || 12,
       priority: Number(form.priority) || 0,
-      requireOptIn: form.requireOptIn,
+      requireOptIn: true,
       startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
       endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
       dailyStartHour: form.dailyStartHour === "" ? null : Number(form.dailyStartHour),
@@ -572,7 +565,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                     ["minPrice", "Minimum price (₹)", "0"],
                     ["maxPrice", "Maximum price (₹, 0 = no limit)", "0"],
                     ["minStock", "Minimum stock", "0"],
-                    ["limit", "Max products from this rule", "1", "100"],
                     ["priority", "Priority (higher first)"],
                   ].map(([key, label, min, max]) => (
                     <label key={key} className="user-field col-12 col-md-4">
@@ -587,13 +579,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                       />
                     </label>
                   ))}
-                  <div className="user-field col-12 col-md-6">
-                    <span className="user-field__label">Only vendor opt-ins</span>
-                    <Toggle checked={form.requireOptIn} label="Require opt-in" onChange={(v) => setForm((p) => ({ ...p, requireOptIn: v }))} />
-                    <small className="data-table__muted">
-                      On: only products the vendor asked to put in Hot Deals. Off: every matching product qualifies.
-                    </small>
-                  </div>
                   <label className="user-field col-12 col-md-6">
                     <span className="user-field__label">Starts at (optional)</span>
                     <input
@@ -686,8 +671,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                   <tr>
                     <th>Name</th>
                     <th>Conditions</th>
-                    <th>Opt-in</th>
-                    <th>Limit</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th className="data-table__actions-col">Actions</th>
@@ -696,11 +679,11 @@ export function HotDealsPage({ initialTab = "rules" }) {
                 <tbody>
                   {rulesLoading ? (
                     <tr>
-                      <td colSpan={7}>Loading…</td>
+                      <td colSpan={5}>Loading…</td>
                     </tr>
                   ) : rules.length === 0 ? (
                     <tr>
-                      <td colSpan={7}>No rules yet. Without an active rule the Hot Deals section stays empty.</td>
+                      <td colSpan={5}>No rules yet. Without an active rule the Hot Deals section stays empty.</td>
                     </tr>
                   ) : (
                     rules.map((rule) => (
@@ -710,8 +693,6 @@ export function HotDealsPage({ initialTab = "rules" }) {
                           {rule.badge ? <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>{rule.badge}</span> : null}
                         </td>
                         <td className="data-table__muted">{ruleSummary(rule)}</td>
-                        <td>{rule.requireOptIn ? "Required" : "Not needed"}</td>
-                        <td>{rule.limit}</td>
                         <td>{rule.priority}</td>
                         <td>
                           <Toggle

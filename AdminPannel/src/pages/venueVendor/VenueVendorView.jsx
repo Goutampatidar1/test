@@ -165,6 +165,8 @@ export function VenueVendorView() {
             <DetailRow label="Business Mobile Number" value={venueVendor.businessPhone} />
             <DetailRow label="Business Email ID" value={venueVendor.businessEmail} />
             <DetailRow label="Address" value={venueVendor.businessAddress} />
+            <DetailRow label="City" value={venueVendor.city} />
+            <DetailRow label="Sub-district" value={venueVendor.subDistrict} />
             <DetailRow label="Description" value={venueVendor.businessDescription} />
             <DetailRow label="PAN Number" value={venueVendor.panNumber} />
             <DetailRow label="GST Number" value={venueVendor.gstNumber} />

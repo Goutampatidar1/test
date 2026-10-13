@@ -577,6 +577,23 @@ body.vendor-register-active {
   filter: brightness(0.97);
 }
 
+.vendor-register-verified {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #047857;
+  font-weight: 600;
+}
+
+.vendor-register-verify-btn {
+  width: 100%;
+  margin-top: 14px;
+}
+
 .vendor-register-login-link {
   margin: 0;
   padding: 0 24px 24px;

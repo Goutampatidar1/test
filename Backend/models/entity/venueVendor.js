@@ -38,6 +38,9 @@ const venueVendorSchema = new mongoose.Schema(
     businessEmail: { type: String, default: null, trim: true, lowercase: true },
     businessAddress: { type: String, default: null, trim: true },
     businessDescription: { type: String, default: null, trim: true },
+    state: { type: String, default: null, trim: true },
+    city: { type: String, default: null, trim: true },
+    subDistrict: { type: String, default: null, trim: true },
     panNumber: { type: String, default: null, trim: true },
     gstNumber: { type: String, default: null, trim: true },
 
