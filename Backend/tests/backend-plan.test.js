@@ -120,26 +120,28 @@ test("hot deals: rule is only live inside its dates and daily window", () => {
 });
 
 // --- product update verification -----------------------------------------------------------
-test("approval after update: trusted vendors stay live, untrusted go back to review", async () => {
+test("approval after update: services are always auto-approved", async () => {
   await withConfig({ vendor_approval_required: true }, async () => {
+    // Services should always be auto-approved regardless of vendor status
     const trusted = await resolveItemApprovalForVendor({ approvalStatus: "approved", status: "active" });
     assert.equal(trusted.adminApproved, true);
     assert.equal(trusted.catalogStatus, "active");
 
+    // Even pending vendors get auto-approved services
     const pendingVendor = await resolveItemApprovalForVendor({ approvalStatus: "pending", status: "active" });
-    assert.equal(pendingVendor.adminApproved, false);
-    assert.equal(pendingVendor.catalogStatus, "pending");
+    assert.equal(pendingVendor.adminApproved, true);
+    assert.equal(pendingVendor.catalogStatus, "active");
   });
 });
 
-test("approval after update: trust can be switched off by admin", async () => {
+test("approval after update: services auto-approved even when autoApproveTrustedVendors is off", async () => {
   await withConfig({ vendor_approval_required: true, feature_settings: { autoApproveTrustedVendors: false } }, async () => {
     const result = await resolveItemApprovalForVendor({ approvalStatus: "approved", status: "active" });
-    assert.equal(result.adminApproved, false);
+    assert.equal(result.adminApproved, true);
   });
 });
 
-test("approval after update: nothing to review when approval is off globally", async () => {
+test("approval after update: services auto-approved when global approval is off", async () => {
   await withConfig({ vendor_approval_required: false }, async () => {
     const result = await resolveItemApprovalForVendor({ approvalStatus: "pending", status: "active" });
     assert.equal(result.adminApproved, true);

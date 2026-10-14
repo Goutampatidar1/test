@@ -502,7 +502,7 @@ exports.updateVendor = asyncHandler(async (req, res) => {
     vendor.status = status;
   }
   if (approvalStatus !== undefined) {
-    applyVendorApprovalStatus(vendor, { approvalStatus, rejectionReason });
+    applyVendorApprovalStatus(vendor, { approvalStatus, rejectionReason }, { recipientType: "vendor" });
   }
   if (city !== undefined) {
     const cityNorm = normalizeRequired(city);

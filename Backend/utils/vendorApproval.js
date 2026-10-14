@@ -1,5 +1,6 @@
 const AppError = require("./AppError");
 const { AppConfig } = require("../models");
+const { queueAppNotification } = require("./appNotify");
 
 const REJECTION_REASON_MAX = 500;
 const REJECTION_REASON_MIN = 3;
@@ -8,11 +9,18 @@ function normalizeRejectionReason(value) {
   return String(value ?? "").trim();
 }
 
-function applyVendorApprovalStatus(entity, { approvalStatus, rejectionReason }) {
+/**
+ * Apply approval status to vendor and send notification
+ * @param {Object} entity - Vendor or VenueVendor document
+ * @param {Object} options - { approvalStatus, rejectionReason }
+ * @param {Object} notifyOptions - { recipientType: 'vendor' | 'venueVendor' } for notification
+ */
+function applyVendorApprovalStatus(entity, { approvalStatus, rejectionReason }, notifyOptions = {}) {
   if (approvalStatus === undefined) {
     return;
   }
 
+  const previousStatus = entity.approvalStatus;
   const nextStatus = String(approvalStatus).trim().toLowerCase();
 
   if (nextStatus === "rejected") {
@@ -29,6 +37,22 @@ function applyVendorApprovalStatus(entity, { approvalStatus, rejectionReason }) 
     entity.approvalStatus = "rejected";
     entity.rejectionReason = reason;
     entity.status = "inactive";
+
+    // Send rejection notification
+    if (entity._id) {
+      const recipientType = notifyOptions.recipientType || "vendor";
+      queueAppNotification({
+        recipientType,
+        recipientId: entity._id,
+        type: "account_rejected",
+        title: "Account Rejected",
+        message: `Your account registration has been rejected. Reason: ${reason}`,
+        metadata: {
+          event: "account_rejected",
+          rejectionReason: reason,
+        },
+      });
+    }
     return;
   }
 
@@ -36,8 +60,24 @@ function applyVendorApprovalStatus(entity, { approvalStatus, rejectionReason }) 
   if (nextStatus === "approved") {
     entity.rejectionReason = null;
     entity.status = "active";
+
+    // Send approval notification only if status changed from non-approved to approved
+    if (previousStatus !== "approved" && entity._id) {
+      const recipientType = notifyOptions.recipientType || "vendor";
+      queueAppNotification({
+        recipientType,
+        recipientId: entity._id,
+        type: "account_approved",
+        title: "Account Approved! 🎉",
+        message: "Congratulations! Your account has been approved by the admin. You can now log in and start using the platform.",
+        metadata: {
+          event: "account_approved",
+        },
+      });
+    }
   }
 }
+
 
 async function readVendorApprovalRequiredSetting() {
   const config = await AppConfig.findOne()
@@ -66,21 +106,11 @@ async function resolveVendorApprovalRequired() {
 
 /**
  * Approval for an item (service / product) created by an existing vendor account.
- * Vendors whose account admin already approved are trusted when `autoApproveTrustedVendors`
- * is on, so their listings go live without waiting again (and without a full profile).
+ * Services are always auto-approved without requiring admin approval.
+ * This allows vendors to immediately publish their services after adding them.
  */
 async function resolveItemApprovalForVendor(vendor) {
-  const base = await resolveVendorApprovalRequired();
-  if (!base.approvalRequired) return { ...base, trusted: false };
-
-  const { getFeatureSettings } = require("./appFeatureSettings");
-  const settings = await getFeatureSettings();
-  const trusted =
-    settings.autoApproveTrustedVendors &&
-    String(vendor?.approvalStatus || "") === "approved" &&
-    String(vendor?.status || "active") === "active";
-
-  if (!trusted) return { ...base, trusted: false };
+  // Always auto-approve services - no admin approval required
   return {
     approvalRequired: false,
     adminApproved: true,

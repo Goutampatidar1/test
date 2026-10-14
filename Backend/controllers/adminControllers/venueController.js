@@ -246,10 +246,10 @@ exports.createVenue = asyncHandler(async (req, res) => {
     normalizeOptional(req.body.shortDescription) || description || "";
   const category = normalizeRequired(req.body.category);
   const subCategory = normalizeOptional(req.body.subCategory);
-  const address = normalizeOptional(req.body.address) || "";
+  let address = normalizeOptional(req.body.address) || "";
   const subDistrictInput = await readVenueSubDistrictInput(req.body);
-  const city = subDistrictInput?.city || normalizeOptional(req.body.city) || "";
-  const state = normalizeOptional(req.body.state) || "";
+  let city = subDistrictInput?.city || normalizeOptional(req.body.city) || "";
+  let state = normalizeOptional(req.body.state) || "";
   const pincode = normalizeOptional(req.body.pincode) || "";
   const latitude = req.body.latitude === "" || req.body.latitude === undefined ? null : Number(req.body.latitude);
   const longitude = req.body.longitude === "" || req.body.longitude === undefined ? null : Number(req.body.longitude);
@@ -338,9 +338,34 @@ exports.createVenue = asyncHandler(async (req, res) => {
   if (amenities.length > 0) await assertAmenitiesExist(amenities);
 
   let venueAdminApproved = true;
+  let vendorSubDistrictId = null;
   if (role === "VenueVendor") {
-    const ownerVendor = await VenueVendor.findById(addedById).select("approvalStatus status").lean();
+    const ownerVendor = await VenueVendor.findById(addedById)
+      .select("approvalStatus status city state businessAddress subDistrict")
+      .lean();
     ({ adminApproved: venueAdminApproved } = await resolveItemApprovalForVendor(ownerVendor));
+    
+    // Auto-fill location from vendor profile if not provided
+    if (!city && ownerVendor?.city) {
+      city = ownerVendor.city;
+    }
+    if (!state && ownerVendor?.state) {
+      state = ownerVendor.state;
+    }
+    if (!address && ownerVendor?.businessAddress) {
+      address = ownerVendor.businessAddress;
+    }
+    // Try to resolve vendor's subDistrict to ObjectId if venue doesn't have one
+    if (!subDistrictInput && ownerVendor?.subDistrict) {
+      const SubDistrict = require("../../models/other/subDistrict");
+      const vendorSubDistrict = await SubDistrict.findOne({
+        name: { $regex: new RegExp(`^${ownerVendor.subDistrict.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+        status: "active",
+      }).select("_id").lean();
+      if (vendorSubDistrict) {
+        vendorSubDistrictId = vendorSubDistrict._id;
+      }
+    }
   }
 
   const venue = await Venue.create({
@@ -351,7 +376,7 @@ exports.createVenue = asyncHandler(async (req, res) => {
     ...(subCategory ? { subCategory } : {}),
     address,
     city,
-    ...(subDistrictInput ? { subDistrict: subDistrictInput.subDistrictId } : {}),
+    ...(subDistrictInput ? { subDistrict: subDistrictInput.subDistrictId } : vendorSubDistrictId ? { subDistrict: vendorSubDistrictId } : {}),
     state,
     pincode,
     latitude,

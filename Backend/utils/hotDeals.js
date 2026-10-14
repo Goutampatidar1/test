@@ -90,7 +90,7 @@ async function matchingRulesForProduct(product) {
 }
 
 /**
- * Vendor opts a product in/out. Opt-in goes to the admin queue unless a matching rule auto-approves.
+ * Vendor opts a product in/out. Opt-in is auto-approved immediately.
  * Returns the resulting hotDeal state (caller saves the product).
  */
 async function applyHotDealOptIn(product, optIn) {
@@ -105,15 +105,17 @@ async function applyHotDealOptIn(product, optIn) {
   }
 
   const rules = await listLiveRules();
-  const autoRule = rules.find((rule) => rule.autoApprove && productMatchesRule(product, rule));
+  const matchingRule = rules.find((rule) => productMatchesRule(product, rule));
   const now = new Date();
+  
+  // Auto-approve all hot deal opt-ins - no admin approval required
   product.hotDeal = {
     optIn: true,
-    status: autoRule && product.adminApproved ? "approved" : "pending",
+    status: "approved",
     requestedAt: now,
-    reviewedAt: autoRule && product.adminApproved ? now : null,
+    reviewedAt: now,
     rejectionReason: "",
-    rule: autoRule?._id ?? null,
+    rule: matchingRule?._id ?? null,
   };
   return product.hotDeal;
 }
@@ -182,6 +184,39 @@ async function listHotDealProducts({ limit } = {}) {
   return requested > 0 ? sorted.slice(0, requested) : sorted;
 }
 
+/**
+ * Get the hot deals timer info from the first active rule with daily time window.
+ * Returns timer object for app to display.
+ */
+async function getHotDealsTimer() {
+  const rules = await HotDealRule.find({ status: "active" })
+    .sort({ priority: -1, createdAt: 1 })
+    .lean();
+
+  // Find the first rule with daily time window set
+  const ruleWithTime = rules.find(
+    (r) => Number.isInteger(r.dailyStartHour) && Number.isInteger(r.dailyEndHour)
+  );
+
+  if (!ruleWithTime) {
+    // Return default timer if no rule found
+    return {
+      startTime: "00:00",
+      endTime: "23:59",
+      percentOff: 50,
+    };
+  }
+
+  const startHour = ruleWithTime.dailyStartHour;
+  const endHour = ruleWithTime.dailyEndHour;
+
+  return {
+    startTime: `${String(startHour).padStart(2, "0")}:00`,
+    endTime: `${String(endHour).padStart(2, "0")}:00`,
+    percentOff: Number(ruleWithTime.minDiscountPercent) || 50,
+  };
+}
+
 module.exports = {
   productDiscountPercent,
   isRuleLive,
@@ -192,4 +227,5 @@ module.exports = {
   applyHotDealOptIn,
   notifyAdminsHotDealPending,
   listHotDealProducts,
+  getHotDealsTimer,
 };

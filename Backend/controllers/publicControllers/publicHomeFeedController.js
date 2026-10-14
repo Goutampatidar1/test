@@ -11,6 +11,7 @@ const {
   loadSuggestedVendors,
 } = require("../../utils/homeFeed");
 const { loadVideoPage } = require("./publicVideoFeedController");
+const { getHotDealsTimer } = require("../../utils/hotDeals");
 
 async function safe(label, fn, fallback) {
   try {
@@ -59,7 +60,7 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
 
   const needCategories = wants.has("categories") || wants.has("products");
 
-  const [banners, categorySections, video, hotDeals, suggestionData, suggestedVendors] = await Promise.all([
+  const [banners, categorySections, video, hotDeals, hotDealsTimer, suggestionData, suggestedVendors] = await Promise.all([
     wants.has("banners")
       ? safe("banners", () => listActiveBanners({ city, targetType: "user", baseUrl }), [])
       : [],
@@ -76,6 +77,9 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
     wants.has("hotDeals") && features.hotDealsEnabled !== false
       ? safe("hotDeals", () => loadHotDealCards(req), [])
       : [],
+    wants.has("hotDeals") && features.hotDealsEnabled !== false
+      ? safe("hotDealsTimer", () => getHotDealsTimer(), { startTime: "00:00", endTime: "23:59", percentOff: 50 })
+      : { startTime: "00:00", endTime: "23:59", percentOff: 50 },
     wants.has("suggestions")
       ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl, city: area.city }), {
           items: [],
@@ -101,7 +105,7 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
       nextCursor: video.nextCursor,
       endpoint: "/api/public/video-feeds",
     }),
-    hotDeals: () => ({ enabled: features.hotDealsEnabled !== false, items: hotDeals }),
+    hotDeals: () => ({ enabled: features.hotDealsEnabled !== false, items: hotDeals, timer: hotDealsTimer }),
     products: () => ({ groups: categorySections }),
     suggestions: () => ({
       items: suggestionData.items,

@@ -442,7 +442,7 @@ exports.updateVenueVendor = asyncHandler(async (req, res) => {
   if (fcm_id !== undefined) venueVendor.fcm_id = normalizeOptional(fcm_id);
   if (status !== undefined) venueVendor.status = status;
   if (approvalStatus !== undefined) {
-    applyVendorApprovalStatus(venueVendor, { approvalStatus, rejectionReason });
+    applyVendorApprovalStatus(venueVendor, { approvalStatus, rejectionReason }, { recipientType: "venueVendor" });
   }
   if (password) venueVendor.passwordHash = await hashPassword(password);
 
