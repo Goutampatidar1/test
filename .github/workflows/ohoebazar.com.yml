@@ -56,6 +56,68 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      # Hostinger Node Application root is document root (server.js + controllers/ at /),
+      # not the nested Backend/ folder. Sync API code into that root without wiping the SPA.
+      - name: Sync Backend into Node app root (document root)
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./Backend/controllers/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/controllers/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Backend utils into Node app root
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./Backend/utils/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/utils/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Backend routes into Node app root
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./Backend/routes/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/routes/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Backend models into Node app root
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./Backend/models/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/models/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Backend middleware into Node app root
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./Backend/middleware/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/middleware/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Backend server.js into Node app root
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./Backend/server.js
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/server.js
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
       # API process may run outside public_html (keeps its own .env). Sync code into that cwd, then PM2 reload.
       - name: Sync Backend into live API cwd and restart PM2
         uses: appleboy/ssh-action@v1.2.2
