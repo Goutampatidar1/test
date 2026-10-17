@@ -1,19 +1,17 @@
 /**
- * Restore https://ohoebazar.com:5017 without breaking Hostinger/Apache.
+ * Serve HTTP + HTTPS on the same PORT (5017).
  *
- * With certs + public IPv4:
- *   HTTP  127.0.0.1:PORT   → Apache + Hostinger health checks
- *   HTTPS <public-ip>:PORT → Flutter https://ohoebazar.com:5017
+ * Hostinger health checks + Apache use plain HTTP on 127.0.0.1:5017.
+ * Flutter uses https://ohoebazar.com:5017 — TLS ClientHello is demuxed to HTTPS.
  *
- * Without certs / if HTTPS bind fails:
- *   HTTP  0.0.0.0:PORT
+ * Without certs: plain HTTP on 0.0.0.0:PORT.
  */
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const net = require("net");
 const http = require("http");
 const https = require("https");
-const dns = require("dns");
 
 function readIfExists(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
@@ -121,32 +119,6 @@ function loadSslMaterials() {
   return null;
 }
 
-function listExternalIpv4() {
-  const out = [];
-  if (process.env.HTTPS_BIND_IP && String(process.env.HTTPS_BIND_IP).trim()) {
-    out.push(String(process.env.HTTPS_BIND_IP).trim());
-  }
-  const nets = os.networkInterfaces();
-  for (const entries of Object.values(nets)) {
-    for (const net of entries || []) {
-      const family = net.family === "IPv4" || net.family === 4;
-      if (family && !net.internal && net.address && !out.includes(net.address)) {
-        out.push(net.address);
-      }
-    }
-  }
-  return out;
-}
-
-function resolveDomainIpv4(hostname) {
-  return new Promise((resolve) => {
-    dns.lookup(hostname, { family: 4 }, (err, address) => {
-      if (err || !address) return resolve(null);
-      resolve(address);
-    });
-  });
-}
-
 function listenHttpOnly(app, port, onListening) {
   const server = app.listen(port, "0.0.0.0", () => {
     if (typeof onListening === "function") {
@@ -160,20 +132,71 @@ function listenHttpOnly(app, port, onListening) {
   return { mode: "http-only", server };
 }
 
-function tryListen(server, port, host) {
-  return new Promise((resolve, reject) => {
-    const onError = (err) => {
-      server.off("listening", onListening);
-      reject(err);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve();
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen(port, host);
+/**
+ * Multiplex HTTP and HTTPS on one TCP port.
+ * TLS records start with handshake type 0x16.
+ */
+function listenHttpAndHttpsSamePort(app, port, ssl, onListening) {
+  const httpServer = http.createServer(app);
+  const httpsServer = https.createServer(ssl.opts, app);
+
+  // Prevent accidental .listen on these — connections are fed by the mux.
+  httpServer.on("error", (err) => console.error("HTTP server error:", err.message));
+  httpsServer.on("error", (err) => console.error("HTTPS server error:", err.message));
+
+  const mux = net.createServer((socket) => {
+    socket.once("error", () => {
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
+
+    socket.once("data", (buf) => {
+      socket.pause();
+      // Put bytes back so http/https parsers see the full stream.
+      socket.unshift(buf);
+
+      const isTls = buf && buf.length > 0 && buf[0] === 0x16;
+      const target = isTls ? httpsServer : httpServer;
+      target.emit("connection", socket);
+
+      process.nextTick(() => {
+        try {
+          socket.resume();
+        } catch {
+          /* ignore */
+        }
+      });
+    });
   });
+
+  mux.on("error", (err) => {
+    console.error("Mux listen error:", err.message);
+    console.warn("Falling back to HTTP-only on", port);
+    try {
+      mux.close();
+    } catch {
+      /* ignore */
+    }
+    listenHttpOnly(app, port, onListening);
+  });
+
+  mux.listen(port, "0.0.0.0", () => {
+    if (typeof onListening === "function") {
+      onListening({
+        mode: "http+https-mux",
+        http: `0.0.0.0:${port}`,
+        https: `0.0.0.0:${port}`,
+        sslSource: ssl.source,
+        certPath: ssl.certPath,
+        apachePort: port,
+      });
+    }
+  });
+
+  return { mode: "http+https-mux", mux, httpServer, httpsServer, ssl };
 }
 
 /**
@@ -185,69 +208,7 @@ async function listenHttpAndMaybeHttps(app, { port, onListening }) {
   if (!ssl) {
     return listenHttpOnly(app, port, onListening);
   }
-
-  let candidates = listExternalIpv4();
-  const domain = process.env.SSL_DOMAIN || "ohoebazar.com";
-  const resolved = await resolveDomainIpv4(domain);
-  if (resolved && !candidates.includes(resolved)) {
-    candidates.push(resolved);
-  }
-  if (resolved) {
-    candidates = [resolved, ...candidates.filter((ip) => ip !== resolved)];
-  }
-
-  if (!candidates.length) {
-    console.warn("SSL loaded but no public IPv4 — falling back to HTTP-only on", port);
-    return listenHttpOnly(app, port, onListening);
-  }
-
-  const httpServer = http.createServer(app);
-  try {
-    await tryListen(httpServer, port, "127.0.0.1");
-  } catch (err) {
-    console.error("HTTP 127.0.0.1 listen error:", err.message);
-    process.exit(1);
-  }
-
-  let boundIp = null;
-  for (const ip of candidates) {
-    const httpsServer = https.createServer(ssl.opts, app);
-    try {
-      await tryListen(httpsServer, port, ip);
-      boundIp = ip;
-      break;
-    } catch (err) {
-      console.warn(`HTTPS ${ip}:${port} failed: ${err.message}`);
-      try {
-        httpsServer.close();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  if (!boundIp) {
-    console.warn("HTTPS bind failed on all IPs — keeping HTTP on 127.0.0.1 only is not enough for Hostinger; rebinding HTTP on 0.0.0.0");
-    try {
-      httpServer.close();
-    } catch {
-      /* ignore */
-    }
-    return listenHttpOnly(app, port, onListening);
-  }
-
-  if (typeof onListening === "function") {
-    onListening({
-      mode: "dual-bind",
-      http: `127.0.0.1:${port}`,
-      https: `${boundIp}:${port}`,
-      sslSource: ssl.source,
-      certPath: ssl.certPath,
-      apachePort: port,
-    });
-  }
-
-  return { mode: "dual-bind", ssl, boundIp };
+  return listenHttpAndHttpsSamePort(app, port, ssl, onListening);
 }
 
 module.exports = {
