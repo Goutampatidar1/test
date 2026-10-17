@@ -1,14 +1,12 @@
 <?php
 /**
- * Copy fixed Backend code into the Node app root (document root) and touch restart.
- * Hostinger Node Application root = public_html/ohoebazar.com (NOT .../Backend).
- * Writes .oho-ssl.json from cPanel certs so Node can serve https://ohoebazar.com:5017
- * while keeping HTTP on 127.0.0.1:5017 for Apache + health checks.
+ * Sync Backend → Node app root + wire trusted HTTPS for :5017.
+ * Uses the same Let's Encrypt chain Apache serves on :443, plus matching private key.
  * GET /ops-reload-api.php?token=oho-reload-2026-10-17
  */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
-@set_time_limit(30);
+@set_time_limit(45);
 
 $expected = 'oho-reload-2026-10-17';
 $token = isset($_GET['token']) ? (string) $_GET['token'] : '';
@@ -19,12 +17,8 @@ if (!hash_equals($expected, $token)) {
 }
 
 function oho_copy_tree($from, $to) {
-  if (!is_dir($from)) {
-    return false;
-  }
-  if (!is_dir($to) && !@mkdir($to, 0755, true)) {
-    return false;
-  }
+  if (!is_dir($from)) return false;
+  if (!is_dir($to) && !@mkdir($to, 0755, true)) return false;
   $it = new RecursiveIteratorIterator(
     new RecursiveDirectoryIterator($from, RecursiveDirectoryIterator::SKIP_DOTS),
     RecursiveIteratorIterator::SELF_FIRST
@@ -32,9 +26,7 @@ function oho_copy_tree($from, $to) {
   foreach ($it as $item) {
     $dest = $to . DIRECTORY_SEPARATOR . $it->getSubPathName();
     if ($item->isDir()) {
-      if (!is_dir($dest)) {
-        @mkdir($dest, 0755, true);
-      }
+      if (!is_dir($dest)) @mkdir($dest, 0755, true);
     } else {
       @copy($item->getPathname(), $dest);
     }
@@ -43,166 +35,101 @@ function oho_copy_tree($from, $to) {
 }
 
 function oho_sh($cmd) {
-  if (!function_exists('shell_exec')) {
-    return null;
-  }
+  if (!function_exists('shell_exec')) return null;
   $out = @shell_exec($cmd . ' 2>/dev/null');
   return is_string($out) ? trim($out) : null;
 }
 
-function oho_ssl_modulus($file, $type) {
-  $file = escapeshellarg($file);
+function oho_ssl_modulus_from_pem($pem, $type) {
+  $tmp = tempnam(sys_get_temp_dir(), 'oho');
+  if ($tmp === false) return null;
+  @file_put_contents($tmp, $pem);
+  $file = escapeshellarg($tmp);
   if ($type === 'cert') {
     $out = oho_sh("openssl x509 -noout -modulus -in $file");
   } else {
     $out = oho_sh("openssl rsa -noout -modulus -in $file");
-    if (!$out) {
-      $out = oho_sh("openssl pkey -noout -modulus -in $file");
-    }
+    if (!$out) $out = oho_sh("openssl pkey -noout -modulus -in $file");
   }
-  if (!$out || stripos($out, 'Modulus=') === false) {
-    return null;
-  }
+  @unlink($tmp);
+  if (!$out || stripos($out, 'Modulus=') === false) return null;
   return strtoupper(preg_replace('/^Modulus=/i', '', trim($out)));
 }
 
-function oho_pick_ssl_pair($home, $domain = 'ohoebazar.com') {
-  $needle = strtolower(str_replace('.', '_', $domain));
-  $certDir = rtrim($home, '/') . '/ssl/certs';
-  $keyDir = rtrim($home, '/') . '/ssl/keys';
-  if (!is_dir($certDir) || !is_dir($keyDir)) {
+function oho_ssl_modulus_file($path, $type) {
+  $file = escapeshellarg($path);
+  if ($type === 'cert') {
+    $out = oho_sh("openssl x509 -noout -modulus -in $file");
+  } else {
+    $out = oho_sh("openssl rsa -noout -modulus -in $file");
+    if (!$out) $out = oho_sh("openssl pkey -noout -modulus -in $file");
+  }
+  if (!$out || stripos($out, 'Modulus=') === false) return null;
+  return strtoupper(preg_replace('/^Modulus=/i', '', trim($out)));
+}
+
+/**
+ * Pull live trusted chain from Apache :443 and find matching private key.
+ */
+function oho_build_ssl_from_443($home, $domain = 'ohoebazar.com') {
+  $show = oho_sh(
+    'echo | openssl s_client -connect 127.0.0.1:443 -servername ' . escapeshellarg($domain) . ' -showcerts'
+  );
+  if (!$show || !preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $m)) {
+    $show = oho_sh(
+      'echo | openssl s_client -connect ' . escapeshellarg($domain . ':443') . ' -servername ' . escapeshellarg($domain) . ' -showcerts'
+    );
+  }
+  if (!$show || !preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $m)) {
     return null;
   }
-  $certs = [];
-  $bundles = [];
-  foreach (scandir($certDir) ?: [] as $name) {
-    if ($name === '.' || $name === '..') continue;
-    $full = $certDir . '/' . $name;
-    if (!is_file($full)) continue;
-    $lower = strtolower($name);
-    if (preg_match('/\.(cabundle|ca-bundle)$/', $lower) || strpos($lower, 'bundle') !== false) {
-      $bundles[] = $full;
-      continue;
-    }
-    if (preg_match('/\.(crt|pem)$/', $lower)) {
-      $certs[] = $full;
-    }
-  }
-  $keys = [];
+  $pems = $m[0];
+  $leaf = $pems[0];
+  $fullchain = implode("\n", $pems) . "\n";
+  $modLeaf = oho_ssl_modulus_from_pem($leaf, 'cert');
+  if (!$modLeaf) return null;
+
+  $keyDir = rtrim($home, '/') . '/ssl/keys';
+  if (!is_dir($keyDir)) return null;
+  $keyPath = null;
   foreach (scandir($keyDir) ?: [] as $name) {
     if ($name === '.' || $name === '..') continue;
+    if (!preg_match('/\.(key|pem)$/i', $name)) continue;
     $full = $keyDir . '/' . $name;
-    if (is_file($full) && preg_match('/\.(key|pem)$/i', $name)) {
-      $keys[] = $full;
+    $modKey = oho_ssl_modulus_file($full, 'key');
+    if ($modKey && hash_equals($modLeaf, $modKey)) {
+      $keyPath = $full;
+      break;
     }
   }
-  if (!$certs || !$keys) {
-    return null;
+  $tmpLeaf = tempnam(sys_get_temp_dir(), 'ohoLeaf');
+  @file_put_contents($tmpLeaf, $leaf);
+  $leafSubject = oho_sh('openssl x509 -noout -subject -in ' . escapeshellarg($tmpLeaf));
+  $leafIssuer = oho_sh('openssl x509 -noout -issuer -in ' . escapeshellarg($tmpLeaf));
+  @unlink($tmpLeaf);
+
+  if (!$keyPath) {
+    return [
+      'error' => 'no_matching_private_key',
+      'leafSubject' => $leafSubject,
+      'leafIssuer' => $leafIssuer,
+    ];
   }
 
-  // Prefer Let's Encrypt / publicly trusted certs for the domain, then domain name match.
-  usort($certs, function ($a, $b) use ($needle) {
-    $score = function ($path) use ($needle) {
-      $s = 0;
-      $bn = basename($path);
-      if (stripos($bn, $needle) !== false) $s += 10;
-      $iss = oho_sh('openssl x509 -noout -issuer -in ' . escapeshellarg($path));
-      $sub = oho_sh('openssl x509 -noout -subject -in ' . escapeshellarg($path));
-      if ($iss && (stripos($iss, "Let's Encrypt") !== false || stripos($iss, 'R3') !== false || stripos($iss, 'YR1') !== false || stripos($iss, 'E1') !== false)) {
-        $s += 50;
-      }
-      if ($iss && stripos($iss, 'self') !== false) $s -= 40;
-      if ($sub && stripos($sub, 'ohoebazar.com') !== false) $s += 20;
-      // Self-signed: subject == issuer
-      if ($sub && $iss && preg_replace('/^subject=/i', '', $sub) === preg_replace('/^issuer=/i', '', $iss)) {
-        $s -= 60;
-      }
-      return $s;
-    };
-    return $score($b) - $score($a);
-  });
-
-  foreach ($certs as $cert) {
-    $modCert = oho_ssl_modulus($cert, 'cert');
-    if (!$modCert) {
-      continue;
-    }
-    foreach ($keys as $key) {
-      $modKey = oho_ssl_modulus($key, 'key');
-      if ($modKey && hash_equals($modCert, $modKey)) {
-        $base = preg_replace('/\.(crt|pem)$/i', '', basename($cert));
-        // Prefer cabundle sharing the cPanel hash tokens from the cert name.
-        $tokens = [];
-        if (preg_match_all('/[a-f0-9]{5,}/i', $base, $tm)) {
-          $tokens = $tm[0];
-        }
-        $ca = null;
-        foreach ($bundles as $b) {
-          $bn = basename($b);
-          if (strpos($bn, $base) === 0) {
-            $ca = $b;
-            break;
-          }
-        }
-        if (!$ca && $tokens) {
-          foreach ($bundles as $b) {
-            $bn = basename($b);
-            $ok = true;
-            foreach ($tokens as $tok) {
-              if (stripos($bn, $tok) === false) {
-                $ok = false;
-                break;
-              }
-            }
-            if ($ok) {
-              $ca = $b;
-              break;
-            }
-          }
-        }
-        if (!$ca) {
-          foreach ($bundles as $b) {
-            if (stripos(basename($b), $needle) !== false) {
-              $ca = $b;
-              break;
-            }
-          }
-        }
-        // Last resort: skip generic ca_bundle.crt if a domain-named bundle exists later.
-        if (!$ca) {
-          foreach ($bundles as $b) {
-            if (stripos(basename($b), 'ca_bundle') === false) {
-              $ca = $b;
-              break;
-            }
-          }
-        }
-        if (!$ca && $bundles) {
-          $ca = $bundles[0];
-        }
-        return ['cert' => $cert, 'key' => $key, 'ca' => $ca, 'matched' => true];
-      }
-    }
-  }
-  return null;
+  return [
+    'fullchainPem' => $fullchain,
+    'key' => $keyPath,
+    'leafSubject' => $leafSubject,
+    'leafIssuer' => $leafIssuer,
+  ];
 }
 
 function oho_set_apache_proxy_port($htaccessPath, $port) {
-  if (!is_file($htaccessPath)) {
-    return false;
-  }
+  if (!is_file($htaccessPath)) return false;
   $body = (string) @file_get_contents($htaccessPath);
-  if ($body === '') {
-    return false;
-  }
-  $updated = preg_replace(
-    '#http://127\.0\.0\.1:\d+#',
-    'http://127.0.0.1:' . (int) $port,
-    $body
-  );
-  if (!is_string($updated)) {
-    return false;
-  }
+  if ($body === '') return false;
+  $updated = preg_replace('#http://127\.0\.0\.1:\d+#', 'http://127.0.0.1:' . (int) $port, $body);
+  if (!is_string($updated)) return false;
   if ($updated === $body) {
     return (bool) preg_match('#http://127\.0\.0\.1:' . (int) $port . '#', $body);
   }
@@ -223,75 +150,60 @@ $copied = [];
 foreach ($parts as $part) {
   $from = $src . '/' . $part;
   $to = $nodeRoot . '/' . $part;
-  if (is_dir($from)) {
-    $copied[$part] = oho_copy_tree($from, $to);
-  }
+  if (is_dir($from)) $copied[$part] = oho_copy_tree($from, $to);
 }
 
-$files = ['server.js', 'package.json', 'package-lock.json'];
 $fileCopy = [];
-foreach ($files as $file) {
+foreach (['server.js', 'package.json', 'package-lock.json'] as $file) {
   $from = $src . '/' . $file;
   $to = $nodeRoot . '/' . $file;
-  if (is_file($from)) {
-    $fileCopy[$file] = @copy($from, $to);
-  }
+  if (is_file($from)) $fileCopy[$file] = @copy($from, $to);
 }
 
 $home = getenv('HOME') ?: ('/home/' . get_current_user());
-$sslPair = oho_pick_ssl_pair($home, 'ohoebazar.com');
-$sslJson = null;
 $apachePort = 5017;
-$sslRemoved = [];
-if ($sslPair) {
-  $leaf = (string) @file_get_contents($sslPair['cert']);
-  $chainExtra = '';
-  // Prefer the exact intermediate chain Apache serves on :443 (mobile-trusted).
-  $show = oho_sh(
-    'echo | openssl s_client -connect 127.0.0.1:443 -servername ohoebazar.com -showcerts 2>/dev/null'
-  );
-  if ($show && preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $pemMatches)) {
-    $pems = $pemMatches[0];
-    // Drop leaf (index 0); keep intermediates only.
-    if (count($pems) > 1) {
-      $chainExtra = implode("\n", array_slice($pems, 1)) . "\n";
-    }
-  }
-  if ($chainExtra === '' && !empty($sslPair['ca']) && is_file($sslPair['ca'])) {
-    $chainExtra = (string) @file_get_contents($sslPair['ca']);
-  }
-  $fullchain = rtrim($leaf) . "\n" . ltrim($chainExtra);
-  $fullchainPath = $nodeRoot . '/.oho-fullchain.pem';
-  @file_put_contents($fullchainPath, $fullchain);
-  @file_put_contents($src . '/.oho-fullchain.pem', $fullchain);
+oho_set_apache_proxy_port($docRoot . '/.htaccess', $apachePort);
 
+$sslFrom443 = oho_build_ssl_from_443($home, 'ohoebazar.com');
+$sslJson = null;
+$sslMeta = ['written' => false];
+
+if (is_array($sslFrom443) && !empty($sslFrom443['fullchainPem']) && !empty($sslFrom443['key'])) {
+  $fullchainPath = $nodeRoot . '/.oho-fullchain.pem';
+  @file_put_contents($fullchainPath, $sslFrom443['fullchainPem']);
+  @file_put_contents($src . '/.oho-fullchain.pem', $sslFrom443['fullchainPem']);
   $sslJson = [
     'cert' => $fullchainPath,
-    'key' => $sslPair['key'],
-    'ca' => $sslPair['ca'],
-    'leaf' => $sslPair['cert'],
+    'key' => $sslFrom443['key'],
     'fullchain' => $fullchainPath,
   ];
   @file_put_contents($nodeRoot . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @file_put_contents($src . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+  $sslMeta = [
+    'written' => true,
+    'source' => 'apache-443-chain',
+    'cert' => basename($fullchainPath),
+    'key' => basename($sslFrom443['key']),
+    'subject' => $sslFrom443['leafSubject'] ?? null,
+    'issuer' => $sslFrom443['leafIssuer'] ?? null,
+    'apachePort' => $apachePort,
+  ];
 } else {
-  // Remove bad/mismatched SSL config so Node can boot HTTP-only.
-  foreach ([$nodeRoot . '/.oho-ssl.json', $src . '/.oho-ssl.json'] as $badSsl) {
-    if (is_file($badSsl)) {
-      $sslRemoved[] = $badSsl;
-      @unlink($badSsl);
-    }
+  foreach ([$nodeRoot . '/.oho-ssl.json', $src . '/.oho-ssl.json'] as $bad) {
+    if (is_file($bad)) @unlink($bad);
   }
+  $sslMeta = [
+    'written' => false,
+    'source' => 'apache-443-chain',
+    'detail' => $sslFrom443,
+    'apachePort' => $apachePort,
+  ];
 }
-// Always keep Apache on 5017.
-oho_set_apache_proxy_port($docRoot . '/.htaccess', $apachePort);
 
 $serverBody = is_file($nodeRoot . '/server.js') ? (string) @file_get_contents($nodeRoot . '/server.js') : '';
 
 foreach ([$nodeRoot . '/tmp', $src . '/tmp'] as $tmp) {
-  if (!is_dir($tmp)) {
-    @mkdir($tmp, 0755, true);
-  }
+  if (!is_dir($tmp)) @mkdir($tmp, 0755, true);
   @file_put_contents($tmp . '/restart.txt', (string) time());
 }
 
@@ -303,20 +215,7 @@ $result = [
   'nodeRoot' => $nodeRoot,
   'copiedDirs' => $copied,
   'copiedFiles' => $fileCopy,
-  'ssl' => $sslJson ? [
-    'written' => true,
-    'matched' => true,
-    'cert' => basename((string) $sslJson['cert']),
-    'key' => basename((string) $sslJson['key']),
-    'ca' => $sslJson['ca'] ? basename((string) $sslJson['ca']) : null,
-    'apachePort' => $apachePort,
-  ] : [
-    'written' => false,
-    'matched' => false,
-    'removed' => $sslRemoved,
-    'home' => $home,
-    'apachePort' => $apachePort,
-  ],
+  'ssl' => $sslMeta,
   'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-fullchain-2026-10-17') !== false
     || strpos($serverBody, 'https-5017-restored-2026-10-17') !== false,
   'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
@@ -329,27 +228,6 @@ usleep(300000);
 $result['verifyHttp5017'] = oho_sh('curl -s -m 5 http://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyHttps5017'] = oho_sh('curl -sk -m 5 https://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyVia443'] = oho_sh('curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL');
-
-// Inventory certs so we can pick Let's Encrypt (not self-signed) for :5017.
-$certInventory = [];
-$certDir = rtrim($home, '/') . '/ssl/certs';
-if (is_dir($certDir)) {
-  foreach (scandir($certDir) ?: [] as $name) {
-    if ($name === '.' || $name === '..') continue;
-    if (!preg_match('/\.(crt|pem)$/i', $name)) continue;
-    if (stripos($name, 'bundle') !== false) continue;
-    $full = $certDir . '/' . $name;
-    $certInventory[] = [
-      'file' => $name,
-      'subject' => oho_sh('openssl x509 -noout -subject -in ' . escapeshellarg($full)),
-      'issuer' => oho_sh('openssl x509 -noout -issuer -in ' . escapeshellarg($full)),
-    ];
-  }
-}
-$result['certInventory'] = $certInventory;
-$result['fullchainHead'] = is_file($nodeRoot . '/.oho-fullchain.pem')
-  ? oho_sh('openssl x509 -noout -subject -issuer -in ' . escapeshellarg($nodeRoot . '/.oho-fullchain.pem'))
-  : null;
 
 @file_put_contents($docRoot . '/api-reload-status.json', json_encode($result, JSON_PRETTY_PRINT));
 echo json_encode($result, JSON_PRETTY_PRINT);

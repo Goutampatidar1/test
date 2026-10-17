@@ -49,7 +49,7 @@ app.get("/delivery/delete-account", legalPageController.renderDeliveryDeleteAcco
 app.get("/driver/delete-account", legalPageController.renderDeliveryDeleteAccount);
 
 /** Deploy/build probe — confirms which folder the live Node process loaded. */
-const API_BUILD = "https-5017-fullchain-2026-10-17";
+const API_BUILD = "https-5017-le-chain-2026-10-17";
 let listenInfo = null;
 app.get("/api/__build", (req, res) => {
   res.json({
