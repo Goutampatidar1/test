@@ -103,15 +103,16 @@ Framework is your choice (Flutter or React Native both fine). Required capabilit
 ### 4.1 Base URL
 
 - All endpoints are under **`{API_BASE}/api`**.
-- Production `API_BASE` (Flutter + web panels):
+- Production `API_BASE` (Flutter app):
 
   | Env | `API_BASE` |
   |---|---|
-  | **prod** | `https://ohoebazar.com` |
+  | **prod** | `https://ohoebazar.com:5017` |
   | **dev** | `http://<LAN-IP>:5001` |
 
-  **Do not use `https://ohoebazar.com:5017`.** Port 5017 is plain HTTP; HTTPS on that port fails TLS → “Cannot reach the server.” Use port **443** (`https://ohoebazar.com/api/...`) — Apache proxies to Node.
-- Media (images, videos, documents) paths returned by the API may be **relative** (e.g. `/uploads/...`). Build absolute URLs as `API_BASE + path` (add `/` if missing). Absolute `http(s)` URLs are used as-is. On production hosts, strip ports `5000/5001/5017` from media URLs (the panel does this — Apache proxies them).
+  Live Node serves **HTTP + HTTPS on :5017** (cPanel SSL). Admin/vendor web panels use `https://ohoebazar.com` (port 443 proxy).
+- Media (images, videos, documents) paths returned by the API may be **relative** (e.g. `/uploads/...`). Build absolute URLs as `API_BASE + path` (add `/` if missing). Absolute `http(s)` URLs are used as-is.
+
 
 
 

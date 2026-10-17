@@ -240,7 +240,8 @@ $result = [
     'home' => $home,
     'apachePort' => $apachePort,
   ],
-  'rootHasHttpsBuild' => strpos($serverBody, 'https-safe-5017-2026-10-17') !== false
+  'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-restored-2026-10-17') !== false
+    || strpos($serverBody, 'https-safe-5017-2026-10-17') !== false
     || strpos($serverBody, 'https-mux-5017-2026-10-17') !== false,
   'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
   'actions' => [
