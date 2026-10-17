@@ -55,3 +55,30 @@ jobs:
           remote_host: ${{ secrets.SERVER_IP }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # Node keeps old controllers in memory until PM2 restarts — required for API fixes.
+      - name: Restart Node API (pm2)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            APP_DIR="$HOME/public_html/ohoebazar.com/Backend"
+            cd "$APP_DIR"
+            if command -v pm2 >/dev/null 2>&1; then
+              if pm2 describe oho-backend >/dev/null 2>&1; then
+                pm2 restart oho-backend --update-env
+              else
+                pm2 start server.js --name oho-backend
+              fi
+              pm2 save || true
+            else
+              echo "pm2 not found; cannot reload API from CI"
+              exit 1
+            fi
+            sleep 2
+            curl -sf -X POST "http://127.0.0.1:5017/api/vendor/auth/check-phone" \
+              -H "Content-Type: application/json" \
+              -d '{"phone":"9650555555","purpose":"vendor_login"}' || true

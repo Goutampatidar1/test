@@ -336,9 +336,14 @@ exports.checkPhone = asyncHandler(async (req, res) => {
       phone: phoneNorm,
       canProceed: true,
       purpose: otpPurpose,
-      vendorPanelType: existing?.vendorPanelType || venueVendor?.vendorPanelType || (existing ? "ecom" : "service"),
+      vendorPanelType:
+        existing?.vendorPanelType ||
+        venueVendor?.vendorPanelType ||
+        (existing && venueVendor ? "both" : existing ? "ecom" : "service"),
       hasEcom: Boolean(existing),
       hasService: Boolean(venueVendor),
+      // Lets clients confirm the reloaded API build (service-vendor login fix).
+      apiBuild: "service-login-2026-10-17",
     });
   }
 
