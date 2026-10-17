@@ -116,11 +116,50 @@ function oho_pick_ssl_pair($home, $domain = 'ohoebazar.com') {
       $modKey = oho_ssl_modulus($key, 'key');
       if ($modKey && hash_equals($modCert, $modKey)) {
         $base = preg_replace('/\.(crt|pem)$/i', '', basename($cert));
+        // Prefer cabundle sharing the cPanel hash tokens from the cert name.
+        $tokens = [];
+        if (preg_match_all('/[a-f0-9]{5,}/i', $base, $tm)) {
+          $tokens = $tm[0];
+        }
         $ca = null;
         foreach ($bundles as $b) {
-          if (strpos(basename($b), $base) === 0 || stripos(basename($b), $needle) !== false) {
+          $bn = basename($b);
+          if (strpos($bn, $base) === 0) {
             $ca = $b;
             break;
+          }
+        }
+        if (!$ca && $tokens) {
+          foreach ($bundles as $b) {
+            $bn = basename($b);
+            $ok = true;
+            foreach ($tokens as $tok) {
+              if (stripos($bn, $tok) === false) {
+                $ok = false;
+                break;
+              }
+            }
+            if ($ok) {
+              $ca = $b;
+              break;
+            }
+          }
+        }
+        if (!$ca) {
+          foreach ($bundles as $b) {
+            if (stripos(basename($b), $needle) !== false) {
+              $ca = $b;
+              break;
+            }
+          }
+        }
+        // Last resort: skip generic ca_bundle.crt if a domain-named bundle exists later.
+        if (!$ca) {
+          foreach ($bundles as $b) {
+            if (stripos(basename($b), 'ca_bundle') === false) {
+              $ca = $b;
+              break;
+            }
           }
         }
         if (!$ca && $bundles) {
@@ -190,10 +229,33 @@ $sslJson = null;
 $apachePort = 5017;
 $sslRemoved = [];
 if ($sslPair) {
+  $leaf = (string) @file_get_contents($sslPair['cert']);
+  $chainExtra = '';
+  // Prefer the exact intermediate chain Apache serves on :443 (mobile-trusted).
+  $show = oho_sh(
+    'echo | openssl s_client -connect 127.0.0.1:443 -servername ohoebazar.com -showcerts 2>/dev/null'
+  );
+  if ($show && preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $pemMatches)) {
+    $pems = $pemMatches[0];
+    // Drop leaf (index 0); keep intermediates only.
+    if (count($pems) > 1) {
+      $chainExtra = implode("\n", array_slice($pems, 1)) . "\n";
+    }
+  }
+  if ($chainExtra === '' && !empty($sslPair['ca']) && is_file($sslPair['ca'])) {
+    $chainExtra = (string) @file_get_contents($sslPair['ca']);
+  }
+  $fullchain = rtrim($leaf) . "\n" . ltrim($chainExtra);
+  $fullchainPath = $nodeRoot . '/.oho-fullchain.pem';
+  @file_put_contents($fullchainPath, $fullchain);
+  @file_put_contents($src . '/.oho-fullchain.pem', $fullchain);
+
   $sslJson = [
-    'cert' => $sslPair['cert'],
+    'cert' => $fullchainPath,
     'key' => $sslPair['key'],
     'ca' => $sslPair['ca'],
+    'leaf' => $sslPair['cert'],
+    'fullchain' => $fullchainPath,
   ];
   @file_put_contents($nodeRoot . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @file_put_contents($src . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -240,9 +302,8 @@ $result = [
     'home' => $home,
     'apachePort' => $apachePort,
   ],
-  'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-restored-2026-10-17') !== false
-    || strpos($serverBody, 'https-safe-5017-2026-10-17') !== false
-    || strpos($serverBody, 'https-mux-5017-2026-10-17') !== false,
+  'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-fullchain-2026-10-17') !== false
+    || strpos($serverBody, 'https-5017-restored-2026-10-17') !== false,
   'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
   'actions' => [
     ['signal' => 'skipped — restart Node from Hostinger panel after this sync'],

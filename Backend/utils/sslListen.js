@@ -38,16 +38,25 @@ function loadFromPaths(certPath, keyPath, caPath) {
   const cert = readIfExists(certPath);
   const key = readIfExists(keyPath);
   if (!cert || !key) return null;
-  if (!keyMatchesCert(cert, key)) {
+  // fullchain.pem may include intermediates — validate against the first (leaf) cert only.
+  const leafPem = String(cert).split("-----END CERTIFICATE-----")[0] + "-----END CERTIFICATE-----\n";
+  if (!keyMatchesCert(leafPem, key)) {
     console.warn(`SSL skip: key does not match cert (${keyPath} / ${certPath})`);
     return null;
   }
-  const opts = { cert, key };
+  let certOut = cert;
   const ca = readIfExists(caPath);
-  if (ca) {
-    opts.cert = Buffer.concat([cert, Buffer.from("\n"), ca]);
-    opts.ca = ca;
+  // If cert file is leaf-only, append CA bundle. If it's already a fullchain, keep as-is.
+  const certCount = (String(cert).match(/BEGIN CERTIFICATE/g) || []).length;
+  if (ca && certCount < 2) {
+    certOut = Buffer.concat([
+      Buffer.isBuffer(cert) ? cert : Buffer.from(cert),
+      Buffer.from("\n"),
+      Buffer.isBuffer(ca) ? ca : Buffer.from(ca),
+    ]);
   }
+  // Do not set opts.ca — that is for client-certificate auth, not the server chain.
+  const opts = { cert: certOut, key };
   return { opts, certPath, keyPath, caPath: caPath || null };
 }
 
