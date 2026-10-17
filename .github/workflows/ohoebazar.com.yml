@@ -45,3 +45,13 @@ jobs:
           remote_host: ${{ secrets.SERVER_IP }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy document-root htaccess
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr
+          path: ./deploy/public_html.htaccess
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/.htaccess
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
