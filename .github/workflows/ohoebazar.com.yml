@@ -17,10 +17,25 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: OhoEBazarWebsite/package-lock.json
+          cache-dependency-path: |
+            OhoEBazarWebsite/package-lock.json
+            AdminPannel/package-lock.json
+            VenueVendorPanel/package-lock.json
 
       - name: Build public website
         working-directory: OhoEBazarWebsite
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build admin panel
+        working-directory: AdminPannel
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build vendor panel
+        working-directory: VenueVendorPanel
         run: |
           npm ci
           npm run build
@@ -42,6 +57,26 @@ jobs:
           switches: -avzr
           path: ./OhoEBazarWebsite/dist/
           remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy admin panel to /admin/
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr --delete
+          path: ./AdminPannel/dist/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/admin/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy vendor panel to /vendor/
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr --delete
+          path: ./VenueVendorPanel/dist/
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/vendor/
           remote_host: ${{ secrets.SERVER_IP }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}

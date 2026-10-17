@@ -23,10 +23,27 @@ function isPrivateLanHost(hostname) {
  * - LAN IP: http(s)://<ip>:5001
  * - public HTTPS domain: same host on port 443 (Apache proxies /api — mobile-safe)
  */
+function normalizeProductionApiBase(url) {
+  let base = String(url || "").trim().replace(/\/$/, "");
+  try {
+    const u = new URL(base);
+    if (
+      u.protocol === "https:" &&
+      (u.port === "5017" || u.port === "5001" || u.port === "5000")
+    ) {
+      u.port = "";
+      base = u.toString().replace(/\/$/, "");
+    }
+  } catch {
+    /* keep as-is */
+  }
+  return base;
+}
+
 export function resolveApiBase() {
   const fromEnv = import.meta.env.VITE_API_URL;
   if (fromEnv && String(fromEnv).trim()) {
-    return String(fromEnv).trim().replace(/\/$/, "");
+    return normalizeProductionApiBase(fromEnv);
   }
 
   if (typeof window !== "undefined") {
