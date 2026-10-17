@@ -1,0 +1,23 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-to-server:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via Rsync
+        uses: Burnett01/rsync-deployments@7.0.0
+        with:
+          switches: -avzr --exclude='.git*' --exclude='.github*' --exclude='.env' --exclude='/vendor/' --exclude='node_modules'
+          path: ./
+          remote_path: /home/${{ secrets.SERVER_USER }}/public_html/ohoebazar.com/
+          remote_host: ${{ secrets.SERVER_IP }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
