@@ -1,10 +1,11 @@
 <?php
 /**
- * Sync fixed Backend code into the live Node app and force reload.
+ * Fast API reload: copy fixed Backend into Node cwd for :5017, signal process.
  * GET /ops-reload-api.php?token=oho-reload-2026-10-17
  */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+@set_time_limit(20);
 
 $expected = 'oho-reload-2026-10-17';
 $token = isset($_GET['token']) ? (string) $_GET['token'] : '';
@@ -46,87 +47,73 @@ function oho_copy_tree($from, $to) {
   return true;
 }
 
-$home = oho_sh('printf %s "$HOME"');
-if (!$home) {
-  $home = '/home/alphawizzserver';
-}
+$home = '/home/alphawizzserver';
 $docRoot = rtrim(str_replace('\\', '/', (string) ($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
-
-$src = null;
-foreach ([
-  $docRoot . '/Backend',
-  $home . '/public_html/ohoebazar.com/Backend',
-  __DIR__ . '/Backend',
-] as $cand) {
-  if ($cand && is_file($cand . '/controllers/vendorControllers/vendorMobileAuth.js')) {
-    $src = $cand;
-    break;
-  }
+$src = $docRoot . '/Backend';
+if (!is_file($src . '/controllers/vendorControllers/vendorMobileAuth.js')) {
+  $src = $home . '/public_html/ohoebazar.com/Backend';
 }
 
 $result = [
   'ok' => false,
   'time' => gmdate('c'),
-  'home' => $home,
-  'docRoot' => $docRoot,
   'src' => $src,
   'discover' => [],
   'targets' => [],
   'actions' => [],
 ];
 
-if ($src === null) {
+if (!is_file($src . '/controllers/vendorControllers/vendorMobileAuth.js')) {
   http_response_code(500);
-  $result['message'] = 'Backend source not found';
+  $result['message'] = 'Backend source missing';
   echo json_encode($result, JSON_PRETTY_PRINT);
   exit;
 }
 
-// Discover Backend/server.js locations and process listening on 5017
-$result['discover']['findServerJs'] = oho_sh(
-  'find "$HOME" /home/alphawizzserver -type f -path "*/Backend/server.js" 2>/dev/null | head -40'
-);
-$result['discover']['ss5017'] = oho_sh('ss -ltnp 2>/dev/null | grep 5017 || netstat -ltnp 2>/dev/null | grep 5017');
-$result['discover']['lsof5017'] = oho_sh('lsof -nP -iTCP:5017 -sTCP:LISTEN 2>/dev/null');
-$result['discover']['pgrepNode'] = oho_sh('pgrep -af "node|server.js" 2>/dev/null | head -30');
-$result['discover']['cloudlinux'] = oho_sh('ls -d $HOME/nodevenv/* $HOME/nodes/* $HOME/applications/* 2>/dev/null | head -40');
+$ss = oho_sh('ss -ltnp | grep 5017 || true');
+$lsof = oho_sh('lsof -nP -iTCP:5017 -sTCP:LISTEN || true');
+$result['discover']['ss'] = $ss;
+$result['discover']['lsof'] = $lsof;
 
-$targets = [$src];
-
-if (!empty($result['discover']['findServerJs'])) {
-  foreach (preg_split('/\r\n|\r|\n/', $result['discover']['findServerJs']) as $line) {
-    $line = trim($line);
-    if ($line !== '' && is_file($line)) {
-      $targets[] = dirname($line);
-    }
-  }
-}
-
-// Resolve cwd from PID in ss/lsof output
 $pid = null;
-if (!empty($result['discover']['lsof5017']) && preg_match('/\b(\d+)\b/', $result['discover']['lsof5017'], $m)) {
-  // Prefer PID column carefully — take last number-like from node line
-  if (preg_match('/node\s+(\d+)/i', $result['discover']['lsof5017'], $m2)) {
-    $pid = $m2[1];
-  } elseif (preg_match_all('/\b(\d{2,})\b/', $result['discover']['lsof5017'], $mm)) {
-    $pid = end($mm[1]);
-  }
-}
-if (!$pid && !empty($result['discover']['ss5017']) && preg_match('/pid=(\d+)/', $result['discover']['ss5017'], $m)) {
+if ($lsof && preg_match('/\b(?:LISTEN)\s+(\d+)\b/', $lsof, $m)) {
   $pid = $m[1];
 }
+if (!$pid && $ss && preg_match('/pid=(\d+)/', $ss, $m)) {
+  $pid = $m[1];
+}
+if (!$pid) {
+  $pid = oho_sh("lsof -t -iTCP:5017 -sTCP:LISTEN | head -1");
+}
+
+$cwd = null;
 if ($pid) {
-  $cwd = oho_sh('readlink -f /proc/' . escapeshellarg($pid) . '/cwd');
-  $result['discover']['pid'] = $pid;
-  $result['discover']['cwd'] = $cwd;
-  if ($cwd && is_file($cwd . '/server.js')) {
-    $targets[] = $cwd;
-  } elseif ($cwd && is_file($cwd . '/Backend/server.js')) {
-    $targets[] = $cwd . '/Backend';
+  $cwd = oho_sh('readlink -f /proc/' . preg_replace('/\D/', '', $pid) . '/cwd');
+}
+$result['discover']['pid'] = $pid;
+$result['discover']['cwd'] = $cwd;
+
+$targets = [$src];
+if ($cwd && is_file($cwd . '/server.js')) {
+  $targets[] = $cwd;
+} elseif ($cwd && is_file($cwd . '/Backend/server.js')) {
+  $targets[] = $cwd . '/Backend';
+}
+
+// Common Hostinger / custom paths (no recursive find — stays fast)
+foreach ([
+  $home . '/ohoebazar-api/Backend',
+  $home . '/apps/ohoebazar/Backend',
+  $home . '/nodejs/ohoebazar/Backend',
+  $home . '/domains/ohoebazar.com/public_html/Backend',
+  $home . '/public_html/ohoebazar.com/Backend',
+] as $cand) {
+  if (is_file($cand . '/server.js')) {
+    $targets[] = $cand;
   }
 }
 
-$targets = array_values(array_unique(array_filter($targets)));
+$targets = array_values(array_unique($targets));
 $parts = ['controllers', 'utils', 'routes', 'models', 'middleware'];
 
 foreach ($targets as $target) {
@@ -141,49 +128,35 @@ foreach ($targets as $target) {
   $auth = $target . '/controllers/vendorControllers/vendorMobileAuth.js';
   $body = is_file($auth) ? (string) @file_get_contents($auth) : '';
   $entry['hasBuildTag'] = strpos($body, 'service-login-2026-10-17') !== false;
-  $tmp = $target . '/tmp';
-  if (!is_dir($tmp)) {
-    @mkdir($tmp, 0755, true);
-  }
-  $entry['restartTxt'] = @file_put_contents($tmp . '/restart.txt', (string) time()) !== false;
-  // Parent app roots sometimes want restart.txt too
-  $parentTmp = dirname($target) . '/tmp';
-  if (is_dir(dirname($target))) {
-    if (!is_dir($parentTmp)) {
-      @mkdir($parentTmp, 0755, true);
+  foreach ([$target . '/tmp', dirname($target) . '/tmp'] as $tmp) {
+    if (!is_dir($tmp)) {
+      @mkdir($tmp, 0755, true);
     }
-    @file_put_contents($parentTmp . '/restart.txt', (string) time());
+    @file_put_contents($tmp . '/restart.txt', (string) time());
   }
   $result['targets'][] = $entry;
 }
 
-// Hostinger / Passenger style restarts
-$result['actions'][] = [
-  'touchRestart' => oho_sh(
-    'mkdir -p "$HOME/tmp" "' . $src . '/tmp" && touch "$HOME/tmp/restart.txt" "' . $src . '/tmp/restart.txt" && echo ok'
-  ),
-];
-
-// Try killing node on 5017 so the panel process manager respawns it with new files
-$killOut = oho_sh(
+// Prefer hard restart of the listener so Hostinger/supervisor respawns with new files
+$sig = oho_sh(
   'PID=$(lsof -t -iTCP:5017 -sTCP:LISTEN 2>/dev/null | head -1); '
-  . 'if [ -n "$PID" ]; then kill -HUP "$PID" 2>/dev/null || kill "$PID" 2>/dev/null; echo "signaled $PID"; '
-  . 'else echo "no listener pid"; fi'
+  . 'echo "pid=$PID"; '
+  . 'if [ -n "$PID" ]; then kill "$PID"; sleep 1; '
+  . '  if kill -0 "$PID" 2>/dev/null; then kill -9 "$PID"; echo killed-9; else echo killed; fi; '
+  . 'else echo none; fi'
 );
-$result['actions'][] = ['signal5017' => $killOut];
+$result['actions'][] = ['kill5017' => $sig];
 
-// Give supervisor a moment, then verify
-usleep(1500000);
+usleep(2000000);
 $verify = oho_sh(
-  'curl -s -X POST "http://127.0.0.1:5017/api/vendor/auth/check-phone" '
+  'curl -s -m 5 -X POST "http://127.0.0.1:5017/api/vendor/auth/check-phone" '
   . '-H "Content-Type: application/json" '
-  . '-d \'{"phone":"9650555555","purpose":"vendor_login"}\''
+  . '-d \'{"phone":"9650555555","purpose":"vendor_login"}\' || echo CURL_FAIL'
 );
 $result['verifyCheckPhone'] = $verify;
+$result['listeningAfter'] = oho_sh('ss -ltnp | grep 5017 || lsof -nP -iTCP:5017 -sTCP:LISTEN || echo down');
 $result['ok'] = true;
 $result['message'] = 'Reload attempted';
 
-$statusPath = ($docRoot !== '' ? $docRoot : dirname($src)) . '/api-reload-status.json';
-@file_put_contents($statusPath, json_encode($result, JSON_PRETTY_PRINT));
-
+@file_put_contents($docRoot . '/api-reload-status.json', json_encode($result, JSON_PRETTY_PRINT));
 echo json_encode($result, JSON_PRETTY_PRINT);
