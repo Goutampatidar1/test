@@ -56,8 +56,8 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Node keeps old controllers in memory until PM2 restarts — required for API fixes.
-      - name: Restart Node API (pm2)
+      # API process may run outside public_html (keeps its own .env). Sync code into that cwd, then PM2 reload.
+      - name: Sync Backend into live API cwd and restart PM2
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -65,27 +65,66 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            APP_DIR="$HOME/public_html/ohoebazar.com/Backend"
-            echo "Deployed Backend at: $APP_DIR"
-            ls -la "$APP_DIR/controllers/vendorControllers/vendorMobileAuth.js"
-            # Show which process owns :5017
-            (ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || true) | grep 5017 || true
+            SRC="$HOME/public_html/ohoebazar.com/Backend"
+            echo "Source: $SRC"
+            test -f "$SRC/controllers/vendorControllers/vendorMobileAuth.js"
+
+            PID=""
+            if command -v ss >/dev/null 2>&1; then
+              PID=$(ss -ltnp 2>/dev/null | grep ':5017' | head -1 | grep -oP 'pid=\K[0-9]+' || true)
+            fi
+            if [ -z "$PID" ] && command -v lsof >/dev/null 2>&1; then
+              PID=$(lsof -t -iTCP:5017 -sTCP:LISTEN 2>/dev/null | head -1 || true)
+            fi
+            echo "PID on :5017 = '${PID:-unknown}'"
             pm2 list || true
-            cd "$APP_DIR"
+
+            TARGET=""
+            if [ -n "$PID" ] && [ -d "/proc/$PID/cwd" ]; then
+              TARGET=$(readlink -f "/proc/$PID/cwd" || true)
+            fi
+            if [ -z "$TARGET" ] || [ ! -d "$TARGET" ]; then
+              # Fallbacks used on this host historically
+              for cand in \
+                "$HOME/ohoebazar-api/Backend" \
+                "$HOME/apps/ohoebazar/Backend" \
+                "$HOME/nodejs/ohoebazar/Backend" \
+                "$HOME/public_html/ohoebazar.com/Backend"
+              do
+                if [ -f "$cand/server.js" ]; then TARGET="$cand"; break; fi
+              done
+            fi
+            echo "API target cwd: $TARGET"
+            test -n "$TARGET"
+            test -f "$TARGET/server.js"
+
+            # Copy application code only — never overwrite live .env / node_modules / uploads
+            rsync -a --delete \
+              --exclude '.env' \
+              --exclude '.env.*' \
+              --exclude 'node_modules' \
+              --exclude 'uploads' \
+              --exclude '.mongodb-data' \
+              --exclude '.mongodb-local' \
+              "$SRC/" "$TARGET/"
+
+            grep -n "service-login-2026-10-17" "$TARGET/controllers/vendorControllers/vendorMobileAuth.js" | head -2
+
             if command -v pm2 >/dev/null 2>&1; then
-              # Prefer known name; otherwise restart whatever is serving this folder / all node apps
               if pm2 describe oho-backend >/dev/null 2>&1; then
-                pm2 delete oho-backend || true
+                pm2 restart oho-backend --update-env
+              else
+                # Restart every online app as a fallback when the name differs
+                pm2 restart all --update-env || pm2 start "$TARGET/server.js" --name oho-backend --cwd "$TARGET"
               fi
-              # Start fresh from the deployed path so require() loads new controllers
-              pm2 start server.js --name oho-backend --cwd "$APP_DIR" --update-env
               pm2 save || true
             else
-              echo "pm2 not found; cannot reload API from CI"
+              echo "pm2 missing"
               exit 1
             fi
+
             sleep 3
-            echo "check-phone after restart:"
+            echo "check-phone after reload:"
             curl -s -X POST "http://127.0.0.1:5017/api/vendor/auth/check-phone" \
               -H "Content-Type: application/json" \
               -d '{"phone":"9650555555","purpose":"vendor_login"}' || true
