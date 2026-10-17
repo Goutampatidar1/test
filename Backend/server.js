@@ -74,7 +74,7 @@ async function start() {
     await connectDatabase();
 
     const { listenHttpAndMaybeHttps } = require("./utils/sslListen");
-    listenHttpAndMaybeHttps(app, {
+    await listenHttpAndMaybeHttps(app, {
       port: config.port,
       onListening: (info) => {
         listenInfo = info;

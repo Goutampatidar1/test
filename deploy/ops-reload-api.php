@@ -2,8 +2,8 @@
 /**
  * Copy fixed Backend code into the Node app root (document root) and touch restart.
  * Hostinger Node Application root = public_html/ohoebazar.com (NOT .../Backend).
- * Also wires cPanel SSL into .oho-ssl.json so https://ohoebazar.com:5017 works,
- * and points Apache ProxyPass at the internal HTTP port (5018) when TLS is on.
+ * Writes .oho-ssl.json from cPanel certs so Node can serve https://ohoebazar.com:5017
+ * while keeping HTTP on 127.0.0.1:5017 for Apache + health checks.
  * GET /ops-reload-api.php?token=oho-reload-2026-10-17
  */
 header('Content-Type: application/json; charset=utf-8');
@@ -138,8 +138,10 @@ function oho_set_apache_proxy_port($htaccessPath, $port) {
     'http://127.0.0.1:' . (int) $port,
     $body
   );
-  if (!is_string($updated) || $updated === $body) {
-    // still write if already correct
+  if (!is_string($updated)) {
+    return false;
+  }
+  if ($updated === $body) {
     return (bool) preg_match('#http://127\.0\.0\.1:' . (int) $port . '#', $body);
   }
   return (bool) @file_put_contents($htaccessPath, $updated);
@@ -153,7 +155,6 @@ if (!is_file($src . '/controllers/vendorControllers/vendorMobileAuth.js')) {
   exit;
 }
 
-// Node app root on this host is the document root (server.js + controllers/ sit next to Backend/)
 $nodeRoot = $docRoot;
 $parts = ['controllers', 'utils', 'routes', 'models', 'middleware', 'config', 'scripts'];
 $copied = [];
@@ -187,12 +188,10 @@ if ($sslPair) {
   ];
   @file_put_contents($nodeRoot . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @file_put_contents($src . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-  $apachePort = 5018;
 }
+// Always keep Apache on 5017 (Node serves HTTP on 127.0.0.1:5017 + HTTPS on public IP:5017).
 oho_set_apache_proxy_port($docRoot . '/.htaccess', $apachePort);
 
-$authRoot = $nodeRoot . '/controllers/vendorControllers/vendorMobileAuth.js';
-$authBody = is_file($authRoot) ? (string) @file_get_contents($authRoot) : '';
 $serverBody = is_file($nodeRoot . '/server.js') ? (string) @file_get_contents($nodeRoot . '/server.js') : '';
 
 foreach ([$nodeRoot . '/tmp', $src . '/tmp'] as $tmp) {
@@ -219,20 +218,15 @@ $result = [
   ] : ['written' => false, 'home' => $home, 'apachePort' => $apachePort],
   'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-2026-10-17') !== false,
   'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
-  'rootHasApiBuildRoute' => strpos($serverBody, '/api/__build') !== false,
-  'actions' => [],
+  'actions' => [
+    ['signal' => 'skipped — restart Node once from Hostinger panel to enable HTTPS :5017'],
+  ],
 ];
 
-// Do NOT kill the Node process from PHP — restart from Hostinger Node panel after sync.
-$result['actions'][] = ['signal' => 'skipped — restart Node from Hostinger panel to load HTTPS :5017'];
-
-usleep(500000);
-$result['verifyHttpApache'] = oho_sh('curl -s -m 5 http://127.0.0.1:' . (int) $apachePort . '/api/__build || echo FAIL');
+usleep(300000);
 $result['verifyHttp5017'] = oho_sh('curl -s -m 5 http://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyHttps5017'] = oho_sh('curl -sk -m 5 https://127.0.0.1:5017/api/__build || echo FAIL');
-$result['verifyVia443'] = oho_sh(
-  'curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL'
-);
+$result['verifyVia443'] = oho_sh('curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL');
 
 @file_put_contents($docRoot . '/api-reload-status.json', json_encode($result, JSON_PRETTY_PRINT));
 echo json_encode($result, JSON_PRETTY_PRINT);
