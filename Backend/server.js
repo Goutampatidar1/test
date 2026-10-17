@@ -48,6 +48,20 @@ app.get("/vendor/delete-account", legalPageController.renderVendorDeleteAccount)
 app.get("/delivery/delete-account", legalPageController.renderDeliveryDeleteAccount);
 app.get("/driver/delete-account", legalPageController.renderDeliveryDeleteAccount);
 
+/** Deploy/build probe — confirms which folder the live Node process loaded. */
+const API_BUILD = "service-login-2026-10-17";
+app.get("/api/__build", (req, res) => {
+  res.json({
+    ok: true,
+    apiBuild: API_BUILD,
+    cwd: process.cwd(),
+    filename: __filename,
+    dirname: __dirname,
+    pid: process.pid,
+    uptimeSec: Math.round(process.uptime()),
+  });
+});
+
 app.use("/api", routes);
 
 app.use(notFound);
@@ -58,7 +72,7 @@ async function start() {
     await connectDatabase();
 
     app.listen(config.port, "0.0.0.0", () => {
-      console.log(`Server running on port ${config.port}`);
+      console.log(`Server running on port ${config.port} [${API_BUILD}] cwd=${process.cwd()}`);
       // background jobs: enquiry/banner/plan expiry, plan reminders, nightly profile scores
       require("./utils/scheduler").startScheduler();
     });
