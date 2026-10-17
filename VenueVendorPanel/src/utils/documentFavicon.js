@@ -56,13 +56,16 @@ function baseAsset(baseUrl, file) {
 export function applyDefaultDocumentFavicons(baseUrl = import.meta.env.BASE_URL || "/") {
   clearIconLinks();
   const ico = baseAsset(baseUrl, "favicon.ico");
-  const svg = baseAsset(baseUrl, "favicon.svg");
-  const png = baseAsset(baseUrl, "favicon-32.png");
+  const png32 = baseAsset(baseUrl, "favicon-32.png");
+  const png48 = baseAsset(baseUrl, "favicon-48.png");
+  const png192 = baseAsset(baseUrl, "favicon-192.png");
+  const apple = baseAsset(baseUrl, "apple-touch-icon.png");
 
   appendIconLink({ rel: "icon", href: ico, type: "image/x-icon", sizes: "any" });
-  appendIconLink({ rel: "icon", href: svg, type: "image/svg+xml" });
-  appendIconLink({ rel: "icon", href: png, type: "image/png", sizes: "32x32" });
-  appendIconLink({ rel: "apple-touch-icon", href: png });
+  appendIconLink({ rel: "icon", href: png48, type: "image/png", sizes: "48x48" });
+  appendIconLink({ rel: "icon", href: png32, type: "image/png", sizes: "32x32" });
+  appendIconLink({ rel: "icon", href: png192, type: "image/png", sizes: "192x192" });
+  appendIconLink({ rel: "apple-touch-icon", href: apple });
   appendIconLink({ rel: "shortcut icon", href: ico, type: "image/x-icon" });
 }
 
