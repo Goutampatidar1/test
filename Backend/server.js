@@ -49,8 +49,7 @@ app.get("/delivery/delete-account", legalPageController.renderDeliveryDeleteAcco
 app.get("/driver/delete-account", legalPageController.renderDeliveryDeleteAccount);
 
 /** Deploy/build probe — confirms which folder the live Node process loaded. */
-const API_BUILD = "https-safe-5017-2026-10-17";
-let listenInfo = null;
+const API_BUILD = "http-only-recover-2026-10-17";
 app.get("/api/__build", (req, res) => {
   res.json({
     ok: true,
@@ -60,7 +59,6 @@ app.get("/api/__build", (req, res) => {
     dirname: __dirname,
     pid: process.pid,
     uptimeSec: Math.round(process.uptime()),
-    listen: listenInfo,
   });
 });
 
@@ -73,20 +71,11 @@ async function start() {
   try {
     await connectDatabase();
 
-    const { listenHttpAndMaybeHttps } = require("./utils/sslListen");
-    await listenHttpAndMaybeHttps(app, {
-      port: config.port,
-      onListening: (info) => {
-        listenInfo = info;
-        console.log(
-          `Server listening [${API_BUILD}] mode=${info.mode}` +
-            (info.http ? ` http=${info.http}` : "") +
-            (info.https ? ` https=${info.https}` : "") +
-            ` cwd=${process.cwd()}`
-        );
-        // background jobs: enquiry/banner/plan expiry, plan reminders, nightly profile scores
-        require("./utils/scheduler").startScheduler();
-      },
+    // Temporary: plain HTTP only so Hostinger Node boots (bad SSL pair was crashing HTTPS mux).
+    // Re-enable HTTPS mux after a verified cert/key modulus match is on disk.
+    app.listen(config.port, "0.0.0.0", () => {
+      console.log(`Server running on port ${config.port} [${API_BUILD}] cwd=${process.cwd()}`);
+      require("./utils/scheduler").startScheduler();
     });
   } catch (err) {
     console.error("Error starting server:", err.message);
