@@ -102,20 +102,18 @@ $result = [
   'actions' => [],
 ];
 
-// Try to signal Node if tools exist in this jail
-$sig = oho_sh(
-  'PID=$(lsof -t -iTCP:5017 -sTCP:LISTEN 2>/dev/null | head -1); '
-  . 'echo "pid=$PID"; '
-  . 'if [ -n "$PID" ]; then kill "$PID"; echo killed; else echo none; fi'
-);
-$result['actions'][] = ['signal' => $sig];
+// Do NOT kill the Node process — Hostinger may wrap :5017 with TLS; killing breaks https://host:5017.
+$result['actions'][] = ['signal' => 'skipped (avoid breaking Hostinger TLS wrapper)'];
 
-usleep(1500000);
+usleep(500000);
 $result['verifyBuild'] = oho_sh('curl -s -m 5 http://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyCheckPhone'] = oho_sh(
   'curl -s -m 5 -X POST http://127.0.0.1:5017/api/vendor/auth/check-phone '
   . '-H "Content-Type: application/json" '
   . '-d \'{"phone":"9650555555","purpose":"vendor_login"}\' || echo FAIL'
+);
+$result['verifyVia443'] = oho_sh(
+  'curl -s -m 5 https://127.0.0.1/api/__build -k || curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL'
 );
 
 @file_put_contents($docRoot . '/api-reload-status.json', json_encode($result, JSON_PRETTY_PRINT));
