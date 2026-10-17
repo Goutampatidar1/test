@@ -100,11 +100,26 @@ function oho_pick_ssl_pair($home, $domain = 'ohoebazar.com') {
     return null;
   }
 
-  // Prefer domain certs first, then verify modulus against every key.
+  // Prefer Let's Encrypt / publicly trusted certs for the domain, then domain name match.
   usort($certs, function ($a, $b) use ($needle) {
-    $aHit = stripos(basename($a), $needle) !== false ? 0 : 1;
-    $bHit = stripos(basename($b), $needle) !== false ? 0 : 1;
-    return $aHit - $bHit;
+    $score = function ($path) use ($needle) {
+      $s = 0;
+      $bn = basename($path);
+      if (stripos($bn, $needle) !== false) $s += 10;
+      $iss = oho_sh('openssl x509 -noout -issuer -in ' . escapeshellarg($path));
+      $sub = oho_sh('openssl x509 -noout -subject -in ' . escapeshellarg($path));
+      if ($iss && (stripos($iss, "Let's Encrypt") !== false || stripos($iss, 'R3') !== false || stripos($iss, 'YR1') !== false || stripos($iss, 'E1') !== false)) {
+        $s += 50;
+      }
+      if ($iss && stripos($iss, 'self') !== false) $s -= 40;
+      if ($sub && stripos($sub, 'ohoebazar.com') !== false) $s += 20;
+      // Self-signed: subject == issuer
+      if ($sub && $iss && preg_replace('/^subject=/i', '', $sub) === preg_replace('/^issuer=/i', '', $iss)) {
+        $s -= 60;
+      }
+      return $s;
+    };
+    return $score($b) - $score($a);
   });
 
   foreach ($certs as $cert) {
@@ -314,6 +329,27 @@ usleep(300000);
 $result['verifyHttp5017'] = oho_sh('curl -s -m 5 http://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyHttps5017'] = oho_sh('curl -sk -m 5 https://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyVia443'] = oho_sh('curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL');
+
+// Inventory certs so we can pick Let's Encrypt (not self-signed) for :5017.
+$certInventory = [];
+$certDir = rtrim($home, '/') . '/ssl/certs';
+if (is_dir($certDir)) {
+  foreach (scandir($certDir) ?: [] as $name) {
+    if ($name === '.' || $name === '..') continue;
+    if (!preg_match('/\.(crt|pem)$/i', $name)) continue;
+    if (stripos($name, 'bundle') !== false) continue;
+    $full = $certDir . '/' . $name;
+    $certInventory[] = [
+      'file' => $name,
+      'subject' => oho_sh('openssl x509 -noout -subject -in ' . escapeshellarg($full)),
+      'issuer' => oho_sh('openssl x509 -noout -issuer -in ' . escapeshellarg($full)),
+    ];
+  }
+}
+$result['certInventory'] = $certInventory;
+$result['fullchainHead'] = is_file($nodeRoot . '/.oho-fullchain.pem')
+  ? oho_sh('openssl x509 -noout -subject -issuer -in ' . escapeshellarg($nodeRoot . '/.oho-fullchain.pem'))
+  : null;
 
 @file_put_contents($docRoot . '/api-reload-status.json', json_encode($result, JSON_PRETTY_PRINT));
 echo json_encode($result, JSON_PRETTY_PRINT);
