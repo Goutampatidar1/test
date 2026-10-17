@@ -5,6 +5,7 @@ import {
   venueVendorListCategories,
 } from "../../api/venueVendorCatalog.js";
 import { publicListCategories } from "../../api/publicCatalog.js";
+import { publicListCities, publicListSubDistricts } from "../../api/publicLocations.js";
 import { vendorCreateVenue, vendorUpdateVenue } from "../../api/vendorVenues.js";
 import { mediaUrl } from "../../media.js";
 import { resolveServiceCategoryImage } from "../../utils/serviceCategoryIcon.js";
@@ -31,6 +32,8 @@ function emptyForm() {
     priceType: "full",
     price: "",
     tokenAmount: "",
+    cityId: "",
+    subDistrictId: "",
   };
 }
 
@@ -62,6 +65,8 @@ function venueToFormValues(venue, initialCategoryId = "") {
     priceType,
     price: inferPriceValue(venue, priceType),
     tokenAmount: venue.tokenAmount ?? "",
+    cityId: venue.subDistrict?.city?._id || venue.subDistrict?.city || "",
+    subDistrictId: venue.subDistrict?._id || venue.subDistrict || "",
   };
 }
 
@@ -80,6 +85,8 @@ function collectExistingPhotos(venue) {
 
 function validate(values, mode, photoCount) {
   if (!values.category) return "Select a service type.";
+  if (!values.cityId) return "Select the city where you provide this service.";
+  if (!values.subDistrictId) return "Select the tehsil where you provide this service.";
   if (!values.name.trim()) return "Service name is required.";
   if (values.name.trim().length > LIMITS.name) {
     return `Service name cannot exceed ${LIMITS.name} characters.`;
@@ -125,6 +132,47 @@ export function VenueForm({
   const [categories, setCategories] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
+  const [cities, setCities] = useState([]);
+  const [subDistricts, setSubDistricts] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    publicListCities({ limit: 500 })
+      .then((rows) => {
+        if (!cancelled) setCities(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const savedCity = String(initialVenue?.city || "").trim().toLowerCase();
+    if (values.cityId || !savedCity || !cities.length) return;
+    const match = cities.find((row) => String(row.name || "").trim().toLowerCase() === savedCity);
+    if (match) setValues((prev) => (prev.cityId ? prev : { ...prev, cityId: String(match._id) }));
+  }, [cities, initialVenue, values.cityId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!values.cityId) {
+      setSubDistricts([]);
+      return undefined;
+    }
+    publicListSubDistricts({ city: values.cityId, limit: 500 })
+      .then((rows) => {
+        if (!cancelled) setSubDistricts(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSubDistricts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [values.cityId]);
 
   useEffect(() => {
     setValues(venueToFormValues(initialVenue, initialCategoryId));
@@ -233,6 +281,7 @@ export function VenueForm({
 
     const businessAddress = String(user?.businessAddress || "").trim();
     const existingAddress = String(initialVenue?.address || "").trim();
+    const selectedCity = cities.find((row) => String(row._id) === String(values.cityId));
     const payload = {
       name: values.name.trim(),
       shortDescription: values.shortDescription.trim(),
@@ -242,6 +291,8 @@ export function VenueForm({
       price: values.price,
       tokenAmount: values.tokenAmount,
       amenities: [],
+      city: selectedCity?.name || "",
+      subDistrictId: values.subDistrictId,
     };
     // Simplified service form has no address field. Never send "" — backend rejects empty
     // address on update. Prefer existing venue address, then profile business address.
@@ -381,6 +432,50 @@ export function VenueForm({
               placeholder="e.g. DJ + Sound + Light"
               maxLength={LIMITS.shortDescription}
             />
+          </div>
+
+          <div className="service-add-form__field">
+            <label htmlFor={id("cityId")} className="service-add-form__label">
+              City
+            </label>
+            <select
+              id={id("cityId")}
+              className="form-select service-add-form__input"
+              value={values.cityId}
+              onChange={(e) => setValues((prev) => ({ ...prev, cityId: e.target.value, subDistrictId: "" }))}
+              required
+            >
+              <option value="">Select city</option>
+              {cities.map((row) => (
+                <option key={row._id} value={row._id}>
+                  {row.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="service-add-form__field">
+            <label htmlFor={id("subDistrictId")} className="service-add-form__label">
+              Tehsil
+            </label>
+            <select
+              id={id("subDistrictId")}
+              className="form-select service-add-form__input"
+              value={values.subDistrictId}
+              onChange={handleChange("subDistrictId")}
+              required
+              disabled={!values.cityId}
+            >
+              <option value="">Select tehsil</option>
+              {subDistricts.map((row) => (
+                <option key={row._id} value={row._id}>
+                  {row.name}
+                </option>
+              ))}
+            </select>
+            <div className="form-text service-add-form__help">
+              Customers in this area will see this service in the app.
+            </div>
           </div>
 
           <div className="service-add-form__field">

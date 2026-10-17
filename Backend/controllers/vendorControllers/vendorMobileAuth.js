@@ -16,7 +16,7 @@ const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { normalizePhone } = require("../../utils/phone");
 const { resolveVendorApprovalRequired } = require("../../utils/vendorApproval");
 const { queueNotifyAllAdmins } = require("../../utils/adminInbox");
-const { generateOtp, otpExpiryDate, registrationSessionExpiryDate, isOtpExpired, OTP_TTL_MS, REGISTER_SESSION_TTL_MS, devOnlyOtp } = require("../../utils/otp");
+const { resolveOtpForPhone, otpExpiryDate, registrationSessionExpiryDate, isOtpExpired, OTP_TTL_MS, REGISTER_SESSION_TTL_MS, devOnlyOtp } = require("../../utils/otp");
 const { sendSuccess } = require("../../utils/apiResponse");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
@@ -63,7 +63,7 @@ function normalizeOptionalGender(value) {
   return normalized;
 }
 
-/** Mobile login: allow pending approval; block rejected/suspended/blocked/inactive. */
+/** Allows pending approval; blocks rejected/suspended/blocked/inactive. */
 function assertVendorCanAuthenticate(vendor) {
   if (vendor.status === "blocked") {
     throw new AppError("Account is blocked", 403);
@@ -80,6 +80,14 @@ function assertVendorCanAuthenticate(vendor) {
   }
   if (vendor.approvalStatus === "suspended") {
     throw new AppError("Vendor account is suspended", 403);
+  }
+}
+
+/** OTP login needs an admin-approved account; refresh tokens keep the softer check above. */
+function assertVendorCanLoginWithOtp(vendor) {
+  assertVendorCanAuthenticate(vendor);
+  if (vendor.approvalStatus !== "approved") {
+    throw new AppError("Your account is pending admin approval. You can log in once it is approved.", 403);
   }
 }
 
@@ -314,14 +322,17 @@ async function createVendorFromRegister(req, phoneNorm, body) {
   }
 }
 
-exports.sendOtp = asyncHandler(async (req, res) => {
+/**
+ * Check if phone can proceed to OTP screen.
+ * Call this BEFORE sendOtp to avoid wasting OTPs on blocked/pending vendors.
+ */
+exports.checkPhone = asyncHandler(async (req, res) => {
   const { phone, purpose } = req.body || {};
   const phoneNorm = normalizePhone(phone);
-  const otpPurpose = String(purpose ?? OTP_PURPOSE_REGISTER).trim().toLowerCase();
+  let otpPurpose = String(purpose ?? "").trim().toLowerCase() || OTP_PURPOSE_LOGIN;
 
-  if (!ALLOWED_OTP_PURPOSES.has(otpPurpose)) {
-    throw new AppError("Invalid purpose. Use vendor_register or vendor_login", 400);
-  }
+  if (otpPurpose === "login") otpPurpose = OTP_PURPOSE_LOGIN;
+  if (otpPurpose === "register") otpPurpose = OTP_PURPOSE_REGISTER;
 
   const { vendor: existing } = await findVendorByPhone(phone);
 
@@ -329,14 +340,59 @@ exports.sendOtp = asyncHandler(async (req, res) => {
     if (!existing) {
       throw new AppError("No account found with this phone number. Please sign up", 404);
     }
-    assertVendorCanAuthenticate(existing);
+    // Check if vendor can login (throws error for pending/blocked/rejected)
+    assertVendorCanLoginWithOtp(existing);
+    
+    return sendSuccess(res, "Phone verified. You can proceed to OTP", {
+      phone: phoneNorm,
+      canProceed: true,
+      purpose: otpPurpose,
+    });
   }
 
-  if (otpPurpose === OTP_PURPOSE_REGISTER && existing) {
+  // For registration
+  if (existing) {
     throw new AppError("Phone number is already registered. Please log in", 409);
   }
 
-  const otp = generateOtp();
+  return sendSuccess(res, "Phone available for registration", {
+    phone: phoneNorm,
+    canProceed: true,
+    purpose: otpPurpose,
+  });
+});
+
+exports.sendOtp = asyncHandler(async (req, res) => {
+  const { phone, purpose } = req.body || {};
+  const phoneNorm = normalizePhone(phone);
+  let otpPurpose = String(purpose ?? "").trim().toLowerCase() || OTP_PURPOSE_REGISTER;
+
+  // Accept "login" as alias for "vendor_login"
+  if (otpPurpose === "login") otpPurpose = OTP_PURPOSE_LOGIN;
+  // Accept "register" as alias for "vendor_register"  
+  if (otpPurpose === "register") otpPurpose = OTP_PURPOSE_REGISTER;
+
+  if (!ALLOWED_OTP_PURPOSES.has(otpPurpose)) {
+    throw new AppError("Invalid purpose. Use vendor_register or vendor_login", 400);
+  }
+
+  const { vendor: existing } = await findVendorByPhone(phone);
+
+  // If vendor exists, always check if they can login (block pending/rejected/blocked)
+  if (existing) {
+    if (otpPurpose === OTP_PURPOSE_REGISTER) {
+      throw new AppError("Phone number is already registered. Please log in", 409);
+    }
+    // Block pending vendors BEFORE sending OTP
+    assertVendorCanLoginWithOtp(existing);
+  } else {
+    // No vendor exists
+    if (otpPurpose === OTP_PURPOSE_LOGIN) {
+      throw new AppError("No account found with this phone number. Please sign up", 404);
+    }
+  }
+
+  const otp = resolveOtpForPhone(phoneNorm);
   const otpExpire = otpExpiryDate();
   await saveVendorPhoneOtp(phoneNorm, otpPurpose, otp, otpExpire);
 
@@ -352,8 +408,13 @@ exports.sendOtp = asyncHandler(async (req, res) => {
 exports.verifyOtp = asyncHandler(async (req, res) => {
   const { phone, otp, purpose, fcm_id } = req.body || {};
   const phoneNorm = normalizePhone(phone);
-  const otpPurpose = String(purpose ?? OTP_PURPOSE_REGISTER).trim().toLowerCase();
+  let otpPurpose = String(purpose ?? OTP_PURPOSE_REGISTER).trim().toLowerCase();
   const otpValue = String(otp ?? "").trim();
+
+  // Accept "login" as alias for "vendor_login"
+  if (otpPurpose === "login") otpPurpose = OTP_PURPOSE_LOGIN;
+  // Accept "register" as alias for "vendor_register"
+  if (otpPurpose === "register") otpPurpose = OTP_PURPOSE_REGISTER;
 
   if (!otpValue) {
     throw new AppError("OTP is required", 400);
@@ -368,7 +429,7 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
     if (!vendor) {
       throw new AppError("Account not found", 404);
     }
-    assertVendorCanAuthenticate(vendor);
+    assertVendorCanLoginWithOtp(vendor);
     if (fcm_id !== undefined) {
       vendor.fcm_id = normalizeOptional(fcm_id);
       await vendor.save();

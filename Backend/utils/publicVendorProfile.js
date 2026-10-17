@@ -258,7 +258,7 @@ async function listVendorProducts(vendorId, baseUrl, { page = 1, limit = 20, ski
   ]);
 
   const vendor = await Vendor.findById(vendorId)
-    .select("businessName shopLogo")
+    .select("businessName shopLogo city subDistrict")
     .lean();
 
   const ratingStatsMap = await getRatingStatsForProducts(products.map((product) => product._id));

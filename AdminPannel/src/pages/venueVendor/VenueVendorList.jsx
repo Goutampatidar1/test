@@ -16,6 +16,7 @@ import { ListPagination } from "../../components/ListPagination.jsx";
 import { AdminSearchField } from "../../components/AdminSearchField.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
 import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholder.jsx";
+import { VendorTypeBadge } from "../../components/VendorTypeBadge.jsx";
 
 function StatusBadge({ status }) {
   const s = (status || "").toLowerCase();
@@ -144,6 +145,7 @@ export function VenueVendorList() {
               <th>Vendor Info</th>
               <th>Contact Info</th>
               <th>Business Details</th>
+              <th>Vendor Type</th>
               <th>PAN / GST</th>
               <th>Approval Status</th>
               <th>Status</th>
@@ -152,7 +154,7 @@ export function VenueVendorList() {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={8}><p className="table-placeholder">No service vendors found.</p></td></tr>
+              <tr><td colSpan={9}><p className="table-placeholder">No service vendors found.</p></td></tr>
             ) : rows.map((row, idx) => (
               <ClickableTableRow key={row._id} to={row._id}>
                 <td>{(page - 1) * limit + idx + 1}</td>
@@ -177,6 +179,9 @@ export function VenueVendorList() {
                 <td>
                   <div className="data-table__strong">{row.businessName || "—"}</div>
                   <div className="user-cell__muted">{row.businessPhone || "—"}</div>
+                </td>
+                <td>
+                  <VendorTypeBadge type={row.vendorPanelType} fallback="service" />
                 </td>
                 <td>
                   <div className="user-cell__muted">{row.panNumber || "—"}</div>

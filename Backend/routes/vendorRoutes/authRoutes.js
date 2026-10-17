@@ -9,6 +9,7 @@ const {
 const router = express.Router();
 
 // Mobile app (OTP + multi-step register)
+router.post("/check-phone", authController.checkPhone);
 router.post("/otp/send", authController.sendOtp);
 router.post("/otp/verify", authController.verifyOtp);
 router.post("/register/complete", optionalVendorRegisterFiles, authController.completeRegister);

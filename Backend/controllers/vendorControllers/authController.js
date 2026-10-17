@@ -275,6 +275,7 @@ exports.getMe = asyncHandler(async (req, res) => {
   res.json({ user: toPublicProfile(req.user) });
 });
 
+exports.checkPhone = mobileAuth.checkPhone;
 exports.sendOtp = mobileAuth.sendOtp;
 exports.verifyOtp = mobileAuth.verifyOtp;
 exports.completeRegister = mobileAuth.completeRegister;

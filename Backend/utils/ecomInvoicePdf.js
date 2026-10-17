@@ -83,7 +83,7 @@ function writeInvoicePdfFile(invoiceData, relativePath) {
     doc.moveDown(1);
     const tableTop = doc.y;
     const colX = [48, 220, 280, 340, 410, 490];
-    const headers = ["Item", "SKU", "Qty", "Unit", "Total"];
+    const headers = ["Item", "SKU", "Qty", "Unit", "Line total"];
 
     doc.font("Helvetica-Bold").fontSize(9);
     headers.forEach((header, index) => {
@@ -116,21 +116,73 @@ function writeInvoicePdfFile(invoiceData, relativePath) {
     doc.moveDown(2);
     const totalsY = Math.max(rowY + 12, doc.y);
     doc.font("Helvetica").fontSize(10);
-    doc.text(`Subtotal: ${formatPdfInrLabel(summary.subTotalLabel, summary.subTotal)}`, 360, totalsY, {
-      align: "right",
-      width: 180,
-    });
+    let totalLineY = totalsY;
+    const subtotalLabel = summary.discountAlreadyIncluded
+      ? "Subtotal (after item discounts)"
+      : "Subtotal";
     doc.text(
-      `Shipping: ${formatPdfInrLabel(summary.shippingCostLabel, summary.shippingCost)}`,
+      `${subtotalLabel}: ${formatPdfInrLabel(summary.subTotalLabel, summary.subTotal)}`,
       360,
-      totalsY + 16,
+      totalLineY,
       { align: "right", width: 180 }
     );
+    totalLineY += 16;
+    if (Number(summary.discountTotal) > 0) {
+      const discountLabel = summary.discountAlreadyIncluded
+        ? "Discount saved (included above)"
+        : "Discount";
+      doc.text(
+        `${discountLabel}: ${formatPdfInrAmount(summary.discountTotal)}`,
+        360,
+        totalLineY,
+        { align: "right", width: 180 }
+      );
+      totalLineY += 16;
+    }
+    if (Number(summary.taxTotal) > 0) {
+      doc.text(`Tax: ${formatPdfInrAmount(summary.taxTotal)}`, 360, totalLineY, {
+        align: "right",
+        width: 180,
+      });
+      totalLineY += 16;
+    }
+    if (Number(summary.shippingCost) > 0) {
+      doc.text(
+        `Shipping: ${formatPdfInrLabel(summary.shippingCostLabel, summary.shippingCost)}`,
+        360,
+        totalLineY,
+        { align: "right", width: 180 }
+      );
+      totalLineY += 16;
+    }
+    if (Number(summary.tokenAmount) > 0) {
+      doc.text(
+        `Booking deposit due (${Number(summary.tokenAmountPercentage) || 0}%): ${formatPdfInrAmount(summary.tokenAmount)}`,
+        360,
+        totalLineY,
+        { align: "right", width: 180 }
+      );
+      totalLineY += 16;
+    }
+    if (Number(summary.amountPaid) > 0) {
+      doc.text(`Amount paid: ${formatPdfInrAmount(summary.amountPaid)}`, 360, totalLineY, {
+        align: "right",
+        width: 180,
+      });
+      totalLineY += 16;
+    }
+    if (Number(summary.remainingAmount) > 0) {
+      doc.text(`Remaining: ${formatPdfInrAmount(summary.remainingAmount)}`, 360, totalLineY, {
+        align: "right",
+        width: 180,
+      });
+      totalLineY += 16;
+    }
     doc.font("Helvetica-Bold").fontSize(12);
     doc.text(
       `Grand total: ${formatPdfInrLabel(summary.totalAmountLabel, summary.totalAmount)}`,
       360,
-      totalsY + 36,
+      totalLineY + 4,
       { align: "right", width: 180 }
     );
 

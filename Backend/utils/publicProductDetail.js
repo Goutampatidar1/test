@@ -157,7 +157,7 @@ async function fetchSimilarProducts(product, baseUrl, { userId, wishlistSet, myR
       approvalStatus: "approved",
       isOpen: { $ne: false },
     })
-      .select("businessName shopLogo")
+      .select("businessName shopLogo city subDistrict")
       .lean(),
     getRatingStatsForProducts(similar.map((item) => item._id)),
   ]);

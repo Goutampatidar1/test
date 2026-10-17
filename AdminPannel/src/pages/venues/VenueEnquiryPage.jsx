@@ -172,22 +172,23 @@ export function VenueEnquiryPage() {
               placeholder="Enquiry no., name or phone"
               aria-label="Search enquiries"
             />
-            <select
-              className="user-field__input"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              style={{ maxWidth: 200 }}
-              aria-label="Filter by status"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <label className="user-field" style={{ margin: 0, width: 200 }}>
+              <select
+                className="user-field__input"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Filter by status"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
         <div className="table-scroll">

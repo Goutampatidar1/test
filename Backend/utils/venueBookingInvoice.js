@@ -174,7 +174,9 @@ function buildVenueInvoicePayload(order, user, venue, baseUrl) {
   </table>
   <div class="totals">
     <div>Venue fee: <strong>${escapeHtml(amounts.venueFeeLabel)}</strong></div>
-    ${amounts.tokenAmount > 0 ? `<div>Token paid (${escapeHtml(amounts.tokenAmountPercentage)}%): <strong>${escapeHtml(amounts.tokenAmountLabel)}</strong></div>` : ""}
+    ${amounts.discountTotal > 0 ? `<div>Discount: <strong>−${escapeHtml(formatInrAmount(amounts.discountTotal))}</strong></div>` : ""}
+    ${amounts.taxTotal > 0 ? `<div>Tax: <strong>${escapeHtml(formatInrAmount(amounts.taxTotal))}</strong></div>` : ""}
+    ${amounts.tokenAmount > 0 ? `<div>Booking deposit due (${escapeHtml(amounts.tokenAmountPercentage)}%): <strong>${escapeHtml(amounts.tokenAmountLabel)}</strong></div>` : ""}
     ${amounts.amountPaid > 0 ? `<div>Amount paid: <strong>${escapeHtml(amounts.amountPaidLabel)}</strong></div>` : ""}
     ${amounts.remainingAmount > 0 ? `<div>Remaining: <strong>${escapeHtml(amounts.remainingAmountLabel)}</strong></div>` : ""}
     <div class="grand">Total: ${escapeHtml(amounts.grandTotalLabel)}</div>
@@ -236,8 +238,14 @@ function buildVenueInvoicePayload(order, user, venue, baseUrl) {
     summary: {
       subTotal: amounts.subTotal,
       subTotalLabel: amounts.subTotalLabel,
+      discountTotal: amounts.discountTotal,
+      taxTotal: amounts.taxTotal,
       shippingCost: 0,
       shippingCostLabel: formatInrAmount(0),
+      tokenAmount: amounts.tokenAmount,
+      tokenAmountPercentage: amounts.tokenAmountPercentage,
+      amountPaid: amounts.amountPaid,
+      remainingAmount: amounts.remainingAmount,
       totalAmount: amounts.grandTotal,
       totalAmountLabel: amounts.grandTotalLabel,
     },

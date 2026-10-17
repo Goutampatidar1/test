@@ -119,7 +119,7 @@ async function listPresenceProducts({ baseUrl = "", limit } = {}) {
     ...activePublicVendorFilter(),
     _id: { $in: toObjectIds(subs.map((s) => s.owner)) },
   })
-    .select("_id businessName shopLogo")
+    .select("_id businessName shopLogo city subDistrict")
     .lean();
   const vendorMap = new Map(openVendors.map((v) => [String(v._id), v]));
 

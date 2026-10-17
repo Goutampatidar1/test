@@ -19,6 +19,24 @@ export async function vendorPanelVerifyOtp({ phone, otp, panelMode }) {
   }
 }
 
+export async function vendorPanelSendRegisterOtp({ phone, vendorPanelType }) {
+  try {
+    const { data } = await api.post("/vendor-panel/auth/register/otp/send", { phone, vendorPanelType });
+    return data;
+  } catch (error) {
+    normalizeApiError(error);
+  }
+}
+
+export async function vendorPanelVerifyRegisterOtp({ phone, otp }) {
+  try {
+    const { data } = await api.post("/vendor-panel/auth/register/otp/verify", { phone, otp });
+    return data;
+  } catch (error) {
+    normalizeApiError(error);
+  }
+}
+
 export async function vendorPanelRegister(fields, files = {}) {
   const fd = new FormData();
   Object.entries(fields).forEach(([key, value]) => {

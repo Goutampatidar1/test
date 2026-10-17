@@ -7,6 +7,7 @@ const { sendSuccess } = require("../../utils/apiResponse");
 const { getPublicBaseUrl } = require("../../utils/mediaUrl");
 const { resolveSubDistrictFields } = require("../../utils/shippingAddress");
 const { getFeatureSettings } = require("../../utils/appFeatureSettings");
+const { resolveRequestArea } = require("../../utils/areaFilter");
 const {
   recordRecentView,
   listRecentlyViewed,
@@ -72,12 +73,12 @@ exports.listRecentlyViewed = asyncHandler(async (req, res) => {
 exports.listSuggestions = asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 30);
   const baseUrl = getPublicBaseUrl(req);
-  const user = await User.findById(req.user._id).select("city subDistrict").lean();
+  const area = await resolveRequestArea(req);
   const [suggestions, vendors] = await Promise.all([
-    loadSuggestions(req, { limit, baseUrl }),
+    loadSuggestions(req, { limit, baseUrl, city: area.city }),
     req.query.vendors === "0"
       ? []
-      : loadSuggestedVendors(req, { limit: 6, baseUrl, city: user?.city, subDistrict: user?.subDistrict }),
+      : loadSuggestedVendors(req, { limit: 6, baseUrl, city: area.city, subDistrict: area.subDistrict }),
   ]);
   const features = await getFeatureSettings();
   return res.status(200).json({

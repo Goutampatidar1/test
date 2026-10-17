@@ -142,7 +142,43 @@ curl http://127.0.0.1:5000/api
 
 Both panels need the API URL **at build time** (`VITE_*` variables are baked into the bundle).
 
-### Admin Panel
+### Combined root deployment (public site + `/admin` + `/vendor`)
+
+For one domain with the public website at `/`, the admin panel at `/admin/`,
+and the venue vendor panel at `/vendor/`, use
+[`deploy/public_html.htaccess`](../deploy/public_html.htaccess).
+
+The document root must contain the built files in this layout:
+
+```text
+public_html/
+├── .htaccess
+├── index.html, assets/, media/       # OhoEBazarWebsite/dist
+├── admin/index.html, admin/assets/   # AdminPannel/dist
+└── vendor/index.html, vendor/assets/ # VenueVendorPanel/dist
+```
+
+Build the admin panel after the `/admin/` base-path change:
+
+```bash
+cd AdminPannel
+npm run build
+```
+
+The vendor panel already uses `/vendor/` in production:
+
+```bash
+cd VenueVendorPanel
+npm run build
+```
+
+Copy each `dist` directory as shown above, copy
+`deploy/public_html.htaccess` to `public_html/.htaccess`, and enable
+`rewrite`, `proxy`, `proxy_http`, and `headers` in Apache. The `.htaccess`
+proxies `/api`, `/uploads`, `/view`, and the legal pages to Node on
+`127.0.0.1:5017`.
+
+### Separate admin hostname
 
 Create `AdminPannel/.env.production`:
 

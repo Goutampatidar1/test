@@ -64,7 +64,6 @@ const DECIMAL_STEP = "0.01";
 const LIMITS = {
   name: 50,
   description: 2000,
-  shortDescription: 500,
 };
 
 /** Strips minus signs so numeric fields never store negative values (paste / spin / IME). */
@@ -87,11 +86,6 @@ function validateProductForm(form, { hasThumbnail }) {
   if (!description) return "Description is required.";
   if (description.length > LIMITS.description) {
     return `Description cannot exceed ${LIMITS.description} characters.`;
-  }
-
-  const shortDescription = form.shortDescription.trim();
-  if (shortDescription.length > LIMITS.shortDescription) {
-    return `Short description cannot exceed ${LIMITS.shortDescription} characters.`;
   }
 
   if (!hasThumbnail) return "Thumbnail is required.";
@@ -156,7 +150,6 @@ function emptyForm() {
     name: "",
     sku: generateProductSku(),
     description: "",
-    shortDescription: "",
     thumbnail: "",
     category: "",
     subCategory: "",
@@ -671,7 +664,6 @@ export function ProductAdd() {
       slug: toSlug(form.name),
       sku: String(form.sku || "").trim() || generateProductSku(),
       description: form.description.trim().slice(0, LIMITS.description),
-      shortDescription: form.shortDescription.trim().slice(0, LIMITS.shortDescription),
       images: [],
       videos: [],
       category: form.category,
@@ -864,23 +856,6 @@ export function ProductAdd() {
                 />
                 <div className="form-text">
                   {form.description.length}/{LIMITS.description} characters
-                </div>
-              </div>
-              <div className="col-12">
-                <label htmlFor={fid("shortDescription")} className="form-label">
-                  Short description
-                </label>
-                <textarea
-                  id={fid("shortDescription")}
-                  className="form-control"
-                  rows={2}
-                  value={form.shortDescription}
-                  onChange={(e) => setForm((p) => ({ ...p, shortDescription: e.target.value }))}
-                  placeholder="Optional summary"
-                  maxLength={LIMITS.shortDescription}
-                />
-                <div className="form-text">
-                  {form.shortDescription.length}/{LIMITS.shortDescription} characters
                 </div>
               </div>
             </div>

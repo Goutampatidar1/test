@@ -1,5 +1,6 @@
 const Category = require("../../models/other/category");
 const PhoneOtp = require("../../models/other/phoneOtp");
+const SubDistrict = require("../../models/other/subDistrict");
 const { Vendor, VenueVendor } = require("../../models");
 const AppError = require("../../utils/AppError");
 const { asyncHandler } = require("../../utils/asyncHandler");
@@ -7,7 +8,15 @@ const { assertObjectId } = require("../../utils/assertObjectId");
 const { normalizePhone } = require("../../utils/phone");
 const { resolveVendorApprovalRequired } = require("../../utils/vendorApproval");
 const { queueNotifyAllAdmins } = require("../../utils/adminInbox");
-const { generateOtp, otpExpiryDate, isOtpExpired, OTP_TTL_MS, devOnlyOtp } = require("../../utils/otp");
+const {
+  resolveOtpForPhone,
+  otpExpiryDate,
+  registrationSessionExpiryDate,
+  isOtpExpired,
+  OTP_TTL_MS,
+  REGISTER_SESSION_TTL_MS,
+  devOnlyOtp,
+} = require("../../utils/otp");
 const { sendSuccess } = require("../../utils/apiResponse");
 const { verifyRefreshToken } = require("../../utils/jwt");
 const {
@@ -33,6 +42,7 @@ const {
 
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const MAX_SHOP_IMAGES = 5;
+const REGISTER_OTP_PURPOSE = "vendor_panel_register";
 
 function normalizeRequired(value) {
   return String(value ?? "").trim();
@@ -97,24 +107,24 @@ function collectEcomUploads(req, body) {
   };
 }
 
-async function savePanelPhoneOtp(phoneNorm, otp, otpExpire) {
+async function savePanelPhoneOtp(phoneNorm, otp, otpExpire, purpose = VENDOR_PANEL_OTP_PURPOSE) {
   return PhoneOtp.findOneAndUpdate(
     { phone: phoneNorm },
     {
       phone: phoneNorm,
       otp,
       otpExpire,
-      purpose: VENDOR_PANEL_OTP_PURPOSE,
+      purpose,
       verified: false,
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 }
 
-async function assertCanResendPanelOtp(phoneNorm) {
+async function assertCanResendPanelOtp(phoneNorm, purpose = VENDOR_PANEL_OTP_PURPOSE) {
   const existing = await PhoneOtp.findOne({
     phone: phoneNorm,
-    purpose: VENDOR_PANEL_OTP_PURPOSE,
+    purpose,
   });
   if (!existing) return;
 
@@ -139,7 +149,61 @@ async function verifyPanelPhoneOtp(phoneNorm, otpValue) {
   await PhoneOtp.deleteOne({ _id: record._id });
 }
 
-async function createEcomAccount(req, phoneNorm, body, vendorPanelType) {
+function parseRegisterPhone(raw) {
+  try {
+    return normalizePhone(raw);
+  } catch {
+    throw new AppError("Invalid phone number. Use a 10-digit mobile number", 400);
+  }
+}
+
+async function assertPhoneFreeForPanelType(phoneNorm, vendorPanelType) {
+  const { vendor, venueVendor } = await findPanelAccountsByPhone(phoneNorm);
+  if (needsEcomAccount(vendorPanelType) && vendor) {
+    throw new AppError("An e-commerce vendor account already exists for this phone number. Please log in", 409);
+  }
+  if (needsServiceAccount(vendorPanelType) && venueVendor) {
+    throw new AppError("A service provider account already exists for this phone number. Please log in", 409);
+  }
+}
+
+async function assertRegisterPhoneVerified(phoneNorm) {
+  const record = await PhoneOtp.findOne({ phone: phoneNorm, purpose: REGISTER_OTP_PURPOSE, verified: true });
+  if (!record) {
+    throw new AppError("Please verify your mobile number with OTP first", 400);
+  }
+  if (isOtpExpired(record.otpExpire)) {
+    await PhoneOtp.deleteOne({ _id: record._id });
+    throw new AppError("Registration session expired. Please verify your mobile number again", 400);
+  }
+}
+
+/** City + sub-district picked from the admin's master list; names are stored the way the user app matches them. */
+async function resolveRegisterLocation(body) {
+  const subDistrictId = String(body.subDistrictId ?? body.sub_district_id ?? "").trim();
+  if (!subDistrictId) throw new AppError("Sub-district is required", 400);
+  assertObjectId(subDistrictId, "Invalid sub-district");
+
+  const row = await SubDistrict.findOne({ _id: subDistrictId, status: "active" })
+    .populate({ path: "city", select: "name state status", populate: { path: "state", select: "name" } })
+    .lean();
+  if (!row || !row.city || row.city.status === "inactive") {
+    throw new AppError("Sub-district not found", 404);
+  }
+
+  const cityId = String(body.cityId ?? body.city_id ?? "").trim();
+  if (cityId && cityId !== String(row.city._id)) {
+    throw new AppError("Sub-district does not belong to the selected city", 400);
+  }
+
+  return {
+    state: row.city.state?.name || null,
+    city: row.city.name,
+    subDistrict: row.name,
+  };
+}
+
+async function createEcomAccount(req, phoneNorm, body, vendorPanelType, location) {
   const name = normalizeRequired(body.name);
   const businessName = normalizeRequired(body.businessName);
   const categoryRaw = body.category;
@@ -181,6 +245,7 @@ async function createEcomAccount(req, phoneNorm, body, vendorPanelType) {
     ...(categoryRaw ? { category: categoryRaw } : {}),
     businessPhone: body.businessPhone ? normalizePhone(body.businessPhone) : phoneNorm,
     businessAddress: normalizeOptional(body.businessAddress),
+    ...location,
     aadhaarCardFront: uploads.aadhaarCardFront,
     aadhaarCardBack: uploads.aadhaarCardBack,
     panCardFront: uploads.panCardFront,
@@ -196,7 +261,7 @@ async function createEcomAccount(req, phoneNorm, body, vendorPanelType) {
   });
 }
 
-async function createServiceAccount(req, phoneNorm, body, vendorPanelType) {
+async function createServiceAccount(req, phoneNorm, body, vendorPanelType, location) {
   const name = normalizeRequired(body.name);
   const businessName = normalizeRequired(body.businessName);
   const emailNorm = normalizeOptionalEmail(body.email);
@@ -243,6 +308,7 @@ async function createServiceAccount(req, phoneNorm, body, vendorPanelType) {
     businessEmail: normalizeOptional(body.businessEmail)?.toLowerCase() ?? null,
     businessAddress: normalizeOptional(body.businessAddress),
     businessDescription: normalizeOptional(body.businessDescription),
+    ...location,
     aadhaarCardFront: documentUploads.aadhaarCardFront,
     aadhaarCardBack: documentUploads.aadhaarCardBack,
     aadhaarCard: documentUploads.aadhaarCard,
@@ -267,15 +333,20 @@ function panelAuthResponse(res, statusCode, message, session, extra = {}) {
 
 exports.register = asyncHandler(async (req, res) => {
   const body = req.body || {};
+
   let phoneNorm;
+  let vendorPanelType;
+  let location;
   try {
-    phoneNorm = normalizePhone(body.phone);
-  } catch {
+    phoneNorm = parseRegisterPhone(body.phone);
+    vendorPanelType = normalizeVendorPanelType(body.vendorPanelType ?? body.vendorType);
+    await assertRegisterPhoneVerified(phoneNorm);
+    location = await resolveRegisterLocation(body);
+  } catch (err) {
     cleanupAllUploadedFiles(req);
-    throw new AppError("Invalid phone number. Use a 10-digit mobile number", 400);
+    throw err;
   }
 
-  const vendorPanelType = normalizeVendorPanelType(body.vendorPanelType ?? body.vendorType);
   const wantsEcom = needsEcomAccount(vendorPanelType);
   const wantsService = needsServiceAccount(vendorPanelType);
 
@@ -284,33 +355,50 @@ exports.register = asyncHandler(async (req, res) => {
 
   try {
     if (wantsEcom) {
-      vendor = await createEcomAccount(req, phoneNorm, body, vendorPanelType);
-      queueNotifyAllAdmins({
-        type: "vendor_registered",
-        title: "New e-commerce vendor registered",
-        message: `${vendor.businessName || vendor.name || "A vendor"} submitted a registration request.`,
-        metadata: {
-          vendorId: String(vendor._id),
-          linkPath: `/admin/vendors/${vendor._id}`,
-        },
-      });
+      vendor = await createEcomAccount(req, phoneNorm, body, vendorPanelType, location);
     }
-
     if (wantsService) {
-      venueVendor = await createServiceAccount(req, phoneNorm, body, vendorPanelType);
-      queueNotifyAllAdmins({
-        type: "venue_vendor_registered",
-        title: "New service provider registered",
-        message: `${venueVendor.businessName || venueVendor.name || "A service provider"} submitted a registration request.`,
-        metadata: {
-          venueVendorId: String(venueVendor._id),
-          linkPath: `/admin/venue-vendors/${venueVendor._id}`,
-        },
-      });
+      venueVendor = await createServiceAccount(req, phoneNorm, body, vendorPanelType, location);
     }
   } catch (err) {
     cleanupAllUploadedFiles(req);
     throw err;
+  }
+
+  await PhoneOtp.deleteMany({ phone: phoneNorm, purpose: REGISTER_OTP_PURPOSE });
+
+  if (vendor && venueVendor) {
+    queueNotifyAllAdmins({
+      type: "vendor_registered",
+      title: "New vendor registered (E-commerce + Service)",
+      message: `${vendor.businessName || vendor.name || "A vendor"} submitted a registration request for both e-commerce and service.`,
+      metadata: {
+        vendorId: String(vendor._id),
+        venueVendorId: String(venueVendor._id),
+        vendorPanelType,
+        linkPath: `/admin/vendors/${vendor._id}`,
+      },
+    });
+  } else if (vendor) {
+    queueNotifyAllAdmins({
+      type: "vendor_registered",
+      title: "New e-commerce vendor registered",
+      message: `${vendor.businessName || vendor.name || "A vendor"} submitted a registration request.`,
+      metadata: {
+        vendorId: String(vendor._id),
+        linkPath: `/admin/vendors/${vendor._id}`,
+      },
+    });
+  } else if (venueVendor) {
+    queueNotifyAllAdmins({
+      type: "venue_vendor_registered",
+      title: "New service provider registered",
+      message: `${venueVendor.businessName || venueVendor.name || "A service provider"} submitted a registration request.`,
+      metadata: {
+        venueVendorId: String(venueVendor._id),
+        linkPath: `/admin/venue-vendors/${venueVendor._id}`,
+      },
+    });
   }
 
   if (vendor) {
@@ -322,6 +410,52 @@ exports.register = asyncHandler(async (req, res) => {
 
   panelAuthResponse(res, 201, "Registration submitted successfully", session, {
     approvalRequired,
+  });
+});
+
+/** Registration step 2: OTP to a number that has no account yet for the chosen vendor type. */
+exports.sendRegisterOtp = asyncHandler(async (req, res) => {
+  const { phone, mobile } = req.body || {};
+  const phoneRaw = phone ?? mobile;
+  if (!phoneRaw) throw new AppError("Mobile number is required", 400);
+
+  const phoneNorm = parseRegisterPhone(phoneRaw);
+  const vendorPanelType = normalizeVendorPanelType(req.body.vendorPanelType ?? req.body.vendorType);
+  await assertPhoneFreeForPanelType(phoneNorm, vendorPanelType);
+  await assertCanResendPanelOtp(phoneNorm, REGISTER_OTP_PURPOSE);
+
+  const otp = resolveOtpForPhone(phoneNorm);
+  await savePanelPhoneOtp(phoneNorm, otp, otpExpiryDate(), REGISTER_OTP_PURPOSE);
+
+  sendSuccess(res, "OTP sent successfully", {
+    phone: phoneNorm,
+    expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+    resendAfterSeconds: Math.floor(RESEND_COOLDOWN_MS / 1000),
+    otp: devOnlyOtp(otp),
+  });
+});
+
+exports.verifyRegisterOtp = asyncHandler(async (req, res) => {
+  const { phone, mobile, otp } = req.body || {};
+  const phoneRaw = phone ?? mobile;
+  const otpValue = String(otp ?? "").trim();
+  if (!phoneRaw) throw new AppError("Mobile number is required", 400);
+  if (!otpValue) throw new AppError("OTP is required", 400);
+
+  const phoneNorm = parseRegisterPhone(phoneRaw);
+  const record = await PhoneOtp.findOne({ phone: phoneNorm, purpose: REGISTER_OTP_PURPOSE });
+  if (!record || record.verified || isOtpExpired(record.otpExpire) || String(record.otp) !== otpValue) {
+    throw new AppError("Invalid or expired OTP", 400);
+  }
+  await PhoneOtp.updateOne(
+    { _id: record._id },
+    { $set: { verified: true, otpExpire: registrationSessionExpiryDate() }, $unset: { otp: "" } }
+  );
+
+  sendSuccess(res, "Mobile number verified", {
+    phone: phoneNorm,
+    otpVerified: true,
+    verifiedExpiresInSeconds: Math.floor(REGISTER_SESSION_TTL_MS / 1000),
   });
 });
 
@@ -342,7 +476,7 @@ exports.sendOtp = asyncHandler(async (req, res) => {
 
   await assertCanResendPanelOtp(phoneNorm);
 
-  const otp = generateOtp();
+  const otp = resolveOtpForPhone(phoneNorm);
   const otpExpire = otpExpiryDate();
   await savePanelPhoneOtp(phoneNorm, otp, otpExpire);
 

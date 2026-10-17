@@ -17,8 +17,8 @@ import { logout } from "../store/authSlice.js";
 
 const STAT_CARDS = [
   { key: "totalUsers", label: "Total Users", tone: "yellow", format: "number", Icon: MdPeople, to: "/admin/users" },
-  { key: "ecomVendors", label: "Ecom Vendors", tone: "orange", format: "number", Icon: MdStore, to: "/admin/vendors" },
-  { key: "venueVendors", label: "Service Vendors", tone: "orange", format: "number", Icon: MdBusiness, to: "/admin/venue-vendors" },
+  { key: "ecomVendors", label: "Ecom Vendors", tone: "orange", format: "number", Icon: MdStore, to: "/admin/vendors?type=ecom" },
+  { key: "venueVendors", label: "Service Vendors", tone: "orange", format: "number", Icon: MdBusiness, to: "/admin/vendors?type=service" },
   { key: "totalOrders", label: "Total Orders", tone: "yellow", format: "number", Icon: MdShoppingCart, to: "/admin/orders?tab=order" },
   { key: "revenue", label: "Revenue", tone: "yellow", format: "currency", Icon: MdCurrencyRupee, to: "/admin/payments" },
   {
@@ -43,7 +43,7 @@ const STAT_CARDS = [
     tone: "yellow",
     format: "number",
     Icon: MdStorefront,
-    to: "/admin/vendors?status=active&approvalStatus=approved",
+    to: "/admin/vendors?type=ecom&status=active&approvalStatus=approved",
   },
   {
     key: "venueActiveVendors",
@@ -51,7 +51,7 @@ const STAT_CARDS = [
     tone: "yellow",
     format: "number",
     Icon: MdBusiness,
-    to: "/admin/venue-vendors?status=active&approvalStatus=approved",
+    to: "/admin/vendors?type=service&status=active&approvalStatus=approved",
   },
   {
     key: "ecomPendingApprovals",
@@ -59,7 +59,7 @@ const STAT_CARDS = [
     tone: "orange",
     format: "number",
     Icon: MdPendingActions,
-    to: "/admin/vendors?approvalStatus=pending",
+    to: "/admin/vendors?type=ecom&approvalStatus=pending",
   },
   {
     key: "venuePendingApprovals",
@@ -67,7 +67,7 @@ const STAT_CARDS = [
     tone: "orange",
     format: "number",
     Icon: MdPending,
-    to: "/admin/venue-vendors?approvalStatus=pending",
+    to: "/admin/vendors?type=service&approvalStatus=pending",
   },
 ];function formatStatValue(value, format) {
   const num = Number(value ?? 0);

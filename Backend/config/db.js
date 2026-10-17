@@ -13,7 +13,10 @@ const connectDatabase = async () => {
     const { ensureUserEmailSparseIndex } = require("../utils/ensureUserEmailIndex");
     const { ensureVendorEmailSparseIndex } = require("../utils/ensureVendorEmailIndex");
     const { ensureVenueVendorEmailSparseIndex } = require("../utils/ensureVenueVendorEmailIndex");
-    const { ensureAdminProductsApproved } = require("../utils/ensureAdminProductsApproved");
+    const {
+      ensureAdminProductsApproved,
+      ensureVendorProductsApproved,
+    } = require("../utils/ensureAdminProductsApproved");
     const { ensureStaticPagesHaveApp } = require("../utils/staticPage");
     const { ensureStaticPageSlugIndex } = require("../utils/ensureStaticPageSlugIndex");
     const { ensurePromotionPromoCodeIndex } = require("../utils/ensurePromotionPromoCodeIndex");
@@ -22,6 +25,7 @@ const connectDatabase = async () => {
     await ensureVendorEmailSparseIndex();
     await ensureVenueVendorEmailSparseIndex();
     await ensureAdminProductsApproved();
+    await ensureVendorProductsApproved();
     await ensureStaticPagesHaveApp(Page);
     await ensureStaticPageSlugIndex(Page);
     await ensurePromotionPromoCodeIndex();

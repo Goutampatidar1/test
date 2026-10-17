@@ -7,6 +7,7 @@ import { AiFillDelete } from "react-icons/ai";
 import { IoEyeSharp } from "react-icons/io5";
 import { adminDeleteAmenity, adminListAmenities, adminUpdateAmenity } from "../../api/adminAmenities.js";
 import { mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { logout } from "../../store/authSlice.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
 import { AdminSearchField } from "../../components/AdminSearchField.jsx";
@@ -151,11 +152,7 @@ export function AmenitiesList() {
                     <td className="data-table__muted">{(page - 1) * LIST_LIMIT + idx + 1}</td>
                     <td>{row.name || "—"}</td>
                     <td>
-                      {row.icon ? (
-                        <img src={mediaUrl(row.icon)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }} />
-                      ) : (
-                        "—"
-                      )}
+                      <img src={imageOrDefault(row.icon)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }} />
                     </td>
                     <td>
                       <button

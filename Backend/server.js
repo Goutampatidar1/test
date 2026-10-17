@@ -37,6 +37,17 @@ app.use("/api/uploads", express.static(uploadsDir));
 /** In-app WebView URLs for CMS static pages — /view/:app/:slug */
 app.get("/view/:app/:slug", publicStaticPageController.renderPageView);
 
+/** Play Store legal pages (no CMS required) */
+const legalPageController = require("./controllers/publicControllers/legalPageController");
+app.get("/privacy-policy", legalPageController.renderPrivacyPolicy);
+app.get("/vendor/privacy-policy", legalPageController.renderVendorPrivacyPolicy);
+app.get("/delivery/privacy-policy", legalPageController.renderDeliveryPrivacyPolicy);
+app.get("/driver/privacy-policy", legalPageController.renderDeliveryPrivacyPolicy);
+app.get("/delete-account", legalPageController.renderDeleteAccount);
+app.get("/vendor/delete-account", legalPageController.renderVendorDeleteAccount);
+app.get("/delivery/delete-account", legalPageController.renderDeliveryDeleteAccount);
+app.get("/driver/delete-account", legalPageController.renderDeliveryDeleteAccount);
+
 app.use("/api", routes);
 
 app.use(notFound);

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Category = require("../../models/other/category");
 const SubCategory = require("../../models/other/subCategory");
 const Product = require("../../models/other/product");
@@ -34,6 +35,7 @@ const {
   toPublicProductListCard,
   formatInrAmount,
   getCategoryIdsWithPublicProducts,
+  getSubCategoryIdsWithPublicProducts,
 } = require("../../utils/publicProductList");
 const { sendSuccess } = require("../../utils/apiResponse");
 const { listActiveBanners, resolveRequestCity } = require("../../utils/bannerQuery");
@@ -46,6 +48,7 @@ const { buildProductCards } = require("../../utils/publicProductCards");
 const { findVendorsMatchingSearch, nameTokenClause, recordRecentView } = require("../../utils/homeFeed");
 const { toAbsoluteUploadUrl } = require("../../utils/mediaUrl");
 const { activePublicVenueListingFilter, activePublicVenueListingFilterOpen, isVenueListable } = require("../../utils/publicVenueList");
+const { resolveRequestArea, venueAreaClause, andClause } = require("../../utils/areaFilter");
 
 const ALLOWED_MODES = new Set(["ecom", "venue"]);
 
@@ -106,19 +109,28 @@ async function assertActiveVenueCategory(categoryId) {
   return cat;
 }
 
-async function venueCountByCategoryIds(categoryIds) {
+async function venueCountByCategoryIds(categoryIds, areaClause = null) {
   if (!categoryIds.length) return new Map();
   const listingFilter = await activePublicVenueListingFilterOpen();
   const rows = await Venue.aggregate([
     {
-      $match: {
-        ...listingFilter,
-        category: { $in: categoryIds },
-      },
+      $match: andClause({ ...listingFilter, category: { $in: categoryIds } }, areaClause),
     },
     { $group: { _id: "$category", venueCount: { $sum: 1 } } },
   ]);
   return new Map(rows.map((r) => [String(r._id), r.venueCount]));
+}
+
+async function subCategoryIdsWithVenues(categoryId, areaClause = null) {
+  const listingFilter = await activePublicVenueListingFilterOpen();
+  const match = { ...listingFilter, subCategory: { $ne: null } };
+  if (categoryId) match.category = categoryId;
+  return Venue.distinct("subCategory", andClause(match, areaClause));
+}
+
+function readIncludeEmpty(query = {}) {
+  const raw = String(query.includeEmpty ?? "").trim().toLowerCase();
+  return raw === "true" || raw === "1";
 }
 
 /** Products visible on mobile storefront */
@@ -172,9 +184,10 @@ exports.listVenueTypes = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const baseUrl = getPublicBaseUrl(req);
   const filter = activeVenueCategoryFilter(search);
+  const areaClause = await venueAreaClause(await resolveRequestArea(req));
 
   let categories = await Category.find(filter).sort({ name: 1 }).lean();
-  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id));
+  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id), areaClause);
   categories = categories.filter((c) => (countMap.get(String(c._id)) || 0) > 0);
 
   const total = categories.length;
@@ -205,9 +218,10 @@ exports.listAllVenueTypes = asyncHandler(async (req, res) => {
   const { search } = req.query;
   const baseUrl = getPublicBaseUrl(req);
   const filter = activeVenueCategoryFilter(search);
+  const areaClause = await venueAreaClause(await resolveRequestArea(req));
 
   let categories = await Category.find(filter).sort({ name: 1 }).lean();
-  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id));
+  const countMap = await venueCountByCategoryIds(categories.map((c) => c._id), areaClause);
   categories = categories.filter((c) => (countMap.get(String(c._id)) || 0) > 0);
 
   const items = categories
@@ -224,11 +238,11 @@ exports.listAllVenueTypes = asyncHandler(async (req, res) => {
 /** Venues list when user taps a category (no auth) */
 exports.listVenues = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
-  const { subCategory, city, search, sort } = req.query;
+  const { subCategory, search, sort } = req.query;
   const categoryId = req.params.categoryId ?? req.query.category;
   const baseUrl = getPublicBaseUrl(req);
 
-  const filter = await activePublicVenueFilter();
+  let filter = await activePublicVenueFilter();
 
   if (categoryId) {
     await assertActiveVenueCategory(categoryId);
@@ -238,14 +252,6 @@ exports.listVenues = asyncHandler(async (req, res) => {
     assertObjectId(subCategory, "Invalid subCategory id");
     filter.subCategory = subCategory;
   }
-  if (city && String(city).trim()) {
-    const cityRx = new RegExp(
-      `^${String(city).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-      "i"
-    );
-    filter.city = cityRx;
-  }
-
   const searchOr = searchFilter(search, [
     "name",
     "description",
@@ -254,6 +260,9 @@ exports.listVenues = asyncHandler(async (req, res) => {
     "city",
   ]);
   if (searchOr) Object.assign(filter, searchOr);
+
+  const area = await resolveRequestArea(req);
+  filter = andClause(filter, await venueAreaClause(area));
 
   const sortSpec = resolveVenueListSort(sort);
 
@@ -277,6 +286,7 @@ exports.listVenues = asyncHandler(async (req, res) => {
     status: venueList.length > 0,
     message: "Venues fetched",
     data: venueList,
+    location: { city: area.city || null, subDistrict: area.subDistrict || null },
     pagination: {
       page,
       limit,
@@ -338,19 +348,11 @@ exports.listCategories = asyncHandler(async (req, res) => {
   const searchOr = searchFilter(search, ["name"]);
   if (searchOr) Object.assign(filter, searchOr);
 
-  const includeEmpty =
-    String(req.query.includeEmpty ?? "").trim().toLowerCase() === "true" ||
-    String(req.query.includeEmpty ?? "").trim() === "1";
+  const includeEmpty = readIncludeEmpty(req.query);
 
   if (filter.mode === "ecom") {
     if (!includeEmpty) {
-      // Only return categories that have at least one active ecom subcategory.
-      const categoryIdsWithSubs = await SubCategory.distinct("category", {
-        status: "active",
-        mode: "ecom",
-        category: { $ne: null },
-      });
-      filter._id = { $in: categoryIdsWithSubs.filter(Boolean) };
+      filter._id = { $in: await getCategoryIdsWithPublicProducts(Product) };
     }
 
     const categories = await Category.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean();
@@ -363,7 +365,8 @@ exports.listCategories = asyncHandler(async (req, res) => {
   let categories = await Category.find(filter).sort({ name: 1 }).lean();
 
   if (!includeEmpty) {
-    const countMap = await venueCountByCategoryIds(categories.map((c) => c._id));
+    const areaClause = await venueAreaClause(await resolveRequestArea(req));
+    const countMap = await venueCountByCategoryIds(categories.map((c) => c._id), areaClause);
     categories = categories.filter((c) => (countMap.get(String(c._id)) || 0) > 0);
   }
 
@@ -451,6 +454,19 @@ exports.listSubCategories = asyncHandler(async (req, res) => {
 
   const searchOr = searchFilter(search, ["name"]);
   if (searchOr) Object.assign(filter, searchOr);
+
+  if (!readIncludeEmpty(req.query)) {
+    if (filter.mode === "venue") {
+      const areaClause = await venueAreaClause(await resolveRequestArea(req));
+      filter._id = { $in: await subCategoryIdsWithVenues(categoryId, areaClause) };
+    } else {
+      filter._id = {
+        $in: await getSubCategoryIdsWithPublicProducts(Product, {
+          categoryId: categoryId ? new mongoose.Types.ObjectId(categoryId) : undefined,
+        }),
+      };
+    }
+  }
 
   const subCategories = await SubCategory.find(filter)
     .populate("category", "name mode status")

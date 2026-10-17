@@ -11,6 +11,7 @@ import {
   adminUpdateSubCategory,
 } from "../../api/adminSubCategories.js";
 import { mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { AppImage } from "../../components/AppImage.jsx";
 import { logout } from "../../store/authSlice.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
@@ -488,11 +489,7 @@ export function SubCategoryPage() {
                 pendingRows.map((row) => (
                   <tr key={row._id}>
                     <td>
-                      {row.image ? (
-                        <img src={mediaUrl(row.image)} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 6 }} />
-                      ) : (
-                        "—"
-                      )}
+                      <img src={imageOrDefault(row.image)} alt="" style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 6 }} />
                     </td>
                     <td>{row.name}</td>
                     <td>{row.category?.name || "—"}</td>

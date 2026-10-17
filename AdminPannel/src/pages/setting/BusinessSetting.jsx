@@ -1882,7 +1882,7 @@ export function BusinessSetting() {
                       <div>
                         <span className="settings-toggle-row__label">Require admin approval</span>
                         <span className="settings-toggle-row__hint">
-                          Registration, products, services, categories, sub-categories, and child categories.
+                          Registration, services, categories, sub-categories, and child categories. Vendor products go live without approval.
                         </span>
                       </div>
                       <SettingsToggle
@@ -1894,7 +1894,7 @@ export function BusinessSetting() {
                   </div>
                   <p className="settings-panel-hint mt-3">
                     {vendorApprovalRequired
-                      ? "On: vendor registration, catalog items, products, and service listings need admin approval."
+                      ? "On: vendor registration, catalog items, and service listings need admin approval. Products go live immediately."
                       : "Off: all of the above are auto-approved when vendors submit them."}
                   </p>
                 </>

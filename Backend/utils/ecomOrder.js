@@ -683,8 +683,10 @@ function buildInvoicePayload(order, user, baseUrl) {
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     unitPriceLabel: formatInrAmount(item.unitPrice),
-    totalPrice: item.totalPrice,
-    totalPriceLabel: formatInrAmount(item.totalPrice),
+    totalPrice: (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0),
+    totalPriceLabel: formatInrAmount(
+      (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0)
+    ),
   }));
 
   const itemRows = items
@@ -729,12 +731,14 @@ function buildInvoicePayload(order, user, baseUrl) {
   </div>
   <table>
     <thead>
-      <tr><th>Item</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Total</th></tr>
+      <tr><th>Item</th><th>SKU</th><th>Qty</th><th>Unit</th><th>Line total</th></tr>
     </thead>
     <tbody>${itemRows}</tbody>
   </table>
   <div class="totals">
-    <div>Subtotal: <strong>${escapeHtml(paymentDetail.subTotalLabel)}</strong></div>
+    <div>Subtotal (after item discounts): <strong>${escapeHtml(paymentDetail.subTotalLabel)}</strong></div>
+    ${Number(paymentDetail.discountTotal) > 0 ? `<div>Discount saved (already reflected in item prices): <strong>${escapeHtml(formatInrAmount(paymentDetail.discountTotal))}</strong></div>` : ""}
+    ${Number(paymentDetail.taxTotal) > 0 ? `<div>Tax: <strong>${escapeHtml(formatInrAmount(paymentDetail.taxTotal))}</strong></div>` : ""}
     <div>Shipping: <strong>${escapeHtml(paymentDetail.shippingCostLabel)}</strong></div>
     <div class="grand">Grand total: ${escapeHtml(paymentDetail.totalLabel)}</div>
   </div>
@@ -760,6 +764,9 @@ function buildInvoicePayload(order, user, baseUrl) {
     summary: {
       subTotal: order.subTotal,
       subTotalLabel: formatInrAmount(order.subTotal),
+      discountTotal: order.discountTotal,
+      discountAlreadyIncluded: true,
+      taxTotal: order.taxTotal,
       shippingCost: order.shippingCharge,
       shippingCostLabel: formatInrAmount(order.shippingCharge),
       totalAmount: order.grandTotal,

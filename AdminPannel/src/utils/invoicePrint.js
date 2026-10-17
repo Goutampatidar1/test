@@ -125,7 +125,7 @@ export function openOrderInvoice({ kind, row }) {
               <td>${esc(venue)}</td>
               <td class="num">${esc(item.quantity)}</td>
               <td class="num">${esc(formatInr(item.unitPrice))}</td>
-              <td class="num">${esc(formatInr(item.totalPrice))}</td>
+              <td class="num">${esc(formatInr((Number(item.unitPrice) || 0) * (Number(item.quantity) || 0)))}</td>
               <td>${esc(formatDate(item.bookingDate))}${item.bookingSlot ? ` · ${esc(item.bookingSlot)}` : ""}</td>
             </tr>`;
             }
@@ -134,20 +134,34 @@ export function openOrderInvoice({ kind, row }) {
             <td>${esc(item.sku || "—")}</td>
             <td class="num">${esc(item.quantity)}</td>
             <td class="num">${esc(formatInr(item.unitPrice))}</td>
-            <td class="num">${esc(formatInr(item.totalPrice))}</td>
+            <td class="num">${esc(formatInr((Number(item.unitPrice) || 0) * (Number(item.quantity) || 0)))}</td>
           </tr>`;
           })
           .join("");
 
   const thead =
     kind === "venue"
-      ? `<tr><th>Item</th><th>Service</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th><th>Booking</th></tr>`
-      : `<tr><th>Item</th><th>SKU</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Total</th></tr>`;
+      ? `<tr><th>Item</th><th>Service</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Line total</th><th>Booking</th></tr>`
+      : `<tr><th>Item</th><th>SKU</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Line total</th></tr>`;
 
   const ship = Number(row.shippingCharge);
   const shipping =
     kind === "ecom" && Number.isFinite(ship) && ship > 0
       ? `<div>Shipping: <strong>${esc(formatInr(ship))}</strong></div>`
+      : "";
+  const discount = Number(row.discountTotal) || 0;
+  const tax = Number(row.taxTotal) || 0;
+  const discountLabel =
+    kind === "ecom"
+      ? "Discount saved (already reflected in item prices)"
+      : "Discount";
+  const subtotalLabel =
+    kind === "ecom" ? "Subtotal (after item discounts)" : "Subtotal";
+  const venuePayments =
+    kind === "venue"
+      ? `${Number(row.tokenAmount) > 0 ? `<div>Booking deposit due (${esc(row.tokenAmountPercentage || 0)}%): <strong>${esc(formatInr(row.tokenAmount))}</strong></div>` : ""}
+         ${Number(row.amountPaid) > 0 ? `<div>Amount paid: <strong>${esc(formatInr(row.amountPaid))}</strong></div>` : ""}
+         ${Number(row.remainingAmount) > 0 ? `<div>Remaining: <strong>${esc(formatInr(row.remainingAmount))}</strong></div>` : ""}`
       : "";
 
   const inner = `
@@ -163,10 +177,11 @@ export function openOrderInvoice({ kind, row }) {
     </dl>
     <table><thead>${thead}</thead><tbody>${itemRows}</tbody></table>
     <div class="totals">
-      <div>Subtotal: <strong>${esc(formatInr(row.subTotal))}</strong></div>
-      <div>Discount: <strong>${esc(formatInr(row.discountTotal))}</strong></div>
-      <div>Tax: <strong>${esc(formatInr(row.taxTotal))}</strong></div>
+      <div>${subtotalLabel}: <strong>${esc(formatInr(row.subTotal))}</strong></div>
+      ${discount > 0 ? `<div>${discountLabel}: <strong>${esc(formatInr(discount))}</strong></div>` : ""}
+      ${tax > 0 ? `<div>Tax: <strong>${esc(formatInr(tax))}</strong></div>` : ""}
       ${shipping}
+      ${venuePayments}
       <div class="grand">Grand total: ${esc(formatInr(row.grandTotal))}</div>
     </div>
   `;

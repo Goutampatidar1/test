@@ -10,10 +10,12 @@ import "swiper/css/pagination";
 import { adminGetVendor, adminUpdateVendor } from "../../api/adminVendors.js";
 import { logout } from "../../store/authSlice.js";
 import { mediaDocumentUrl, mediaUrl } from "../../media.js";
+import { DEFAULT_IMAGE_SRC } from "../../utils/imageFallback.js";
 import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholder.jsx";
 import { promptRejectionReason } from "../../utils/promptRejectionReason.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 import { VendorOrdersSection } from "../../components/VendorOrdersSection.jsx";
+import { VendorTypeBadge } from "../../components/VendorTypeBadge.jsx";
 function DetailRow({ label, value }) {
   return <div className="user-detail-row"><span className="user-detail-row__label">{label}</span><span className="user-detail-row__value">{value ?? "—"}</span></div>;
 }
@@ -249,6 +251,7 @@ export function VendorView() {
             <DetailRow label="Vendor Name" value={vendor.name} />
             <DetailRow label="Email ID" value={vendor.email} />
             <DetailRow label="Mobile Number" value={vendor.phone} />
+            <DetailRow label="Vendor Type" value={<VendorTypeBadge type={vendor.vendorPanelType} fallback="ecom" />} />
             <DetailRow label="Shop Name" value={vendor.businessName} />
             <DetailRow label="Business Mobile Number" value={vendor.businessPhone} />
             <DetailRow label="GSTIN" value={vendor.gstin} />
@@ -276,11 +279,7 @@ export function VendorView() {
           <div className="vendor-doc-thumbs vendor-doc-thumbs--detail">
             {docs.map((doc) => (
               <div key={doc.key} className="vendor-doc-thumb">
-                {doc.url ? (
-                  <img src={doc.url} alt={doc.label} className="vendor-doc-thumb__ph" />
-                ) : (
-                  <div className="vendor-doc-thumb__ph" />
-                )}
+                <img src={doc.url || DEFAULT_IMAGE_SRC} alt={doc.label} className="vendor-doc-thumb__ph" />
                 {doc.url ? (
                   <a href={doc.url} target="_blank" rel="noreferrer" className="vendor-doc-thumb__link">
                     {doc.label}

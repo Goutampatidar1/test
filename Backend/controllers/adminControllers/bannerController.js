@@ -47,6 +47,25 @@ function assertDateRange(startDate, endDate) {
   }
 }
 
+const BUSINESS_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Kolkata";
+
+function dayKey(date) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function todayKey() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TIMEZONE }).format(new Date());
+}
+
+/** Rejects a day before today. `previous` lets an unchanged stored date through on edit. */
+function assertNotPastDay(date, fieldName, previous) {
+  if (!date) return;
+  if (previous && dayKey(previous) === dayKey(date)) return;
+  if (dayKey(date) < todayKey()) {
+    throw new AppError(`${fieldName} cannot be in the past`, 400);
+  }
+}
+
 function hasCategoryInBody(body) {
   return (
     Object.prototype.hasOwnProperty.call(body, "category") ||
@@ -256,6 +275,8 @@ exports.createBanner = asyncHandler(async (req, res) => {
   try {
     const startDate = startDateRaw ? parseDateOrThrow(startDateRaw, "Start date") : undefined;
     const endDate = endDateRaw ? parseDateOrThrow(endDateRaw, "End date") : undefined;
+    assertNotPastDay(startDate, "Start date");
+    assertNotPastDay(endDate, "End date");
     if (startDate && endDate) {
       assertDateRange(startDate, endDate);
     }
@@ -315,6 +336,33 @@ exports.updateBanner = asyncHandler(async (req, res) => {
   const banner = await Banner.findById(req.params.id);
   if (!banner) throw new AppError("Banner not found", 404);
 
+  try {
+    let nextStartDate = banner.startDate;
+    let nextEndDate = banner.endDate;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "startDate")) {
+      const startDateRaw = normalizeOptional(req.body.startDate);
+      nextStartDate = startDateRaw ? parseDateOrThrow(startDateRaw, "Start date") : undefined;
+      assertNotPastDay(nextStartDate, "Start date", banner.startDate);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "endDate")) {
+      const endDateRaw = normalizeOptional(req.body.endDate);
+      nextEndDate = endDateRaw ? parseDateOrThrow(endDateRaw, "End date") : undefined;
+      assertNotPastDay(nextEndDate, "End date", banner.endDate);
+    }
+
+    if (nextStartDate && nextEndDate) {
+      assertDateRange(nextStartDate, nextEndDate);
+    }
+
+    banner.startDate = nextStartDate;
+    banner.endDate = nextEndDate;
+  } catch (error) {
+    deleteUploadFileByPublicUrl(publicUploadPathFromFile(req, UPLOAD_FOLDER));
+    throw error;
+  }
+
   if (Object.prototype.hasOwnProperty.call(req.body, "targetType")) {
     const targetType = normalizeTargetType(req.body.targetType);
     if (!targetType) throw new AppError("Invalid target type", 400);
@@ -355,25 +403,6 @@ exports.updateBanner = asyncHandler(async (req, res) => {
   }
 
   Object.assign(banner, readContentFields(req.body));
-
-  let nextStartDate = banner.startDate;
-  let nextEndDate = banner.endDate;
-
-  if (Object.prototype.hasOwnProperty.call(req.body, "startDate")) {
-    const startDateRaw = normalizeOptional(req.body.startDate);
-    nextStartDate = startDateRaw ? parseDateOrThrow(startDateRaw, "Start date") : undefined;
-    banner.startDate = nextStartDate;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(req.body, "endDate")) {
-    const endDateRaw = normalizeOptional(req.body.endDate);
-    nextEndDate = endDateRaw ? parseDateOrThrow(endDateRaw, "End date") : undefined;
-    banner.endDate = nextEndDate;
-  }
-
-  if (nextStartDate && nextEndDate) {
-    assertDateRange(nextStartDate, nextEndDate);
-  }
 
   if (Object.prototype.hasOwnProperty.call(req.body, "cities")) {
     banner.cities = normalizeCities(req.body.cities) || [];

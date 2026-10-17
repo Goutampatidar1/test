@@ -2,8 +2,13 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import { vendorPanelRegister } from "../api/vendorPanelAuth.js";
+import {
+  vendorPanelRegister,
+  vendorPanelSendRegisterOtp,
+  vendorPanelVerifyRegisterOtp,
+} from "../api/vendorPanelAuth.js";
 import { publicListCategories } from "../api/publicCatalog.js";
+import { publicListCities, publicListSubDistricts } from "../api/publicLocations.js";
 import { setCredentials } from "../store/authSlice.js";
 import { VENDOR_LOGIN_PATH } from "../constants/authRoutes.js";
 import {
@@ -28,9 +33,13 @@ import { normalizePanelAuthSession } from "../utils/panelAuthSession.js";
 
 const STEPS = [
   { id: 1, label: "Vendor Type" },
-  { id: 2, label: "Personal Details" },
-  { id: 3, label: "Documents & Shop" },
+  { id: 2, label: "Verify Mobile" },
+  { id: 3, label: "Personal Details" },
+  { id: 4, label: "Documents & Shop" },
 ];
+const LAST_STEP = STEPS.length;
+const OTP_LENGTH = 4;
+const DEFAULT_RESEND_COOLDOWN = 30;
 
 const VENDOR_TYPES = [
   { id: "ecom", title: "E-commerce", description: "Sell products online through the marketplace." },
@@ -77,6 +86,28 @@ async function resolveRegistrationCategoryForBoth(existingCategories) {
 
 function validateIndianMobile(phone) {
   return validateIndianMobileMessage(phone, { required: true, label: "Mobile number" });
+}
+
+function unwrapApiPayload(data) {
+  if (Array.isArray(data?.data) && data.data[0] && typeof data.data[0] === "object") return data.data[0];
+  if (data?.data && typeof data.data === "object" && !Array.isArray(data.data)) return data.data;
+  return data ?? {};
+}
+
+function readDevOtp(data) {
+  const otp = unwrapApiPayload(data)?.otp ?? data?.otp;
+  return otp === undefined || otp === null || otp === "" ? "" : String(otp);
+}
+
+function readResendSeconds(data) {
+  const seconds = Number(unwrapApiPayload(data)?.resendAfterSeconds ?? data?.resendAfterSeconds);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_RESEND_COOLDOWN;
+}
+
+function parseResendWaitSeconds(message) {
+  const match = String(message ?? "").match(/wait\s+(\d+)\s+seconds/i);
+  const parsed = match ? Number(match[1]) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function BuildingIcon() {
@@ -266,7 +297,56 @@ export function RegisterPage() {
   const [aadhaarBackFile, setAadhaarBackFile] = useState(null);
   const [panFile, setPanFile] = useState(null);
   const [shopImages, setShopImages] = useState([]);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpDigits, setOtpDigits] = useState(Array(OTP_LENGTH).fill(""));
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [devOtpHint, setDevOtpHint] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [cities, setCities] = useState([]);
+  const [subDistricts, setSubDistricts] = useState([]);
+  const [cityId, setCityId] = useState("");
+  const [subDistrictId, setSubDistrictId] = useState("");
   const formRef = useRef(null);
+  const otpRefs = useRef([]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timerId = window.setTimeout(() => setResendCooldown((prev) => Math.max(0, prev - 1)), 1000);
+    return () => window.clearTimeout(timerId);
+  }, [resendCooldown]);
+
+  useEffect(() => {
+    let cancelled = false;
+    publicListCities({ limit: 500 })
+      .then((rows) => {
+        if (!cancelled) setCities(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setSubDistrictId("");
+    if (!cityId) {
+      setSubDistricts([]);
+      return undefined;
+    }
+    let cancelled = false;
+    publicListSubDistricts({ city: cityId, limit: 500 })
+      .then((rows) => {
+        if (!cancelled) setSubDistricts(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setSubDistricts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
 
   useEffect(() => {
     document.title = "Vendor Registration";
@@ -303,6 +383,103 @@ export function RegisterPage() {
 
   const onChange = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
+  const otpValue = otpDigits.join("");
+
+  const resetOtp = () => {
+    setOtpSent(false);
+    setPhoneVerified(false);
+    setOtpDigits(Array(OTP_LENGTH).fill(""));
+    setDevOtpHint("");
+    setResendCooldown(0);
+  };
+
+  const sendRegisterOtp = async () => {
+    const phoneError = validateIndianMobile(form.phone);
+    if (phoneError) {
+      await Swal.fire({ icon: "error", title: "Invalid mobile", text: phoneError, confirmButtonColor: "#141414" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await vendorPanelSendRegisterOtp({ phone: form.phone, vendorPanelType });
+      const devOtp = readDevOtp(data);
+      setDevOtpHint(devOtp);
+      setOtpSent(true);
+      setOtpDigits(Array(OTP_LENGTH).fill(""));
+      setResendCooldown(readResendSeconds(data));
+      requestAnimationFrame(() => otpRefs.current[0]?.focus());
+    } catch (err) {
+      const waitSeconds = parseResendWaitSeconds(err?.message);
+      if (waitSeconds) setResendCooldown(waitSeconds);
+      await Swal.fire({
+        icon: "error",
+        title: "Could not send OTP",
+        text: err?.message || "Please check your mobile number and try again.",
+        confirmButtonColor: "#141414",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyRegisterOtp = async () => {
+    if (otpValue.length !== OTP_LENGTH) {
+      await Swal.fire({
+        icon: "error",
+        title: "Enter OTP",
+        text: `Enter the ${OTP_LENGTH}-digit code sent to your mobile.`,
+        confirmButtonColor: "#141414",
+      });
+      return;
+    }
+    setLoading(true);
+    try {
+      await vendorPanelVerifyRegisterOtp({ phone: form.phone, otp: otpValue });
+      setPhoneVerified(true);
+      setDevOtpHint("");
+      setStep(3);
+    } catch (err) {
+      await Swal.fire({
+        icon: "error",
+        title: "Verification failed",
+        text: err?.message || "Invalid or expired OTP. Try again or resend.",
+        confirmButtonColor: "#141414",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    const digit = String(value ?? "").replace(/\D/g, "").slice(0, 1);
+    setOtpDigits((prev) => {
+      const next = [...prev];
+      next[index] = digit;
+      return next;
+    });
+    if (digit && index < OTP_LENGTH - 1) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !otpDigits[index] && index > 0) otpRefs.current[index - 1]?.focus();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      verifyRegisterOtp();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = String(e.clipboardData.getData("text") ?? "").replace(/\D/g, "").slice(0, OTP_LENGTH);
+    if (!pasted) return;
+    const next = Array(OTP_LENGTH).fill("");
+    pasted.split("").forEach((ch, i) => {
+      next[i] = ch;
+    });
+    setOtpDigits(next);
+    otpRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
+  };
+
   const validateStep = async (stepNum) => {
     if (stepNum === 1) {
       if (!vendorPanelType) {
@@ -317,6 +494,18 @@ export function RegisterPage() {
     }
 
     if (stepNum === 2) {
+      if (!phoneVerified) {
+        await Swal.fire({
+          icon: "error",
+          title: "Verify mobile",
+          text: "Send the OTP and verify your mobile number to continue.",
+          confirmButtonColor: "#141414",
+        });
+        return false;
+      }
+    }
+
+    if (stepNum === 3) {
       const nameError = validateFullName(form.name);
       if (nameError) {
         await Swal.fire({ icon: "error", title: "Required", text: nameError, confirmButtonColor: "#141414" });
@@ -325,11 +514,6 @@ export function RegisterPage() {
       const emailError = validateEmailMessage(form.email, { required: false });
       if (emailError) {
         await Swal.fire({ icon: "error", title: "Invalid email", text: emailError, confirmButtonColor: "#141414" });
-        return false;
-      }
-      const phoneError = validateIndianMobile(form.phone);
-      if (phoneError) {
-        await Swal.fire({ icon: "error", title: "Invalid mobile", text: phoneError, confirmButtonColor: "#141414" });
         return false;
       }
       const businessNameError = validateBusinessName(form.businessName);
@@ -344,9 +528,18 @@ export function RegisterPage() {
           return false;
         }
       }
+      if (!cityId || !subDistrictId) {
+        await Swal.fire({
+          icon: "error",
+          title: "Required",
+          text: !cityId ? "Please select your city." : "Please select your sub-district.",
+          confirmButtonColor: "#141414",
+        });
+        return false;
+      }
     }
 
-    if (stepNum === 3) {
+    if (stepNum === 4) {
       if (needsServiceFlow(vendorPanelType)) {
         const documentsError = validateVenueVendorDocuments({ aadhaarFrontFile, aadhaarBackFile });
         if (documentsError) {
@@ -386,7 +579,7 @@ export function RegisterPage() {
 
     const ok = await validateStep(step);
     if (!ok) return;
-    setStep((s) => Math.min(3, s + 1));
+    setStep((s) => Math.min(LAST_STEP, s + 1));
   };
 
   const handleBack = () => setStep((s) => Math.max(1, s - 1));
@@ -456,7 +649,7 @@ export function RegisterPage() {
       return;
     }
 
-    for (let stepNum = 1; stepNum <= 3; stepNum += 1) {
+    for (let stepNum = 1; stepNum <= LAST_STEP; stepNum += 1) {
       const ok = await validateStep(stepNum);
       if (!ok) {
         setStep(stepNum);
@@ -481,6 +674,8 @@ export function RegisterPage() {
           businessPhone: form.phone,
           ...(needsServiceFlow(vendorPanelType) ? { businessAddress: form.businessAddress.trim() } : {}),
           ...(registrationCategory ? { category: registrationCategory } : {}),
+          cityId,
+          subDistrictId,
         },
         {
           aadhaarCardFront: aadhaarFrontFile,
@@ -516,6 +711,10 @@ export function RegisterPage() {
         text: err.message || "Could not create account.",
         confirmButtonColor: "#141414",
       });
+      if (/verify your mobile|session expired/i.test(String(err?.message || ""))) {
+        resetOtp();
+        setStep(2);
+      }
     } finally {
       setLoading(false);
     }
@@ -552,6 +751,106 @@ export function RegisterPage() {
               className={`vendor-register-fields vendor-register-fields--stack${step === 2 ? "" : " d-none"}`}
               data-register-step="2"
             >
+              <FormField label="Mobile Number" required>
+                <input
+                  className="vendor-register-input"
+                  type="tel"
+                  inputMode="numeric"
+                  value={form.phone}
+                  onChange={(e) => {
+                    setForm((p) => ({ ...p, phone: sanitizePhoneInput(e.target.value) }));
+                    if (otpSent || phoneVerified) resetOtp();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !otpSent) {
+                      e.preventDefault();
+                      sendRegisterOtp();
+                    }
+                  }}
+                  placeholder="9876543210"
+                  minLength={10}
+                  maxLength={10}
+                  autoComplete="tel"
+                  readOnly={phoneVerified}
+                  required
+                />
+              </FormField>
+
+              {phoneVerified ? (
+                <p className="vendor-register-verified" role="status">
+                  ✓ +91 {form.phone} verified
+                  <button type="button" className="vendor-login-link-btn" onClick={resetOtp} disabled={loading}>
+                    Change number
+                  </button>
+                </p>
+              ) : !otpSent ? (
+                <button
+                  type="button"
+                  className="btn btn--primary vendor-register-footer__btn"
+                  onClick={sendRegisterOtp}
+                  disabled={loading}
+                >
+                  {loading ? "Sending…" : "Send OTP"}
+                </button>
+              ) : (
+                <div className="vendor-register-field">
+                  <span className="vendor-register-field__label">
+                    Enter the OTP sent to +91 {form.phone}
+                    <span className="required-dot"> *</span>
+                  </span>
+                  <div className="vendor-login-otp" onPaste={handleOtpPaste}>
+                    {otpDigits.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => {
+                          otpRefs.current[index] = el;
+                        }}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete={index === 0 ? "one-time-code" : "off"}
+                        className="vendor-login-otp__box"
+                        value={digit}
+                        maxLength={1}
+                        aria-label={`Digit ${index + 1}`}
+                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                      />
+                    ))}
+                  </div>
+                  {devOtpHint ? (
+                    <p className="vendor-login-dev-otp" role="status">
+                      Test OTP (SMS not active): <strong>{devOtpHint}</strong>
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn--primary vendor-register-footer__btn vendor-register-verify-btn"
+                    onClick={verifyRegisterOtp}
+                    disabled={loading}
+                  >
+                    {loading ? "Verifying…" : "Verify OTP"}
+                  </button>
+                  <div className="vendor-login-otp-actions">
+                    <button
+                      type="button"
+                      className="vendor-login-link-btn"
+                      onClick={sendRegisterOtp}
+                      disabled={loading || resendCooldown > 0}
+                    >
+                      {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
+                    </button>
+                    <button type="button" className="vendor-login-link-btn" onClick={resetOtp} disabled={loading}>
+                      Change number
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              className={`vendor-register-fields vendor-register-fields--stack${step === 3 ? "" : " d-none"}`}
+              data-register-step="3"
+            >
               <FormField label="Full Name" required>
                 <input
                   className="vendor-register-input"
@@ -572,20 +871,6 @@ export function RegisterPage() {
                   onChange={onChange("email")}
                   placeholder="your.email@example.co.in (optional)"
                   autoComplete="email"
-                />
-              </FormField>
-              <FormField label="Mobile Number" required>
-                <input
-                  className="vendor-register-input"
-                  type="tel"
-                  inputMode="numeric"
-                  value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: sanitizePhoneInput(e.target.value) }))}
-                  placeholder="9876543210"
-                  minLength={10}
-                  maxLength={10}
-                  autoComplete="tel"
-                  required
                 />
               </FormField>
               <FormField label="Business Name" required>
@@ -612,11 +897,42 @@ export function RegisterPage() {
                   />
                 </FormField>
               ) : null}
+              <FormField label="City" required>
+                <select
+                  className="vendor-register-input"
+                  value={cityId}
+                  onChange={(e) => setCityId(e.target.value)}
+                  required
+                >
+                  <option value="">Select city</option>
+                  {cities.map((row) => (
+                    <option key={row._id} value={row._id}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Sub-district (Tehsil)" required>
+                <select
+                  className="vendor-register-input"
+                  value={subDistrictId}
+                  onChange={(e) => setSubDistrictId(e.target.value)}
+                  disabled={!cityId}
+                  required
+                >
+                  <option value="">{cityId ? "Select sub-district" : "Select city first"}</option>
+                  {subDistricts.map((row) => (
+                    <option key={row._id} value={row._id}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
             </div>
 
             <div
-              className={`vendor-register-fields vendor-register-fields--stack${step === 3 ? "" : " d-none"}`}
-              data-register-step="3"
+              className={`vendor-register-fields vendor-register-fields--stack${step === 4 ? "" : " d-none"}`}
+              data-register-step="4"
             >
               {showShopCategory || showShopImages ? (
                 <>
@@ -711,7 +1027,7 @@ export function RegisterPage() {
               </button>
             ) : null}
 
-            {step < 3 ? (
+            {step === 2 && !phoneVerified ? null : step < LAST_STEP ? (
               <button
                 type="button"
                 className="btn btn--primary vendor-register-footer__btn vendor-register-footer__btn--next"

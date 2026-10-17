@@ -25,6 +25,8 @@ const phoneOtpSchema = new mongoose.Schema(
         "venue_vendor_login",
         "vendor_register",
         "vendor_login",
+        "vendor_panel_login",
+        "vendor_panel_register",
         "delivery_forgot_password",
       ],
       required: true,

@@ -5,10 +5,12 @@ import Swal from "sweetalert2";
 import { adminGetVenueVendor, adminUpdateVenueVendor } from "../../api/adminVenueVendors.js";
 import { logout } from "../../store/authSlice.js";
 import { mediaDocumentUrl, mediaUrl } from "../../media.js";
+import { DEFAULT_IMAGE_SRC } from "../../utils/imageFallback.js";
 import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholder.jsx";
 import { promptRejectionReason } from "../../utils/promptRejectionReason.js";
 import { NotFoundPage } from "../NotFoundPage.jsx";
 import { VendorOrdersSection } from "../../components/VendorOrdersSection.jsx";
+import { VendorTypeBadge } from "../../components/VendorTypeBadge.jsx";
 
 function DetailRow({ label, value }) {
   return <div className="user-detail-row"><span className="user-detail-row__label">{label}</span><span className="user-detail-row__value">{value ?? "—"}</span></div>;
@@ -158,10 +160,13 @@ export function VenueVendorView() {
             <DetailRow label="Full Name" value={venueVendor.name} />
             <DetailRow label="Email ID" value={venueVendor.email} />
             <DetailRow label="Mobile Number" value={venueVendor.phone} />
+            <DetailRow label="Vendor Type" value={<VendorTypeBadge type={venueVendor.vendorPanelType} fallback="service" />} />
             <DetailRow label="Business Name" value={venueVendor.businessName} />
             <DetailRow label="Business Mobile Number" value={venueVendor.businessPhone} />
             <DetailRow label="Business Email ID" value={venueVendor.businessEmail} />
             <DetailRow label="Address" value={venueVendor.businessAddress} />
+            <DetailRow label="City" value={venueVendor.city} />
+            <DetailRow label="Sub-district" value={venueVendor.subDistrict} />
             <DetailRow label="Description" value={venueVendor.businessDescription} />
             <DetailRow label="PAN Number" value={venueVendor.panNumber} />
             <DetailRow label="GST Number" value={venueVendor.gstNumber} />
@@ -184,7 +189,7 @@ export function VenueVendorView() {
           <div className="vendor-doc-thumbs">
             {docs.map((doc) => (
               <div key={doc.key} className="vendor-doc-thumb">
-                {doc.url ? <img src={doc.url} alt={doc.label} className="vendor-doc-thumb__ph" /> : <div className="vendor-doc-thumb__ph" />}
+                <img src={doc.url || DEFAULT_IMAGE_SRC} alt={doc.label} className="vendor-doc-thumb__ph" />
                 {doc.url ? (
                   <a href={doc.url} target="_blank" rel="noreferrer" className="vendor-doc-thumb__link">{doc.label}</a>
                 ) : (

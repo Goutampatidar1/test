@@ -6,6 +6,13 @@ const { getFeatureSettings } = require("./appFeatureSettings");
 const { queueNotifyAllAdmins } = require("./adminInbox");
 
 const CANDIDATE_CAP = 300;
+const DEAL_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Kolkata";
+
+/** Hour (0–23) in the business timezone; the server itself usually runs on UTC. */
+function localHour(now) {
+  const hour = new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: DEAL_TIMEZONE }).format(now);
+  return Number(hour) % 24;
+}
 
 function productDiscountPercent(product) {
   const { price, mrp } = resolveProductSellingPrice(product);
@@ -24,7 +31,7 @@ function isRuleLive(rule, now = new Date()) {
   const start = rule.dailyStartHour;
   const end = rule.dailyEndHour;
   if (Number.isInteger(start) && Number.isInteger(end)) {
-    const hour = now.getHours();
+    const hour = localHour(now);
     const inside = start <= end ? hour >= start && hour < end : hour >= start || hour < end;
     if (!inside) return false;
   }
@@ -36,11 +43,9 @@ function buildRuleFilter(rule) {
   const filter = activePublicProductBaseFilter({ role: "Vendor" });
   filter.stock = { $gte: Math.max(1, Number(rule.minStock) || 1) };
   filter.$or = [{ discountValue: { $gt: 0 } }, { "combinations.discountValue": { $gt: 0 } }];
-
-  if (rule.requireOptIn) {
-    filter["hotDeal.optIn"] = true;
-    filter["hotDeal.status"] = "approved";
-  }
+  // Only products the vendor asked for and admin approved; the rule's requireOptIn flag is ignored.
+  filter["hotDeal.optIn"] = true;
+  filter["hotDeal.status"] = "approved";
   if (rule.categories?.length) filter.category = { $in: toIds(rule.categories) };
   if (rule.subCategories?.length) filter.subCategory = { $in: toIds(rule.subCategories) };
   if (rule.vendors?.length) filter.addedById = { $in: toIds(rule.vendors) };
@@ -85,7 +90,7 @@ async function matchingRulesForProduct(product) {
 }
 
 /**
- * Vendor opts a product in/out. Opt-in goes to the admin queue unless a matching rule auto-approves.
+ * Vendor opts a product in/out. Opt-in is auto-approved immediately.
  * Returns the resulting hotDeal state (caller saves the product).
  */
 async function applyHotDealOptIn(product, optIn) {
@@ -100,15 +105,17 @@ async function applyHotDealOptIn(product, optIn) {
   }
 
   const rules = await listLiveRules();
-  const autoRule = rules.find((rule) => rule.autoApprove && productMatchesRule(product, rule));
+  const matchingRule = rules.find((rule) => productMatchesRule(product, rule));
   const now = new Date();
+  
+  // Auto-approve all hot deal opt-ins - no admin approval required
   product.hotDeal = {
     optIn: true,
-    status: autoRule && product.adminApproved ? "approved" : "pending",
+    status: "approved",
     requestedAt: now,
-    reviewedAt: autoRule && product.adminApproved ? now : null,
+    reviewedAt: now,
     rejectionReason: "",
-    rule: autoRule?._id ?? null,
+    rule: matchingRule?._id ?? null,
   };
   return product.hotDeal;
 }
@@ -128,13 +135,13 @@ function notifyAdminsHotDealPending(product, vendorId) {
 }
 
 /**
- * Live hot deals: products that satisfy at least one live rule (best discount first).
- * With no live rules, falls back to products an admin approved from the opt-in queue.
+ * Live hot deals: products an admin approved from the opt-in queue, plus products that satisfy
+ * at least one live rule (best discount first).
  */
 async function listHotDealProducts({ limit } = {}) {
   const settings = await getFeatureSettings();
   if (!settings.hotDealsEnabled) return [];
-  const max = Math.min(Number(limit) || settings.hotDealsLimit, 50);
+  const requested = Math.trunc(Number(limit));
 
   const rules = await listLiveRules();
   const picked = new Map();
@@ -148,36 +155,66 @@ async function listHotDealProducts({ limit } = {}) {
     }
   };
 
-  if (rules.length === 0) {
-    const approved = await Product.find({
-      ...activePublicProductBaseFilter({ role: "Vendor" }),
-      "hotDeal.optIn": true,
-      "hotDeal.status": "approved",
-      stock: { $gte: 1 },
-    })
+  const approved = await Product.find({
+    ...activePublicProductBaseFilter({ role: "Vendor" }),
+    "hotDeal.optIn": true,
+    "hotDeal.status": "approved",
+    stock: { $gte: 1 },
+  })
+    .populate("category", "name mode status")
+    .populate("subCategory", "name status")
+    .limit(CANDIDATE_CAP)
+    .lean();
+  approved.forEach((product) => consider(product, null));
+
+  for (const rule of rules) {
+    const candidates = await Product.find(buildRuleFilter(rule))
       .populate("category", "name mode status")
       .populate("subCategory", "name status")
       .limit(CANDIDATE_CAP)
       .lean();
-    approved.forEach((product) => consider(product, null));
-  } else {
-    for (const rule of rules) {
-      const candidates = await Product.find(buildRuleFilter(rule))
-        .populate("category", "name mode status")
-        .populate("subCategory", "name status")
-        .limit(CANDIDATE_CAP)
-        .lean();
-      candidates
-        .filter((product) => productDiscountPercent(product) >= (Number(rule.minDiscountPercent) || 0))
-        .sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a))
-        .slice(0, Number(rule.limit) || 12)
-        .forEach((product) => consider(product, rule));
-    }
+    candidates
+      .filter((product) => productDiscountPercent(product) >= (Number(rule.minDiscountPercent) || 0))
+      .sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a))
+      .slice(0, Number(rule.limit) || 12)
+      .forEach((product) => consider(product, rule));
   }
 
-  return [...picked.values()]
-    .sort((a, b) => b.percent - a.percent)
-    .slice(0, max);
+  const sorted = [...picked.values()].sort((a, b) => b.percent - a.percent);
+  return requested > 0 ? sorted.slice(0, requested) : sorted;
+}
+
+/**
+ * Get the hot deals timer info from the first active rule with daily time window.
+ * Returns timer object for app to display.
+ */
+async function getHotDealsTimer() {
+  const rules = await HotDealRule.find({ status: "active" })
+    .sort({ priority: -1, createdAt: 1 })
+    .lean();
+
+  // Find the first rule with daily time window set
+  const ruleWithTime = rules.find(
+    (r) => Number.isInteger(r.dailyStartHour) && Number.isInteger(r.dailyEndHour)
+  );
+
+  if (!ruleWithTime) {
+    // Return default timer if no rule found
+    return {
+      startTime: "00:00",
+      endTime: "23:59",
+      percentOff: 50,
+    };
+  }
+
+  const startHour = ruleWithTime.dailyStartHour;
+  const endHour = ruleWithTime.dailyEndHour;
+
+  return {
+    startTime: `${String(startHour).padStart(2, "0")}:00`,
+    endTime: `${String(endHour).padStart(2, "0")}:00`,
+    percentOff: Number(ruleWithTime.minDiscountPercent) || 50,
+  };
 }
 
 module.exports = {
@@ -190,4 +227,5 @@ module.exports = {
   applyHotDealOptIn,
   notifyAdminsHotDealPending,
   listHotDealProducts,
+  getHotDealsTimer,
 };

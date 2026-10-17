@@ -662,14 +662,6 @@ export function ProductView() {
                   <p className="text-muted small mb-0">—</p>
                 )}
               </div>
-              <div className="mb-4">
-                <h3 className="small text-muted text-uppercase mb-2">Short description</h3>
-                {product.shortDescription ? (
-                  <p className="mb-0 text-body-secondary">{product.shortDescription}</p>
-                ) : (
-                  <p className="text-muted small mb-0">—</p>
-                )}
-              </div>
               <div>
                 <h3 className="small text-muted text-uppercase mb-2">Attribute titles</h3>
                 <p className="mb-0 fw-medium">{attributeTitleLabels(product)}</p>

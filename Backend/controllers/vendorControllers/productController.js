@@ -13,7 +13,6 @@ const { getPublicBaseUrl, toUploadStoragePath } = require("../../utils/mediaUrl"
 const { toVendorProduct } = require("../../utils/mobilePresenters");
 const { resolveAttributePair } = require("../../utils/attributeEnsure");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
-const { resolveItemApprovalForVendor } = require("../../utils/vendorApproval");
 const { applyHotDealOptIn, notifyAdminsHotDealPending } = require("../../utils/hotDeals");
 const { queueRefreshProfileScore } = require("../../utils/profileCompletion");
 const {
@@ -21,8 +20,6 @@ const {
   queueDiscountAlert,
   productPercentOff,
 } = require("../../utils/discountAlerts");
-const { queueNotifyAllAdmins } = require("../../utils/adminInbox");
-
 const PRODUCT_FOLDER = "product";
 const MAX_PRODUCT_IMAGES = 5;
 const MAX_COMBINATION_IMAGES = 1;
@@ -1093,8 +1090,6 @@ exports.createProduct = asyncHandler(async (req, res) => {
     throw new AppError("Product SKU already exists, retry", 409);
   }
 
-  const { approvalRequired, adminApproved } = await resolveItemApprovalForVendor(req.user);
-
   const product = await Product.create({
     name,
     slug,
@@ -1119,7 +1114,7 @@ exports.createProduct = asyncHandler(async (req, res) => {
     attributeTitles: attributeTitleIds,
     role: "Vendor",
     addedById: req.user._id,
-    adminApproved,
+    adminApproved: true,
     status: "active",
   });
 
@@ -1142,24 +1137,9 @@ exports.createProduct = asyncHandler(async (req, res) => {
     .populate("attributeTitles", "title status")
     .lean();
 
-  if (approvalRequired && !adminApproved) {
-    queueNotifyAllAdmins({
-      type: "product_pending_approval",
-      title: "Product pending approval",
-      message: `${product.name} was submitted and is waiting for approval.`,
-      metadata: {
-        productId: String(product._id),
-        vendorId: String(req.user._id),
-        linkPath: `/admin/products/${product._id}`,
-      },
-    });
-  }
-
   sendSuccess(
     res,
-    approvalRequired
-      ? "Product submitted successfully. It will appear in the store after admin approval."
-      : "Product created successfully.",
+    "Product created successfully.",
     toVendorProduct(fresh, baseUrl),
     201
   );
@@ -1579,9 +1559,7 @@ exports.getMyProductById = asyncHandler(async (req, res) => {
  */
 exports.updateProduct = asyncHandler(async (req, res) => {
   const product = await findVendorOwnedProduct(req.user._id, req.params.id);
-  const wasApproved = Boolean(product.adminApproved);
   const previousDiscountPercent = productPercentOff(product);
-  let needsReapproval = false;
 
   const originalCategoryId = String(product.category);
   const originalSubCategoryId = String(product.subCategory);
@@ -1595,7 +1573,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     const name = normalizeRequired(req.body.name);
     if (!name) throw new AppError("Name cannot be empty", 400);
     product.name = name;
-    needsReapproval = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body, "slug")) {
@@ -1604,7 +1581,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     if (slug !== originalSlug) {
       await assertSlugUnique(slug, product._id);
       product.slug = slug;
-      needsReapproval = true;
     }
   }
 
@@ -1619,7 +1595,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
 
   if (Object.prototype.hasOwnProperty.call(req.body, "description") || Object.prototype.hasOwnProperty.call(req.body, "productDescription")) {
     product.description = normalizeOptional(req.body.description || req.body.productDescription) || "";
-    needsReapproval = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body, "shortDescription")) {
@@ -1640,7 +1615,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     if (!hasChildCategoryInBody(req.body)) {
       product.childCategory = null;
     }
-    needsReapproval = true;
   } else if (Object.prototype.hasOwnProperty.call(req.body, "category") || Object.prototype.hasOwnProperty.call(req.body, "categoryId")) {
     const categoryId = normalizeRequired(req.body.category || req.body.categoryId);
     assertObjectId(categoryId, "Invalid category id");
@@ -1650,7 +1624,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     }
     nextCategoryId = categoryId;
     product.category = categoryId;
-    needsReapproval = true;
   }
 
   if (hasChildCategoryInBody(req.body)) {
@@ -1664,7 +1637,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
       });
       product.childCategory = childCategoryInput;
     }
-    needsReapproval = true;
   }
 
   const uploadedImages = pathsForField(req, "images");
@@ -1680,7 +1652,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
   if (uploadedThumbnail) {
     deleteUploadFileByPublicUrl(product.thumbnail);
     product.thumbnail = uploadedThumbnail;
-    needsReapproval = true;
   }
 
   const keptImageUrls = parseKeptImageUrlsBody(req);
@@ -1718,7 +1689,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     ) {
       product.thumbnail = mergedImages[0] || product.thumbnail;
     }
-    needsReapproval = true;
   }
 
   const keptVideoUrls = parseKeptVideoUrlsBody(req);
@@ -1752,7 +1722,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     pruneRemovedUploads(product.videos, mergedVideos, collectProtectedMediaPaths(product));
     product.videos = mergedVideos;
     product.markModified("videos");
-    needsReapproval = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(req.body, "moq")) {
@@ -1765,12 +1734,9 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     const price = Number(req.body.price ?? req.body.productPrice);
     if (Number.isNaN(price) || price < 1) throw new AppError("Invalid price", 400);
     product.price = price;
-    needsReapproval = true;
   }
 
-  if (applyDiscountTaxUpdates(product, req.body)) {
-    needsReapproval = true;
-  }
+  applyDiscountTaxUpdates(product, req.body);
 
   const rawCombinations = req.body.combinations ?? req.body.variants;
   const combinationUploadedImages = getCombinationUploadedImages(req);
@@ -1793,7 +1759,6 @@ exports.updateProduct = asyncHandler(async (req, res) => {
 
   if (targetVariantType !== product.variantType) {
     product.variantType = targetVariantType;
-    needsReapproval = true;
     if (targetVariantType === "single" && (product.combinations || []).length) {
       clearProductCombinations(product);
     }
@@ -1803,16 +1768,12 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     assertNoCombinationsForSingle(rawCombinations);
     if (hasSingleProductStockInBody(req.body)) {
       product.stock = readSingleProductStock(req.body);
-      needsReapproval = true;
     }
     if ((product.combinations || []).length) {
       clearProductCombinations(product);
-      needsReapproval = true;
     }
   } else if (rawCombinations === undefined || rawCombinations === null || rawCombinations === "") {
-    if (applyStandaloneCombinationImageUpdates(product, req, baseUrl)) {
-      needsReapproval = true;
-    }
+    applyStandaloneCombinationImageUpdates(product, req, baseUrl);
   } else {
     const { combinations: parsedCombinations } = await parseVendorCombinations(
       rawCombinations,
@@ -1869,12 +1830,10 @@ exports.updateProduct = asyncHandler(async (req, res) => {
       .flatMap((combination) => combination.images || [])
       .filter(Boolean);
     pruneRemovedUploads(oldCombinationImages, nextCombinationImages, collectProtectedMediaPaths(product));
-    needsReapproval = true;
   }
 
-  if (needsReapproval && wasApproved) {
-    const productApproval = await resolveItemApprovalForVendor(req.user);
-    product.adminApproved = productApproval.approvalRequired ? false : productApproval.adminApproved;
+  if (!product.adminApproved && !product.statusLockedByAdmin) {
+    product.adminApproved = true;
   }
 
   assertVariantCombinationRules(product.variantType, product.combinations);
@@ -1905,12 +1864,7 @@ exports.updateProduct = asyncHandler(async (req, res) => {
     .populate("attributeTitles", "title status")
     .lean();
 
-  const message =
-    wasApproved && needsReapproval && !product.adminApproved
-      ? "Product updated. It requires admin approval again before appearing in the store."
-      : "Product updated successfully";
-
-  sendSuccess(res, message, toVendorProduct(fresh, baseUrl));
+  sendSuccess(res, "Product updated successfully", toVendorProduct(fresh, baseUrl));
 });
 
 /**

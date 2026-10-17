@@ -8,6 +8,7 @@ router.use(protectVenueVendor);
 
 function withVenueMode(req, _res, next) {
   if (!req.query.mode) req.query.mode = "venue";
+  req.query.includeEmpty = "true";
   next();
 }
 

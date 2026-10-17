@@ -11,10 +11,10 @@ import { NavIcon } from "./NavIcon.jsx";
 
 function pathInGroup(pathname, groupId) {
   if (groupId === "ecom") {
-    return /\/admin\/(vendors|delivery-cod|delivery|orders|products|attribute-sets|attributes)(\/|$)/.test(pathname);
+    return /\/admin\/(delivery-cod|delivery|products|attribute-sets|attributes)(\/|$)/.test(pathname);
   }
   if (groupId === "venue") {
-    return /\/admin\/(venue-vendors|venues|amenities)(\/|$)/.test(pathname);
+    return /\/admin\/(venues|venue-enquiries|amenities)(\/|$)/.test(pathname);
   }
   if (groupId === "recharge") {
     return /\/admin\/(mobile-recharge|gas-recharge|fastag-recharge)(\/|$)/.test(pathname);
@@ -242,9 +242,12 @@ export function Sidebar({ id = "admin-sidebar", onNavigate, drawerOpen, desktopC
               key={item.to}
               to={item.to}
               title={item.label}
-              className={({ isActive }) =>
-                `admin-sidebar__link${isActive ? " admin-sidebar__link--active" : ""}`
-              }
+              className={({ isActive }) => {
+                const extraActive = Array.isArray(item.match)
+                  ? item.match.some((segment) => childPathActive(location.pathname, segment))
+                  : false;
+                return `admin-sidebar__link${isActive || extraActive ? " admin-sidebar__link--active" : ""}`;
+              }}
               onClick={() => {
                 onNavigate?.();
                 if (desktopCollapsed) closeCollapsedFlyouts();

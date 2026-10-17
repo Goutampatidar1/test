@@ -108,7 +108,7 @@ async function listMobileProducts(query = {}, userId = null, baseUrl = "") {
       approvalStatus: "approved",
       isOpen: { $ne: false },
     })
-      .select("businessName shopLogo")
+      .select("businessName shopLogo city subDistrict")
       .lean(),
     getRatingStatsForProducts(productIds),
   ]);

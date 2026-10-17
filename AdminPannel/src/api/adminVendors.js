@@ -4,6 +4,32 @@ function vendorsBase() {
   return "/admin/vendors";
 }
 
+export async function adminListVendorDirectory(
+  token,
+  { page = 1, limit = 10, status, approvalStatus, search, type } = {}
+) {
+  const q = new URLSearchParams();
+  q.set("page", String(page));
+  q.set("limit", String(limit));
+  if (status) q.set("status", status);
+  if (approvalStatus) q.set("approvalStatus", approvalStatus);
+  if (type) q.set("type", type);
+  if (search && String(search).trim()) q.set("search", String(search).trim());
+
+  try {
+    const { data: body } = await api.get(`${vendorsBase()}/directory?${q}`, {
+      headers: authHeader(token),
+    });
+    return {
+      vendors: Array.isArray(body.vendors) ? body.vendors : [],
+      pagination: body.pagination ?? { page, limit, total: 0, pages: 1 },
+      counts: body.counts ?? { all: 0, ecom: 0, service: 0, both: 0 },
+    };
+  } catch (error) {
+    normalizeApiError(error);
+  }
+}
+
 export async function adminListVendors(token, { page = 1, limit = 20, status, approvalStatus, search } = {}) {
   const q = new URLSearchParams();
   q.set("page", String(page));

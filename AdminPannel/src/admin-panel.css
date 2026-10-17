@@ -2692,6 +2692,22 @@ a.btn:hover {
   color: #b91c1c;
 }
 
+.pill--type-ecom {
+  background: rgba(59, 130, 246, 0.14);
+  color: #1d4ed8;
+}
+
+.pill--type-service {
+  background: rgba(168, 85, 247, 0.14);
+  color: #7e22ce;
+}
+
+.pill--type-both {
+  background: rgba(20, 184, 166, 0.16);
+  color: #0f766e;
+  white-space: nowrap;
+}
+
 .row-actions {
   display: inline-flex;
   align-items: center;
@@ -5108,4 +5124,200 @@ a.icon-btn {
   color: #161a22;
   font-size: 1.125rem;
   font-weight: 700;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Shared list pages (header, tabs, toolbar, cells)                           */
+/* -------------------------------------------------------------------------- */
+
+.list-head {
+  align-items: flex-start;
+}
+
+.list-head__subtitle {
+  margin: 6px 0 0;
+  color: var(--admin-muted);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  max-width: 62ch;
+}
+
+.list-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 14px;
+}
+
+.list-toolbar .search-field,
+.list-toolbar__search {
+  flex: 1 1 240px;
+  min-width: 220px;
+  max-width: 360px;
+}
+
+.list-toolbar .user-list-status-select {
+  flex: 0 0 auto;
+}
+
+.list-tabs {
+  margin: 0 0 16px;
+}
+
+.list-tabs__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.2rem;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.settings-tabs__tab--active .list-tabs__count {
+  background: rgba(254, 112, 0, 0.14);
+  color: var(--admin-accent-2);
+}
+
+.list-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.list-cell__media {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f1f5f9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.list-cell__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.list-cell__media--square {
+  border-radius: 10px;
+}
+
+.list-cell__text {
+  min-width: 0;
+}
+
+.list-cell__primary {
+  font-weight: 700;
+  color: var(--admin-text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-cell__primary--mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.list-cell__sub {
+  margin-top: 2px;
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vendor-add {
+  position: relative;
+}
+
+.vendor-add__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  width: 260px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.vendor-add__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.vendor-add__item:hover {
+  background: #f8fafc;
+}
+
+.vendor-add__item-label {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.vendor-add__item-hint {
+  font-size: 0.75rem;
+  color: var(--admin-muted);
+  line-height: 1.35;
+}
+
+.vendor-list-page .data-table tbody td {
+  max-width: 240px;
+}
+
+@media (max-width: 560px) {
+  .list-head__actions,
+  .list-toolbar {
+    width: 100%;
+  }
+
+  .list-toolbar .search-field,
+  .list-toolbar__search,
+  .list-toolbar .user-list-status-select {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .vendor-add,
+  .vendor-add .btn {
+    width: 100%;
+  }
+
+  .vendor-add__menu {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
 }

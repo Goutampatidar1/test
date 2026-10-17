@@ -12,6 +12,7 @@ import { ListPagination } from "../../components/ListPagination.jsx";
 import { AdminSearchField } from "../../components/AdminSearchField.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
 import { ProfileImagePlaceholder } from "../../components/ProfileImagePlaceholder.jsx";
+import { exportCsv } from "../../utils/exportCsv.js";
 
 function ApprovalBadge({ status }) {
   const s = (status || "").toLowerCase();
@@ -91,6 +92,36 @@ export function DeliveryList() {
     }
   };
 
+  const handleExportCsv = () => {
+    exportCsv(
+      "drivers",
+      [
+        "Name",
+        "Email",
+        "Phone",
+        "Gender",
+        "Vehicle Registration",
+        "License Number",
+        "Approval Status",
+        "Status",
+        "Created At",
+        "Driver ID",
+      ],
+      rows.map((row) => [
+        row.name || "",
+        row.email || "",
+        row.phone || "",
+        row.gender || "",
+        row.vehicleRegistrationNumber || "",
+        row.licenseNumber || "",
+        row.approvalStatus || "",
+        row.status || "",
+        row.createdAt || "",
+        row._id || "",
+      ])
+    );
+  };
+
   return (
     <div className="page-card">
       <div className="page-card__head">
@@ -108,6 +139,9 @@ export function DeliveryList() {
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
+          <button type="button" className="btn btn--ghost" onClick={handleExportCsv}>
+            Export CSV
+          </button>
           <Link to="new" className="btn btn--accent">+ Add Delivery Partner</Link>
         </div>
       </div>

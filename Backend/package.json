@@ -11,6 +11,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node scripts/seed.js",
+    "seed:all": "node scripts/seedAll.js",
+    "seed:demo": "node scripts/seedDemoData.js",
+    "seed:demo:remove": "node scripts/seedDemoData.js --remove",
     "migrate:phone-plan": "node scripts/migratePhonePlan.js",
     "check-admin": "node scripts/checkAdmin.js",
     "reset-admin": "node scripts/resetAdminPassword.js"

@@ -13,6 +13,7 @@ import {
 } from "../../api/notificationController.js";
 import { logout } from "../../store/authSlice.js";
 import { mediaUrl } from "../../media.js";
+import { imageOrDefault } from "../../utils/imageFallback.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
 
@@ -599,15 +600,11 @@ export function NotificationPage() {
                   <ClickableTableRow key={row._id} onOpen={() => setViewRow(row)}>
                     <td className="data-table__muted">{(page - 1) * LIST_LIMIT + idx + 1}</td>
                     <td>
-                      {row.image ? (
-                        <img
-                          src={mediaUrl(row.image)}
-                          alt=""
-                          style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 6 }}
-                        />
-                      ) : (
-                        "—"
-                      )}
+                      <img
+                        src={imageOrDefault(row.image)}
+                        alt=""
+                        style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 6 }}
+                      />
                     </td>
                     <td>{kindLabel(row.kind)}</td>
                     {listAudience === "vendors" ? (

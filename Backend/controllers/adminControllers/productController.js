@@ -78,7 +78,8 @@ function resolveAdminApprovedOnCreate(body, role) {
     const parsed = parseAdminApproved(body.adminApproved);
     if (parsed !== null) return parsed;
   }
-  return role === "Admin";
+  // Always auto-approve products - no admin approval required
+  return true;
 }
 
 function parsePossiblyJsonArray(value, fieldName) {

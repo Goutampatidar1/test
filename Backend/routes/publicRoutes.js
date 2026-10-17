@@ -26,15 +26,15 @@ router.get("/hot-deals", optionalProtectUser, publicHotDealsController.listHotDe
 router.get("/home/hot-deals", optionalProtectUser, publicHotDealsController.listHotDeals);
 router.get("/banners", publicCatalogController.listBanners);
 router.get("/home/banners", publicCatalogController.listBanners);
-router.get("/venue-types", publicCatalogController.listVenueTypes);
-router.get("/home/venue-types", publicCatalogController.listVenueTypes);
-router.get("/venue-types/all", publicCatalogController.listAllVenueTypes);
-router.get("/available-venues", publicCatalogController.listAllVenueTypes);
-router.get("/venues", publicCatalogController.listVenues);
+router.get("/venue-types", optionalProtectUser, publicCatalogController.listVenueTypes);
+router.get("/home/venue-types", optionalProtectUser, publicCatalogController.listVenueTypes);
+router.get("/venue-types/all", optionalProtectUser, publicCatalogController.listAllVenueTypes);
+router.get("/available-venues", optionalProtectUser, publicCatalogController.listAllVenueTypes);
+router.get("/venues", optionalProtectUser, publicCatalogController.listVenues);
 // Category id at end of path (preferred for mobile)
-router.get("/category-venues/:categoryId", publicCatalogController.listVenues);
+router.get("/category-venues/:categoryId", optionalProtectUser, publicCatalogController.listVenues);
 // Legacy — id between /categories/ and /venues
-router.get("/categories/:categoryId/venues", publicCatalogController.listVenues);
+router.get("/categories/:categoryId/venues", optionalProtectUser, publicCatalogController.listVenues);
 router.get("/venues/:id", publicCatalogController.getVenueById);
 router.get("/states", locationController.listStates);
 router.get("/cities", locationController.listCities);
@@ -42,11 +42,11 @@ router.get("/states/:stateId/cities", locationController.listCities);
 router.get("/sub-districts", locationController.listSubDistricts);
 router.get("/cities/:cityId/sub-districts", locationController.listSubDistricts);
 
-router.get("/categories", publicCatalogController.listCategories);
+router.get("/categories", optionalProtectUser, publicCatalogController.listCategories);
 router.get("/nearby-vendors", optionalProtectUser, nearbyVendorController.listNearbyVendors);
 router.get("/vendors", optionalProtectUser, nearbyVendorController.listAllVendors);
 router.get("/vendors/all", optionalProtectUser, nearbyVendorController.listAllVendors);
-router.get("/sub-categories", publicCatalogController.listSubCategories);
+router.get("/sub-categories", optionalProtectUser, publicCatalogController.listSubCategories);
 router.get("/product-video-feeds", optionalProtectUser, publicVideoFeedController.listVideoFeeds);
 router.get("/video-feeds", optionalProtectUser, publicVideoFeedController.listVideoFeeds);
 router.get("/product-video-feed/:feedId", optionalProtectUser, publicVideoFeedController.getVideoFeedById);
@@ -71,7 +71,31 @@ router.get("/amenities", publicCatalogController.listAmenities);
 router.get("/faq", publicCatalogController.listFaqs);
 
 const publicStaticPageController = require("../controllers/publicControllers/publicStaticPageController");
+const publicAccountController = require("../controllers/publicControllers/publicAccountController");
+const legalPageController = require("../controllers/publicControllers/legalPageController");
+
 router.get("/pages", publicStaticPageController.listPages);
 router.get("/pages/:slug", publicStaticPageController.getPageBySlug);
+
+/** Play Store legal HTML pages (served via /api proxy — works without Apache root rewrite). */
+router.get("/privacy-policy", legalPageController.renderPrivacyPolicy);
+router.get("/vendor/privacy-policy", legalPageController.renderVendorPrivacyPolicy);
+router.get("/delivery/privacy-policy", legalPageController.renderDeliveryPrivacyPolicy);
+router.get("/driver/privacy-policy", legalPageController.renderDeliveryPrivacyPolicy);
+
+router.get("/delete-account", legalPageController.renderDeleteAccount);
+router.get("/vendor/delete-account", legalPageController.renderVendorDeleteAccount);
+router.get("/delivery/delete-account", legalPageController.renderDeliveryDeleteAccount);
+router.get("/driver/delete-account", legalPageController.renderDeliveryDeleteAccount);
+
+/** Play Store: delete accounts by mobile (no auth token). */
+router.post("/account/delete", publicAccountController.deleteAccountByMobile);
+router.post("/delete-account", publicAccountController.deleteAccountByMobile);
+router.post("/vendor/account/delete", publicAccountController.deleteVendorAccountByMobile);
+router.post("/vendor/delete-account", publicAccountController.deleteVendorAccountByMobile);
+router.post("/delivery/account/delete", publicAccountController.deleteDeliveryAccountByMobile);
+router.post("/delivery/delete-account", publicAccountController.deleteDeliveryAccountByMobile);
+router.post("/driver/account/delete", publicAccountController.deleteDeliveryAccountByMobile);
+router.post("/driver/delete-account", publicAccountController.deleteDeliveryAccountByMobile);
 
 module.exports = router;

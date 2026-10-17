@@ -5,12 +5,12 @@
 export const navItems = [
   { to: "dashboard", label: "Dashboard", icon: "grid" },
   { to: "users", label: "User Management", icon: "users" },
+  { to: "vendors", label: "Vendor Management", icon: "store", match: ["vendors", "venue-vendors"] },
   {
     id: "ecom",
     label: "Ecom Management",
     icon: "cart",
     children: [
-      { to: "vendors", label: "Vendor Management", icon: "store" },
       { to: "delivery", label: "Delivery Management", icon: "truck" },
       { to: "delivery-cod", label: "Driver COD Collection", icon: "credit" },
       { to: "products", label: "Product Management", icon: "box" },
@@ -23,7 +23,6 @@ export const navItems = [
     label: "Service Management",
     icon: "map",
     children: [
-      { to: "venue-vendors", label: "Service Vendor Management", icon: "map" },
       { to: "venues", label: "Services", icon: "map-pin" },
       { to: "venue-enquiries", label: "Service Enquiries", icon: "list" },
       { to: "amenities", label: "Amenities", icon: "sliders" },

@@ -28,6 +28,13 @@ function titleFromPath(pathname) {
     return "Vendor Management";
   }
 
+  if (p.startsWith("/admin/venue-vendors")) {
+    if (/^\/admin\/venue-vendors\/new$/.test(p)) return "Add Service Vendor";
+    if (/^\/admin\/venue-vendors\/[^/]+\/edit$/.test(p)) return "Edit Service Vendor";
+    if (/^\/admin\/venue-vendors\/[^/]+$/.test(p)) return "Service Vendor Details";
+    return "Vendor Management";
+  }
+
   if (/^\/admin\/profile\/?$/.test(p)) return "Admin Profile";
   if (/^\/admin\/settings\/?$/.test(p)) return "App Settings";
 

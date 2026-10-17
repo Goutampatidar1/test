@@ -317,22 +317,20 @@ function toLiteItem(item) {
  * Legacy `page=` requests keep the old offset behaviour.
  */
 exports.listVideoFeeds = asyncHandler(async (req, res) => {
-  if (req.query.page !== undefined) {
-    return listVideoFeedsOffset(req, res);
-  }
-
   const features = await getFeatureSettings();
-  const userEnabled = features.videoEnabledUser !== false && req.user?.videoEnabled !== false;
-  const empty = (message) =>
-    res.status(200).json({
+  if (features.videoEnabledUser === false) {
+    return res.status(200).json({
       status: false,
-      message,
+      message: "Videos are currently disabled",
       data: [],
       videoEnabled: false,
       pagination: { limit: 0, hasMore: false, nextCursor: null },
     });
-  if (features.videoEnabledUser === false) return empty("Videos are currently disabled");
-  if (!userEnabled) return empty("Videos are turned off in your settings");
+  }
+
+  if (req.query.page !== undefined) {
+    return listVideoFeedsOffset(req, res);
+  }
 
   const baseUrl = getPublicBaseUrl(req);
   const feedType = normalizeFeedType(req.query.type ?? req.query.feedType ?? req.query.kind);
@@ -435,6 +433,16 @@ exports.loadVideoPage = loadVideoPage;
 exports.getVideoFeedById = asyncHandler(async (req, res) => {
   const feedId = req.params.feedId ?? req.params.id;
   assertObjectId(feedId, "Invalid video feed id");
+
+  const features = await getFeatureSettings();
+  if (features.videoEnabledUser === false) {
+    return res.status(200).json({
+      status: false,
+      message: "Videos are currently disabled",
+      data: [],
+      videoEnabled: false,
+    });
+  }
 
   const baseUrl = getPublicBaseUrl(req);
 

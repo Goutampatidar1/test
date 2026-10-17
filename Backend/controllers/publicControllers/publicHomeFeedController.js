@@ -11,6 +11,7 @@ const {
   loadSuggestedVendors,
 } = require("../../utils/homeFeed");
 const { loadVideoPage } = require("./publicVideoFeedController");
+const { getHotDealsTimer } = require("../../utils/hotDeals");
 
 async function safe(label, fn, fallback) {
   try {
@@ -33,7 +34,10 @@ async function safe(label, fn, fallback) {
 exports.getHomeFeed = asyncHandler(async (req, res) => {
   const baseUrl = getPublicBaseUrl(req);
   const features = await getFeatureSettings();
-  const order = (features.homeSections || []).filter((s) => s.enabled !== false);
+  const videoAllowed = features.videoEnabledUser !== false;
+  const order = (features.homeSections || []).filter(
+    (s) => s.enabled !== false && (s.key !== "video" || videoAllowed)
+  );
   const wants = new Set(order.map((s) => s.key));
 
   const area = await safe(
@@ -53,18 +57,17 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
   const perCategory = Math.min(Math.max(parseInt(req.query.perCategory, 10) || 8, 1), 20);
   const maxCategories = Math.min(Math.max(parseInt(req.query.maxCategories, 10) || 8, 1), 20);
   const videoLimit = Math.min(Math.max(parseInt(req.query.videoLimit, 10) || 6, 1), 20);
-  const videoAllowed = features.videoEnabledUser !== false && req.user?.videoEnabled !== false;
 
   const needCategories = wants.has("categories") || wants.has("products");
 
-  const [banners, categorySections, video, hotDeals, suggestionData, suggestedVendors] = await Promise.all([
+  const [banners, categorySections, video, hotDeals, hotDealsTimer, suggestionData, suggestedVendors] = await Promise.all([
     wants.has("banners")
       ? safe("banners", () => listActiveBanners({ city, targetType: "user", baseUrl }), [])
       : [],
     needCategories
       ? safe("categories", () => loadCategorySections(req, { baseUrl, perCategory, maxCategories }), [])
       : [],
-    wants.has("video") && videoAllowed
+    wants.has("video")
       ? safe("video", () => loadVideoPage({ feedType: "all", limit: videoLimit, lite: true, baseUrl, userId: req.user?._id }), {
           items: [],
           hasMore: false,
@@ -72,10 +75,16 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
         })
       : { items: [], hasMore: false, nextCursor: null },
     wants.has("hotDeals") && features.hotDealsEnabled !== false
-      ? safe("hotDeals", () => loadHotDealCards(req, { limit: features.hotDealsLimit }), [])
+      ? safe("hotDeals", () => loadHotDealCards(req), [])
       : [],
+    wants.has("hotDeals") && features.hotDealsEnabled !== false
+      ? safe("hotDealsTimer", () => getHotDealsTimer(), { startTime: "00:00", endTime: "23:59", percentOff: 50 })
+      : { startTime: "00:00", endTime: "23:59", percentOff: 50 },
     wants.has("suggestions")
-      ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl }), { items: [], personalised: false })
+      ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl, city: area.city }), {
+          items: [],
+          personalised: false,
+        })
       : { items: [], personalised: false },
     wants.has("suggestions")
       ? safe(
@@ -90,13 +99,13 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
     banners: () => ({ items: banners }),
     categories: () => ({ items: categorySections.map((s) => s.category) }),
     video: () => ({
-      enabled: videoAllowed,
+      enabled: true,
       items: video.items,
       hasMore: video.hasMore,
       nextCursor: video.nextCursor,
       endpoint: "/api/public/video-feeds",
     }),
-    hotDeals: () => ({ enabled: features.hotDealsEnabled !== false, items: hotDeals }),
+    hotDeals: () => ({ enabled: features.hotDealsEnabled !== false, items: hotDeals, timer: hotDealsTimer }),
     products: () => ({ groups: categorySections }),
     suggestions: () => ({
       items: suggestionData.items,

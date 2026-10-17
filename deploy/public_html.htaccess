@@ -1,0 +1,48 @@
+# OHO E-Bazar document-root .htaccess
+#
+# Expected public_html layout:
+#   .htaccess
+#   index.html, assets/, media/       <- OhoEBazarWebsite/dist
+#   admin/index.html, admin/assets/   <- AdminPannel/dist (built with /admin/)
+#   vendor/index.html, vendor/assets/ <- VenueVendorPanel/dist (built with /vendor/)
+#
+# Apache modules required: rewrite, proxy, proxy_http, headers
+# The API process must listen on 127.0.0.1:5017.
+
+Options -Indexes
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|mjs|css|svg|webp|png|jpg|jpeg|gif|ico|woff2?)$">
+        Header set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Keep API, uploads, CMS pages, and legal pages out of the SPAs.
+    # These rules require mod_proxy and mod_proxy_http.
+    <IfModule mod_proxy.c>
+        RewriteRule ^api(?:/(.*))?$ http://127.0.0.1:5017/api/$1 [P,L,NE]
+        RewriteRule ^uploads(?:/(.*))?$ http://127.0.0.1:5017/uploads/$1 [P,L,NE]
+        RewriteRule ^view(?:/(.*))?$ http://127.0.0.1:5017/view/$1 [P,L,NE]
+        RewriteRule ^(privacy-policy|delete-account)/?$ http://127.0.0.1:5017/$1 [P,L,NE]
+        RewriteRule ^(vendor|delivery|driver)/(privacy-policy|delete-account)/?$ http://127.0.0.1:5017/$1/$2 [P,L,NE]
+    </IfModule>
+
+    # Serve files that belong to the selected application.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [END]
+
+    # Admin SPA: /admin and all client-side admin routes.
+    RewriteRule ^admin/?$ admin/index.html [END]
+    RewriteRule ^admin(?:/.*)?$ admin/index.html [END]
+
+    # Vendor SPA: /vendor and all client-side vendor routes.
+    RewriteRule ^vendor/?$ vendor/index.html [END]
+    RewriteRule ^vendor(?:/.*)?$ vendor/index.html [END]
+
+    # Public website SPA at the document root.
+    RewriteRule ^ index.html [END]
+</IfModule>

@@ -1,6 +1,20 @@
-import { mediaUrlOnNodePort } from "../media.js";
+import { mediaUrl, mediaUrlOnNodePort } from "../media.js";
 
-export const DEFAULT_IMAGE_SRC = "/default-image.svg";
+/** Resolved against the Vite base, so it works when the panel is served from /admin/. */
+export const DEFAULT_IMAGE_SRC = `${import.meta.env.BASE_URL || "/"}default-image.svg`;
+
+export function imageOrDefault(path) {
+  return mediaUrl(path) || DEFAULT_IMAGE_SRC;
+}
+
+function isPlaceholder(src, placeholder) {
+  if (!src) return false;
+  try {
+    return new URL(src, window.location.href).pathname === new URL(placeholder, window.location.href).pathname;
+  } catch {
+    return src === placeholder;
+  }
+}
 
 export function installBrokenImageFallback(placeholder = DEFAULT_IMAGE_SRC) {
   if (typeof document === "undefined") return;
@@ -10,18 +24,19 @@ export function installBrokenImageFallback(placeholder = DEFAULT_IMAGE_SRC) {
     (event) => {
       const el = event.target;
       if (!(el instanceof HTMLImageElement)) return;
-      if (el.dataset.fallbackApplied === "1") return;
 
-      if (el.dataset.portRetry !== "1") {
-        const retry = mediaUrlOnNodePort(el.currentSrc || el.getAttribute("src") || "");
-        if (retry) {
-          el.dataset.portRetry = "1";
+      const src = el.getAttribute("src") || "";
+      if (isPlaceholder(src, placeholder)) return;
+
+      if (src && el.dataset.retriedSrc !== src) {
+        const retry = mediaUrlOnNodePort(src);
+        if (retry && retry !== src) {
+          el.dataset.retriedSrc = retry;
           el.src = retry;
           return;
         }
       }
 
-      el.dataset.fallbackApplied = "1";
       el.src = placeholder;
     },
     true
