@@ -50,6 +50,22 @@ function oho_sh($cmd) {
   return is_string($out) ? trim($out) : null;
 }
 
+function oho_ssl_modulus($file, $type) {
+  $file = escapeshellarg($file);
+  if ($type === 'cert') {
+    $out = oho_sh("openssl x509 -noout -modulus -in $file");
+  } else {
+    $out = oho_sh("openssl rsa -noout -modulus -in $file");
+    if (!$out) {
+      $out = oho_sh("openssl pkey -noout -modulus -in $file");
+    }
+  }
+  if (!$out || stripos($out, 'Modulus=') === false) {
+    return null;
+  }
+  return strtoupper(preg_replace('/^Modulus=/i', '', trim($out)));
+}
+
 function oho_pick_ssl_pair($home, $domain = 'ohoebazar.com') {
   $needle = strtolower(str_replace('.', '_', $domain));
   $certDir = rtrim($home, '/') . '/ssl/certs';
@@ -83,46 +99,38 @@ function oho_pick_ssl_pair($home, $domain = 'ohoebazar.com') {
   if (!$certs || !$keys) {
     return null;
   }
-  $cert = null;
-  foreach ($certs as $c) {
-    if (stripos(basename($c), $needle) !== false) {
-      $cert = $c;
-      break;
+
+  // Prefer domain certs first, then verify modulus against every key.
+  usort($certs, function ($a, $b) use ($needle) {
+    $aHit = stripos(basename($a), $needle) !== false ? 0 : 1;
+    $bHit = stripos(basename($b), $needle) !== false ? 0 : 1;
+    return $aHit - $bHit;
+  });
+
+  foreach ($certs as $cert) {
+    $modCert = oho_ssl_modulus($cert, 'cert');
+    if (!$modCert) {
+      continue;
     }
-  }
-  if (!$cert) {
-    $cert = $certs[0];
-  }
-  $base = preg_replace('/\.(crt|pem)$/i', '', basename($cert));
-  $key = null;
-  foreach ($keys as $k) {
-    if (strpos(basename($k), $base) === 0) {
-      $key = $k;
-      break;
-    }
-  }
-  if (!$key) {
-    foreach ($keys as $k) {
-      if (stripos(basename($k), $needle) !== false) {
-        $key = $k;
-        break;
+    foreach ($keys as $key) {
+      $modKey = oho_ssl_modulus($key, 'key');
+      if ($modKey && hash_equals($modCert, $modKey)) {
+        $base = preg_replace('/\.(crt|pem)$/i', '', basename($cert));
+        $ca = null;
+        foreach ($bundles as $b) {
+          if (strpos(basename($b), $base) === 0 || stripos(basename($b), $needle) !== false) {
+            $ca = $b;
+            break;
+          }
+        }
+        if (!$ca && $bundles) {
+          $ca = $bundles[0];
+        }
+        return ['cert' => $cert, 'key' => $key, 'ca' => $ca, 'matched' => true];
       }
     }
   }
-  if (!$key) {
-    $key = $keys[0];
-  }
-  $ca = null;
-  foreach ($bundles as $b) {
-    if (strpos(basename($b), $base) === 0 || stripos(basename($b), $needle) !== false) {
-      $ca = $b;
-      break;
-    }
-  }
-  if (!$ca && $bundles) {
-    $ca = $bundles[0];
-  }
-  return ['cert' => $cert, 'key' => $key, 'ca' => $ca];
+  return null;
 }
 
 function oho_set_apache_proxy_port($htaccessPath, $port) {
@@ -180,6 +188,7 @@ $home = getenv('HOME') ?: ('/home/' . get_current_user());
 $sslPair = oho_pick_ssl_pair($home, 'ohoebazar.com');
 $sslJson = null;
 $apachePort = 5017;
+$sslRemoved = [];
 if ($sslPair) {
   $sslJson = [
     'cert' => $sslPair['cert'],
@@ -188,8 +197,16 @@ if ($sslPair) {
   ];
   @file_put_contents($nodeRoot . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   @file_put_contents($src . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+} else {
+  // Remove bad/mismatched SSL config so Node can boot HTTP-only.
+  foreach ([$nodeRoot . '/.oho-ssl.json', $src . '/.oho-ssl.json'] as $badSsl) {
+    if (is_file($badSsl)) {
+      $sslRemoved[] = $badSsl;
+      @unlink($badSsl);
+    }
+  }
 }
-// Always keep Apache on 5017 (Node serves HTTP on 127.0.0.1:5017 + HTTPS on public IP:5017).
+// Always keep Apache on 5017.
 oho_set_apache_proxy_port($docRoot . '/.htaccess', $apachePort);
 
 $serverBody = is_file($nodeRoot . '/server.js') ? (string) @file_get_contents($nodeRoot . '/server.js') : '';
@@ -211,16 +228,23 @@ $result = [
   'copiedFiles' => $fileCopy,
   'ssl' => $sslJson ? [
     'written' => true,
+    'matched' => true,
     'cert' => basename((string) $sslJson['cert']),
     'key' => basename((string) $sslJson['key']),
     'ca' => $sslJson['ca'] ? basename((string) $sslJson['ca']) : null,
     'apachePort' => $apachePort,
-  ] : ['written' => false, 'home' => $home, 'apachePort' => $apachePort],
-  'rootHasHttpsBuild' => strpos($serverBody, 'https-mux-5017-2026-10-17') !== false
-    || strpos($serverBody, 'https-5017-2026-10-17') !== false,
+  ] : [
+    'written' => false,
+    'matched' => false,
+    'removed' => $sslRemoved,
+    'home' => $home,
+    'apachePort' => $apachePort,
+  ],
+  'rootHasHttpsBuild' => strpos($serverBody, 'https-safe-5017-2026-10-17') !== false
+    || strpos($serverBody, 'https-mux-5017-2026-10-17') !== false,
   'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
   'actions' => [
-    ['signal' => 'skipped — restart Node once from Hostinger panel to enable HTTPS :5017'],
+    ['signal' => 'skipped — restart Node from Hostinger panel after this sync'],
   ],
 ];
 

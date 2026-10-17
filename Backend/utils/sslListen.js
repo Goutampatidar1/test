@@ -1,10 +1,6 @@
 /**
- * Serve HTTP + HTTPS on the same PORT (5017).
- *
- * Hostinger health checks + Apache use plain HTTP on 127.0.0.1:5017.
- * Flutter uses https://ohoebazar.com:5017 — TLS ClientHello is demuxed to HTTPS.
- *
- * Without certs: plain HTTP on 0.0.0.0:PORT.
+ * Optional HTTP+HTTPS on the same PORT (5017).
+ * If cert/key missing or mismatched, falls back to plain HTTP so the API stays up.
  */
 const fs = require("fs");
 const path = require("path");
@@ -12,6 +8,7 @@ const os = require("os");
 const net = require("net");
 const http = require("http");
 const https = require("https");
+const crypto = require("crypto");
 
 function readIfExists(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
@@ -22,10 +19,29 @@ function readIfExists(filePath) {
   }
 }
 
+function keyMatchesCert(certPem, keyPem) {
+  try {
+    if (typeof crypto.X509Certificate !== "function") return true;
+    const x509 = new crypto.X509Certificate(certPem);
+    const key = crypto.createPrivateKey(keyPem);
+    if (typeof x509.checkPrivateKey === "function") {
+      return x509.checkPrivateKey(key);
+    }
+    return true;
+  } catch (err) {
+    console.warn("SSL key/cert check failed:", err.message);
+    return false;
+  }
+}
+
 function loadFromPaths(certPath, keyPath, caPath) {
   const cert = readIfExists(certPath);
   const key = readIfExists(keyPath);
   if (!cert || !key) return null;
+  if (!keyMatchesCert(cert, key)) {
+    console.warn(`SSL skip: key does not match cert (${keyPath} / ${certPath})`);
+    return null;
+  }
   const opts = { cert, key };
   const ca = readIfExists(caPath);
   if (ca) {
@@ -40,7 +56,8 @@ function loadFromJsonFile(filePath) {
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
     return loadFromPaths(raw.cert, raw.key, raw.ca || raw.cabundle || null);
-  } catch {
+  } catch (err) {
+    console.warn("SSL json load failed:", err.message);
     return null;
   }
 }
@@ -80,25 +97,38 @@ function discoverCpanelSsl(domain = "ohoebazar.com") {
     ...listFiles(certDir, /bundle\.(crt|pem)$/i),
   ];
 
-  const certPath = pickBest(certs, needle);
-  if (!certPath) return null;
+  const preferredCerts = [
+    ...certs.filter((f) => f.toLowerCase().includes(needle)),
+    ...certs,
+  ];
 
-  const base = path.basename(certPath).replace(/\.(crt|pem)$/i, "");
-  const keyPath =
-    keys.find((k) => path.basename(k).startsWith(base)) ||
-    pickBest(keys, needle) ||
-    keys[0];
-  if (!keyPath) return null;
-
-  const caPath =
-    bundles.find((b) => path.basename(b).startsWith(base)) ||
-    pickBest(bundles, needle) ||
-    null;
-
-  return loadFromPaths(certPath, keyPath, caPath);
+  for (const certPath of preferredCerts) {
+    const base = path.basename(certPath).replace(/\.(crt|pem)$/i, "");
+    const orderedKeys = [
+      ...keys.filter((k) => path.basename(k).startsWith(base)),
+      ...keys.filter((k) => path.basename(k).toLowerCase().includes(needle)),
+      ...keys,
+    ];
+    const seen = new Set();
+    for (const keyPath of orderedKeys) {
+      if (seen.has(keyPath)) continue;
+      seen.add(keyPath);
+      const caPath =
+        bundles.find((b) => path.basename(b).startsWith(base)) ||
+        pickBest(bundles, needle) ||
+        null;
+      const loaded = loadFromPaths(certPath, keyPath, caPath);
+      if (loaded) return loaded;
+    }
+  }
+  return null;
 }
 
 function loadSslMaterials() {
+  if (String(process.env.DISABLE_HTTPS_MUX || "").trim() === "1") {
+    return null;
+  }
+
   const fromEnv = loadFromPaths(
     process.env.SSL_CERT_PATH || process.env.SSL_CERT_FILE,
     process.env.SSL_KEY_PATH || process.env.SSL_KEY_FILE,
@@ -132,15 +162,10 @@ function listenHttpOnly(app, port, onListening) {
   return { mode: "http-only", server };
 }
 
-/**
- * Multiplex HTTP and HTTPS on one TCP port.
- * TLS records start with handshake type 0x16.
- */
 function listenHttpAndHttpsSamePort(app, port, ssl, onListening) {
   const httpServer = http.createServer(app);
   const httpsServer = https.createServer(ssl.opts, app);
 
-  // Prevent accidental .listen on these — connections are fed by the mux.
   httpServer.on("error", (err) => console.error("HTTP server error:", err.message));
   httpsServer.on("error", (err) => console.error("HTTPS server error:", err.message));
 
@@ -155,13 +180,9 @@ function listenHttpAndHttpsSamePort(app, port, ssl, onListening) {
 
     socket.once("data", (buf) => {
       socket.pause();
-      // Put bytes back so http/https parsers see the full stream.
       socket.unshift(buf);
-
       const isTls = buf && buf.length > 0 && buf[0] === 0x16;
-      const target = isTls ? httpsServer : httpServer;
-      target.emit("connection", socket);
-
+      (isTls ? httpsServer : httpServer).emit("connection", socket);
       process.nextTick(() => {
         try {
           socket.resume();
@@ -174,12 +195,6 @@ function listenHttpAndHttpsSamePort(app, port, ssl, onListening) {
 
   mux.on("error", (err) => {
     console.error("Mux listen error:", err.message);
-    console.warn("Falling back to HTTP-only on", port);
-    try {
-      mux.close();
-    } catch {
-      /* ignore */
-    }
     listenHttpOnly(app, port, onListening);
   });
 
@@ -196,7 +211,7 @@ function listenHttpAndHttpsSamePort(app, port, ssl, onListening) {
     }
   });
 
-  return { mode: "http+https-mux", mux, httpServer, httpsServer, ssl };
+  return { mode: "http+https-mux", mux, ssl };
 }
 
 /**
@@ -204,11 +219,16 @@ function listenHttpAndHttpsSamePort(app, port, ssl, onListening) {
  * @param {{ port: number, onListening?: Function }} options
  */
 async function listenHttpAndMaybeHttps(app, { port, onListening }) {
-  const ssl = loadSslMaterials();
-  if (!ssl) {
+  try {
+    const ssl = loadSslMaterials();
+    if (!ssl) {
+      return listenHttpOnly(app, port, onListening);
+    }
+    return listenHttpAndHttpsSamePort(app, port, ssl, onListening);
+  } catch (err) {
+    console.error("HTTPS setup failed, using HTTP-only:", err.message);
     return listenHttpOnly(app, port, onListening);
   }
-  return listenHttpAndHttpsSamePort(app, port, ssl, onListening);
 }
 
 module.exports = {
