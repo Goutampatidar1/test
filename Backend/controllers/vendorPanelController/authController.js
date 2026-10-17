@@ -299,10 +299,13 @@ async function createServiceAccount(req, phoneNorm, body, vendorPanelType, locat
 
   const { approvalStatus } = await resolveVendorApprovalRequired();
 
-  return VenueVendor.create({
+  // Set phoneCanonical explicitly so login lookups never miss service-only accounts
+  // (field is select:false; rely on it being persisted, not only via pre-validate).
+  const created = await VenueVendor.create({
     name,
     ...(emailNorm ? { email: emailNorm } : {}),
     phone: phoneNorm,
+    phoneCanonical: phoneNorm,
     businessName,
     businessPhone: normalizeOptional(body.businessPhone) || phoneNorm,
     businessEmail: normalizeOptional(body.businessEmail)?.toLowerCase() ?? null,
@@ -311,7 +314,7 @@ async function createServiceAccount(req, phoneNorm, body, vendorPanelType, locat
     ...location,
     aadhaarCardFront: documentUploads.aadhaarCardFront,
     aadhaarCardBack: documentUploads.aadhaarCardBack,
-    aadhaarCard: documentUploads.aadhaarCard,
+    aadhaarCard: documentUploads.aadhaarCardFront,
     panCard: documentUploads.panCard,
     profileImage: documentUploads.profileImage,
     fcm_id: normalizeOptional(body.fcm_id),
@@ -320,6 +323,9 @@ async function createServiceAccount(req, phoneNorm, body, vendorPanelType, locat
     isOpen: true,
     vendorPanelType,
   });
+
+  // Re-fetch so callers always see persisted phone fields used by OTP login.
+  return VenueVendor.findById(created._id);
 }
 
 function panelAuthResponse(res, statusCode, message, session, extra = {}) {

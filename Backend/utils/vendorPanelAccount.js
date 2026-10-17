@@ -55,13 +55,43 @@ async function findVendorByPhone(phoneRaw) {
 
 async function findVenueVendorByPhone(phoneRaw) {
   const phoneNorm = normalizePhone(phoneRaw);
-  const venueVendor = await VenueVendor.findOne({
-    $or: [
-      { phoneCanonical: phoneNorm },
-      { phone: { $in: phoneLookupValues(phoneNorm) } },
-    ],
-  });
-  return { venueVendor, phoneNorm };
+  const variants = phoneLookupValues(phoneNorm);
+
+  // Match Vendor lookup: exact phone first (most common after panel registration).
+  let venueVendor = await VenueVendor.findOne({ phone: phoneNorm });
+  if (venueVendor) {
+    return { venueVendor, phoneNorm };
+  }
+
+  venueVendor = await VenueVendor.findOne({ phone: { $in: variants } });
+  if (venueVendor) {
+    return { venueVendor, phoneNorm };
+  }
+
+  // Legacy / sparse canonical field (select:false — still queryable).
+  venueVendor = await VenueVendor.findOne({ phoneCanonical: { $in: variants } }).select(
+    "+phoneCanonical"
+  );
+  if (venueVendor) {
+    return { venueVendor, phoneNorm };
+  }
+
+  // Last-ditch: stored values with extra formatting still ending in the 10 digits.
+  const digits = String(phoneRaw ?? "").replace(/\D/g, "");
+  if (digits.length >= 10) {
+    const last10 = digits.slice(-10);
+    venueVendor = await VenueVendor.findOne({
+      $or: [
+        { phone: { $regex: `${last10}$` } },
+        { phoneCanonical: last10 },
+      ],
+    }).select("+phoneCanonical");
+    if (venueVendor) {
+      return { venueVendor, phoneNorm: last10 };
+    }
+  }
+
+  return { venueVendor: null, phoneNorm };
 }
 
 async function findPanelAccountsByPhone(phoneRaw) {

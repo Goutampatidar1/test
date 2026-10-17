@@ -136,16 +136,12 @@ function assertVenueVendorCanLogin(venueVendor) {
   }
 }
 
-/** Lookup in `venuevendors` (VenueVendor model) by normalized or legacy phone formats. */
+/** Lookup in `venuevendors` — shared helper (exact phone + legacy formats). */
 async function findVenueVendorByPhone(phoneRaw) {
-  const phoneNorm = normalizePhone(phoneRaw);
-  const venueVendor = await VenueVendor.findOne({
-    $or: [
-      { phoneCanonical: phoneNorm },
-      { phone: { $in: phoneLookupValues(phoneNorm) } },
-    ],
-  });
-  return { venueVendor, phoneNorm };
+  const {
+    findVenueVendorByPhone: findShared,
+  } = require("../../utils/vendorPanelAccount");
+  return findShared(phoneRaw);
 }
 
 function issueAuthTokens(venueVendor) {

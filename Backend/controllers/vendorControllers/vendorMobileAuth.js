@@ -29,6 +29,11 @@ const {
   parseStringArrayField,
   cleanupUploadedVendorFiles,
 } = require("../../utils/vendorFileUpload");
+const {
+  findPanelAccountsByPhone,
+  assertPanelAccountCanAuthenticate,
+  buildPanelSession,
+} = require("../../utils/vendorPanelAccount");
 
 const MAX_SHOP_IMAGES = 5;
 const OTP_PURPOSE_REGISTER = "vendor_register";
@@ -89,26 +94,6 @@ function assertVendorCanLoginWithOtp(vendor) {
   if (vendor.approvalStatus !== "approved") {
     throw new AppError("Your account is pending admin approval. You can log in once it is approved.", 403);
   }
-}
-
-async function findVendorByPhone(phoneRaw) {
-  const phoneNorm = normalizePhone(phoneRaw);
-  let vendor = await Vendor.findOne({ phone: phoneNorm });
-  if (vendor) {
-    return { vendor, phoneNorm };
-  }
-
-  const digits = String(phoneRaw ?? "").replace(/\D/g, "");
-  if (digits.length >= 10) {
-    const last10 = digits.slice(-10);
-    const variants = [last10, `91${last10}`, `+91${last10}`, `0${last10}`];
-    vendor = await Vendor.findOne({ phone: { $in: variants } });
-    if (vendor) {
-      return { vendor, phoneNorm: last10 };
-    }
-  }
-
-  return { vendor: null, phoneNorm };
 }
 
 async function saveVendorPhoneOtp(phoneNorm, otpPurpose, otp, otpExpire) {
@@ -334,24 +319,31 @@ exports.checkPhone = asyncHandler(async (req, res) => {
   if (otpPurpose === "login") otpPurpose = OTP_PURPOSE_LOGIN;
   if (otpPurpose === "register") otpPurpose = OTP_PURPOSE_REGISTER;
 
-  const { vendor: existing } = await findVendorByPhone(phone);
+  // Service-only panel registrations live in VenueVendor — include them in login checks.
+  const { vendor: existing, venueVendor } = await findPanelAccountsByPhone(phone);
 
   if (otpPurpose === OTP_PURPOSE_LOGIN) {
-    if (!existing) {
+    if (!existing && !venueVendor) {
       throw new AppError("No account found with this phone number. Please sign up", 404);
     }
-    // Check if vendor can login (throws error for pending/blocked/rejected)
-    assertVendorCanLoginWithOtp(existing);
-    
+    if (existing) {
+      assertVendorCanLoginWithOtp(existing);
+    } else {
+      assertPanelAccountCanAuthenticate(venueVendor, "Service provider account");
+    }
+
     return sendSuccess(res, "Phone verified. You can proceed to OTP", {
       phone: phoneNorm,
       canProceed: true,
       purpose: otpPurpose,
+      vendorPanelType: existing?.vendorPanelType || venueVendor?.vendorPanelType || (existing ? "ecom" : "service"),
+      hasEcom: Boolean(existing),
+      hasService: Boolean(venueVendor),
     });
   }
 
-  // For registration
-  if (existing) {
+  // For registration (ecom mobile) — block if either account already exists for this phone
+  if (existing || venueVendor) {
     throw new AppError("Phone number is already registered. Please log in", 409);
   }
 
@@ -376,20 +368,21 @@ exports.sendOtp = asyncHandler(async (req, res) => {
     throw new AppError("Invalid purpose. Use vendor_register or vendor_login", 400);
   }
 
-  const { vendor: existing } = await findVendorByPhone(phone);
+  const { vendor: existing, venueVendor } = await findPanelAccountsByPhone(phone);
 
-  // If vendor exists, always check if they can login (block pending/rejected/blocked)
-  if (existing) {
+  // If an account exists, always check if they can login (block pending/rejected/blocked)
+  if (existing || venueVendor) {
     if (otpPurpose === OTP_PURPOSE_REGISTER) {
       throw new AppError("Phone number is already registered. Please log in", 409);
     }
-    // Block pending vendors BEFORE sending OTP
-    assertVendorCanLoginWithOtp(existing);
-  } else {
-    // No vendor exists
-    if (otpPurpose === OTP_PURPOSE_LOGIN) {
-      throw new AppError("No account found with this phone number. Please sign up", 404);
+    if (existing) {
+      assertVendorCanLoginWithOtp(existing);
+    } else {
+      // Service-only: allow OTP login (pending is OK here; panel session handles approval UI)
+      assertPanelAccountCanAuthenticate(venueVendor, "Service provider account");
     }
+  } else if (otpPurpose === OTP_PURPOSE_LOGIN) {
+    throw new AppError("No account found with this phone number. Please sign up", 404);
   }
 
   const otp = resolveOtpForPhone(phoneNorm);
@@ -425,10 +418,38 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
 
   if (otpPurpose === OTP_PURPOSE_LOGIN) {
     await verifyVendorLoginOtp(phoneNorm, otpValue);
-    const { vendor } = await findVendorByPhone(phone);
-    if (!vendor) {
+    const { vendor, venueVendor } = await findPanelAccountsByPhone(phone);
+    if (!vendor && !venueVendor) {
       throw new AppError("Account not found", 404);
     }
+
+    // Any service account (service-only or both) → vendor-panel session shape.
+    if (venueVendor) {
+      if (vendor) {
+        assertPanelAccountCanAuthenticate(vendor, "E-commerce account");
+      }
+      assertPanelAccountCanAuthenticate(venueVendor, "Service provider account");
+      if (fcm_id !== undefined) {
+        venueVendor.fcm_id = normalizeOptional(fcm_id);
+        await venueVendor.save();
+      }
+      let populatedVendor = vendor;
+      if (populatedVendor) {
+        populatedVendor = await Vendor.findById(vendor._id).populate("category", "name mode");
+      }
+      const session = buildPanelSession({
+        vendor: populatedVendor,
+        venueVendor,
+        req,
+      });
+      return res.status(200).json({
+        status: true,
+        message: "Login successful",
+        ...session,
+      });
+    }
+
+    // E-commerce only
     assertVendorCanLoginWithOtp(vendor);
     if (fcm_id !== undefined) {
       vendor.fcm_id = normalizeOptional(fcm_id);
