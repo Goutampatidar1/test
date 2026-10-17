@@ -1,21 +1,28 @@
-import { useId } from "react";
 import { cn } from "@/lib/utils";
 
-/** The OHO bag mark — SVG glyph used as a small decorative icon (e.g. hero eyebrow). */
+/** Shopping-bag mark from the official logo — small decorative icon (e.g. hero eyebrow). */
 export function BrandGlyph({ className }: { className?: string }) {
-  const id = useId();
   return (
     <svg viewBox="0 0 32 32" aria-hidden className={cn("shrink-0", className)}>
-      <defs>
-        <linearGradient id={id} x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#ffd54a" />
-          <stop offset="100%" stopColor="#ff8a00" />
-        </linearGradient>
-      </defs>
       <rect width="32" height="32" rx="8" fill="#141414" />
-      <rect data-glyph-body x="6" y="8" width="16" height="16" rx="3" fill={`url(#${id})`} />
-      <path data-glyph-flap d="M22 11h5v13a2 2 0 0 1-2 2h-3V11z" fill="#ffd54a" />
-      <circle data-glyph-o cx="13.8" cy="16.6" r="3.1" fill="none" stroke="#141414" strokeWidth="2.1" />
+      <path
+        data-glyph-body
+        d="M8 12h16l-1.4 14.2a2.4 2.4 0 0 1-2.4 2.1H11.8a2.4 2.4 0 0 1-2.4-2.1L8 12z"
+        fill="none"
+        stroke="#ff8a00"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        data-glyph-flap
+        d="M12 12c0-3.6 1.8-6.2 4-6.2s4 2.6 4 6.2"
+        fill="none"
+        stroke="#ffd54a"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <circle data-glyph-o cx="13.2" cy="19.2" r="1.35" fill="#d4e157" />
+      <circle cx="18.8" cy="19.2" r="1.35" fill="#d4e157" />
     </svg>
   );
 }
@@ -31,13 +38,15 @@ export function BrandGlyph({ className }: { className?: string }) {
  *   "sm"  → h-7  (28 px) — compact use, e.g. mobile menu header
  *   "md"  → h-9  (36 px) — desktop navbar  (default)
  *   "lg"  → h-11 (44 px) — footer brand block
+ *   "xl"  → h-16 (64 px) — intro loader
  */
-type BrandLogoSize = "sm" | "md" | "lg";
+type BrandLogoSize = "sm" | "md" | "lg" | "xl";
 
 const SIZE: Record<BrandLogoSize, { wrap: string; img: string }> = {
   sm: { wrap: "h-7  px-1.5 rounded-lg",  img: "h-5" },
   md: { wrap: "h-9  px-2   rounded-[10px]", img: "h-6" },
   lg: { wrap: "h-11 px-3   rounded-xl",  img: "h-7" },
+  xl: { wrap: "h-16 px-4   rounded-2xl", img: "h-10" },
 };
 
 export function BrandLogo({

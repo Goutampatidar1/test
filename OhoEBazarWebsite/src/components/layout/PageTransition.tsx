@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { BrandGlyph } from "@/components/brand/BrandMark";
+import { BrandLogo } from "@/components/brand/BrandMark";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { gsap } from "@/lib/gsap";
@@ -11,7 +11,7 @@ export function useIntroDone() {
   return useContext(IntroContext);
 }
 
-/** Opening curtain: brand glyph assembles, then the panel lifts with a curved edge to reveal the page. */
+/** Opening curtain: official brand logo, then the panel lifts with a curved edge to reveal the page. */
 export function PageTransition({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion();
   const [done, setDone] = useState(reduced);
@@ -30,11 +30,9 @@ export function PageTransition({ children }: { children: ReactNode }) {
     document.documentElement.style.overflow = "hidden";
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ delay: 0.1 });
-      tl.from("[data-glyph-body]", { scale: 0, transformOrigin: "50% 50%", duration: 0.5, ease: "back.out(1.8)" })
-        .from("[data-glyph-flap]", { xPercent: -60, opacity: 0, duration: 0.35, ease: "expo.out" }, "-=0.25")
-        .from("[data-glyph-o]", { scale: 0.2, opacity: 0, transformOrigin: "50% 50%", duration: 0.3 }, "-=0.2")
-        .from("[data-curtain-word]", { yPercent: 120, duration: 0.6, ease: "expo.out" }, "-=0.3")
-        .to("[data-curtain-inner]", { y: -30, opacity: 0, duration: 0.35, ease: "power2.in" }, "+=0.1")
+      tl.from("[data-curtain-logo]", { scale: 0.88, opacity: 0, duration: 0.55, ease: "back.out(1.5)" })
+        .from("[data-curtain-word]", { yPercent: 120, duration: 0.55, ease: "expo.out" }, "-=0.25")
+        .to("[data-curtain-inner]", { y: -30, opacity: 0, duration: 0.35, ease: "power2.in" }, "+=0.15")
         .add(() => {
           document.documentElement.style.overflow = "";
           setDone(true);
@@ -59,7 +57,9 @@ export function PageTransition({ children }: { children: ReactNode }) {
           style={{ clipPath: "ellipse(140% 140% at 50% 0%)" }}
         >
           <div data-curtain-inner className="flex flex-col items-center gap-5">
-            <BrandGlyph className="size-16" />
+            <div data-curtain-logo>
+              <BrandLogo size="xl" className="shadow-md" />
+            </div>
             <span className="overflow-hidden px-2 pb-1">
               <span data-curtain-word className="block font-display text-2xl tracking-tight">
                 {lang === "hi" ? "ओहो ई-बाज़ार" : "OHO E-Bazar"}
