@@ -2,6 +2,8 @@
 /**
  * Copy fixed Backend code into the Node app root (document root) and touch restart.
  * Hostinger Node Application root = public_html/ohoebazar.com (NOT .../Backend).
+ * Also wires cPanel SSL into .oho-ssl.json so https://ohoebazar.com:5017 works,
+ * and points Apache ProxyPass at the internal HTTP port (5018) when TLS is on.
  * GET /ops-reload-api.php?token=oho-reload-2026-10-17
  */
 header('Content-Type: application/json; charset=utf-8');
@@ -48,6 +50,101 @@ function oho_sh($cmd) {
   return is_string($out) ? trim($out) : null;
 }
 
+function oho_pick_ssl_pair($home, $domain = 'ohoebazar.com') {
+  $needle = strtolower(str_replace('.', '_', $domain));
+  $certDir = rtrim($home, '/') . '/ssl/certs';
+  $keyDir = rtrim($home, '/') . '/ssl/keys';
+  if (!is_dir($certDir) || !is_dir($keyDir)) {
+    return null;
+  }
+  $certs = [];
+  $bundles = [];
+  foreach (scandir($certDir) ?: [] as $name) {
+    if ($name === '.' || $name === '..') continue;
+    $full = $certDir . '/' . $name;
+    if (!is_file($full)) continue;
+    $lower = strtolower($name);
+    if (preg_match('/\.(cabundle|ca-bundle)$/', $lower) || strpos($lower, 'bundle') !== false) {
+      $bundles[] = $full;
+      continue;
+    }
+    if (preg_match('/\.(crt|pem)$/', $lower)) {
+      $certs[] = $full;
+    }
+  }
+  $keys = [];
+  foreach (scandir($keyDir) ?: [] as $name) {
+    if ($name === '.' || $name === '..') continue;
+    $full = $keyDir . '/' . $name;
+    if (is_file($full) && preg_match('/\.(key|pem)$/i', $name)) {
+      $keys[] = $full;
+    }
+  }
+  if (!$certs || !$keys) {
+    return null;
+  }
+  $cert = null;
+  foreach ($certs as $c) {
+    if (stripos(basename($c), $needle) !== false) {
+      $cert = $c;
+      break;
+    }
+  }
+  if (!$cert) {
+    $cert = $certs[0];
+  }
+  $base = preg_replace('/\.(crt|pem)$/i', '', basename($cert));
+  $key = null;
+  foreach ($keys as $k) {
+    if (strpos(basename($k), $base) === 0) {
+      $key = $k;
+      break;
+    }
+  }
+  if (!$key) {
+    foreach ($keys as $k) {
+      if (stripos(basename($k), $needle) !== false) {
+        $key = $k;
+        break;
+      }
+    }
+  }
+  if (!$key) {
+    $key = $keys[0];
+  }
+  $ca = null;
+  foreach ($bundles as $b) {
+    if (strpos(basename($b), $base) === 0 || stripos(basename($b), $needle) !== false) {
+      $ca = $b;
+      break;
+    }
+  }
+  if (!$ca && $bundles) {
+    $ca = $bundles[0];
+  }
+  return ['cert' => $cert, 'key' => $key, 'ca' => $ca];
+}
+
+function oho_set_apache_proxy_port($htaccessPath, $port) {
+  if (!is_file($htaccessPath)) {
+    return false;
+  }
+  $body = (string) @file_get_contents($htaccessPath);
+  if ($body === '') {
+    return false;
+  }
+  $updated = preg_replace(
+    '#http://127\.0\.0\.1:\d+#',
+    'http://127.0.0.1:' . (int) $port,
+    $body
+  );
+  if (!is_string($updated) || $updated === $body) {
+    // still write if already correct
+    return (bool) preg_match('#http://127\.0\.0\.1:' . (int) $port . '#', $body);
+  }
+  return (bool) @file_put_contents($htaccessPath, $updated);
+}
+
 $docRoot = rtrim(str_replace('\\', '/', (string) ($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
 $src = $docRoot . '/Backend';
 if (!is_file($src . '/controllers/vendorControllers/vendorMobileAuth.js')) {
@@ -78,6 +175,22 @@ foreach ($files as $file) {
   }
 }
 
+$home = getenv('HOME') ?: ('/home/' . get_current_user());
+$sslPair = oho_pick_ssl_pair($home, 'ohoebazar.com');
+$sslJson = null;
+$apachePort = 5017;
+if ($sslPair) {
+  $sslJson = [
+    'cert' => $sslPair['cert'],
+    'key' => $sslPair['key'],
+    'ca' => $sslPair['ca'],
+  ];
+  @file_put_contents($nodeRoot . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+  @file_put_contents($src . '/.oho-ssl.json', json_encode($sslJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+  $apachePort = 5018;
+}
+oho_set_apache_proxy_port($docRoot . '/.htaccess', $apachePort);
+
 $authRoot = $nodeRoot . '/controllers/vendorControllers/vendorMobileAuth.js';
 $authBody = is_file($authRoot) ? (string) @file_get_contents($authRoot) : '';
 $serverBody = is_file($nodeRoot . '/server.js') ? (string) @file_get_contents($nodeRoot . '/server.js') : '';
@@ -97,23 +210,28 @@ $result = [
   'nodeRoot' => $nodeRoot,
   'copiedDirs' => $copied,
   'copiedFiles' => $fileCopy,
-  'rootHasBuildTag' => strpos($authBody, 'service-login-2026-10-17') !== false,
+  'ssl' => $sslJson ? [
+    'written' => true,
+    'cert' => basename((string) $sslJson['cert']),
+    'key' => basename((string) $sslJson['key']),
+    'ca' => $sslJson['ca'] ? basename((string) $sslJson['ca']) : null,
+    'apachePort' => $apachePort,
+  ] : ['written' => false, 'home' => $home, 'apachePort' => $apachePort],
+  'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-2026-10-17') !== false,
+  'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
   'rootHasApiBuildRoute' => strpos($serverBody, '/api/__build') !== false,
   'actions' => [],
 ];
 
-// Do NOT kill the Node process — Hostinger may wrap :5017 with TLS; killing breaks https://host:5017.
-$result['actions'][] = ['signal' => 'skipped (avoid breaking Hostinger TLS wrapper)'];
+// Do NOT kill the Node process from PHP — restart from Hostinger Node panel after sync.
+$result['actions'][] = ['signal' => 'skipped — restart Node from Hostinger panel to load HTTPS :5017'];
 
 usleep(500000);
-$result['verifyBuild'] = oho_sh('curl -s -m 5 http://127.0.0.1:5017/api/__build || echo FAIL');
-$result['verifyCheckPhone'] = oho_sh(
-  'curl -s -m 5 -X POST http://127.0.0.1:5017/api/vendor/auth/check-phone '
-  . '-H "Content-Type: application/json" '
-  . '-d \'{"phone":"9650555555","purpose":"vendor_login"}\' || echo FAIL'
-);
+$result['verifyHttpApache'] = oho_sh('curl -s -m 5 http://127.0.0.1:' . (int) $apachePort . '/api/__build || echo FAIL');
+$result['verifyHttp5017'] = oho_sh('curl -s -m 5 http://127.0.0.1:5017/api/__build || echo FAIL');
+$result['verifyHttps5017'] = oho_sh('curl -sk -m 5 https://127.0.0.1:5017/api/__build || echo FAIL');
 $result['verifyVia443'] = oho_sh(
-  'curl -s -m 5 https://127.0.0.1/api/__build -k || curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL'
+  'curl -s -m 5 https://ohoebazar.com/api/__build || echo FAIL'
 );
 
 @file_put_contents($docRoot . '/api-reload-status.json', json_encode($result, JSON_PRETTY_PRINT));

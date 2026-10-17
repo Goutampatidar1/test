@@ -107,11 +107,12 @@ Framework is your choice (Flutter or React Native both fine). Required capabilit
 
   | Env | `API_BASE` |
   |---|---|
-  | **prod** | `https://ohoebazar.com` |
+  | **prod** | `https://ohoebazar.com:5017` |
   | **dev** | `http://<LAN-IP>:5001` |
 
-  **Do not use `https://ohoebazar.com:5017`.** Port 5017 is plain HTTP (Node). HTTPS on that port fails TLS → “Cannot reach the server.” Apache already proxies `/api` on port **443**.
-- Media (images, videos, documents) paths returned by the API may be **relative** (e.g. `/uploads/...`). Build absolute URLs as `API_BASE + path` (add `/` if missing). Absolute `http(s)` URLs are used as-is. On production hosts, strip ports `5000/5001/5017` from media URLs (the panel does this — Apache proxies them).
+  Live Node serves **HTTPS on :5017** (cPanel SSL). Apache proxies `/api` on :443 to internal HTTP `:5018`.
+- Media (images, videos, documents) paths returned by the API may be **relative** (e.g. `/uploads/...`). Build absolute URLs as `API_BASE + path` (add `/` if missing). Absolute `http(s)` URLs are used as-is. On production hosts, strip ports `5000/5001` from media URLs when loading via the website domain (the panel does this — Apache proxies them).
+
 
 
 ### 4.2 Response envelope
