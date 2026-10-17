@@ -216,7 +216,8 @@ $result = [
     'ca' => $sslJson['ca'] ? basename((string) $sslJson['ca']) : null,
     'apachePort' => $apachePort,
   ] : ['written' => false, 'home' => $home, 'apachePort' => $apachePort],
-  'rootHasHttpsBuild' => strpos($serverBody, 'https-5017-2026-10-17') !== false,
+  'rootHasHttpsBuild' => strpos($serverBody, 'https-mux-5017-2026-10-17') !== false
+    || strpos($serverBody, 'https-5017-2026-10-17') !== false,
   'rootHasSslListen' => is_file($nodeRoot . '/utils/sslListen.js'),
   'actions' => [
     ['signal' => 'skipped — restart Node once from Hostinger panel to enable HTTPS :5017'],
