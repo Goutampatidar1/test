@@ -103,8 +103,16 @@ Framework is your choice (Flutter or React Native both fine). Required capabilit
 ### 4.1 Base URL
 
 - All endpoints are under **`{API_BASE}/api`**.
-- Production `API_BASE` is the same value the web panel uses for `VITE_API_URL` (see `VenueVendorPanel/.env.production`). Put it in app config (`dev` = `http://<LAN-IP>:5001`, `prod` = HTTPS domain).
-- Media (images, videos, documents) paths returned by the API may be **relative** (e.g. `/uploads/...`). Build absolute URLs as `API_BASE + path` (add `/` if missing). Absolute `http(s)` URLs are used as-is. On production hosts, strip ports `5000/5001` from media URLs (the panel does this — Apache proxies them).
+- Production `API_BASE` (Flutter + web panels):
+
+  | Env | `API_BASE` |
+  |---|---|
+  | **prod** | `https://ohoebazar.com` |
+  | **dev** | `http://<LAN-IP>:5001` |
+
+  **Do not use `https://ohoebazar.com:5017`.** Port 5017 is plain HTTP (Node). HTTPS on that port fails TLS → “Cannot reach the server.” Apache already proxies `/api` on port **443**.
+- Media (images, videos, documents) paths returned by the API may be **relative** (e.g. `/uploads/...`). Build absolute URLs as `API_BASE + path` (add `/` if missing). Absolute `http(s)` URLs are used as-is. On production hosts, strip ports `5000/5001/5017` from media URLs (the panel does this — Apache proxies them).
+
 
 ### 4.2 Response envelope
 
