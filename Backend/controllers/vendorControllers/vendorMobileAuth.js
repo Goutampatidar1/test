@@ -324,7 +324,11 @@ exports.checkPhone = asyncHandler(async (req, res) => {
 
   if (otpPurpose === OTP_PURPOSE_LOGIN) {
     if (!existing && !venueVendor) {
-      throw new AppError("No account found with this phone number. Please sign up", 404);
+      // apiBuild suffix proves whether :5017 has reloaded this controller.
+      throw new AppError(
+        "No account found with this phone number. Please sign up (build service-login-2026-10-17)",
+        404
+      );
     }
     if (existing) {
       assertVendorCanLoginWithOtp(existing);

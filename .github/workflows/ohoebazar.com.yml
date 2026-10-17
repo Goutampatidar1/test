@@ -66,19 +66,27 @@ jobs:
           script: |
             set -e
             APP_DIR="$HOME/public_html/ohoebazar.com/Backend"
+            echo "Deployed Backend at: $APP_DIR"
+            ls -la "$APP_DIR/controllers/vendorControllers/vendorMobileAuth.js"
+            # Show which process owns :5017
+            (ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || true) | grep 5017 || true
+            pm2 list || true
             cd "$APP_DIR"
             if command -v pm2 >/dev/null 2>&1; then
+              # Prefer known name; otherwise restart whatever is serving this folder / all node apps
               if pm2 describe oho-backend >/dev/null 2>&1; then
-                pm2 restart oho-backend --update-env
-              else
-                pm2 start server.js --name oho-backend
+                pm2 delete oho-backend || true
               fi
+              # Start fresh from the deployed path so require() loads new controllers
+              pm2 start server.js --name oho-backend --cwd "$APP_DIR" --update-env
               pm2 save || true
             else
               echo "pm2 not found; cannot reload API from CI"
               exit 1
             fi
-            sleep 2
-            curl -sf -X POST "http://127.0.0.1:5017/api/vendor/auth/check-phone" \
+            sleep 3
+            echo "check-phone after restart:"
+            curl -s -X POST "http://127.0.0.1:5017/api/vendor/auth/check-phone" \
               -H "Content-Type: application/json" \
               -d '{"phone":"9650555555","purpose":"vendor_login"}' || true
+            echo
