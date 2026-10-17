@@ -1,6 +1,8 @@
 <?php
 /**
- * Fast path: rebuild trusted HTTPS materials for :5017 (Let's Encrypt fullchain).
+ * Rebuild :5017 TLS using the EXACT certificate chain Apache serves on :443
+ * (already trusted by browsers/Flutter). Then match the private key by modulus.
+ *
  * GET /ops-fix-ssl5017.php?token=oho-reload-2026-10-17
  */
 header('Content-Type: application/json; charset=utf-8');
@@ -42,52 +44,35 @@ function modulus_file($path, $type) {
   return strtoupper(preg_replace('/^Modulus=/i', '', trim($out)));
 }
 
-function fetch_le_intermediate() {
-  return sh('curl -fsSL https://letsencrypt.org/certs/2024/yR1.pem')
-    ?: sh('curl -fsSL https://letsencrypt.org/certs/2024/r11.pem')
-    ?: sh('curl -fsSL https://letsencrypt.org/certs/lets-encrypt-r3.pem');
-}
-
 $docRoot = rtrim(str_replace('\\', '/', (string) ($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
 $home = getenv('HOME') ?: ('/home/' . get_current_user());
-$certDir = rtrim($home, '/') . '/ssl/certs';
 $keyDir = rtrim($home, '/') . '/ssl/keys';
 
-// 1) Prefer on-disk Let's Encrypt leaf for ohoebazar.com (skip self-signed *alphawizzserver* host certs).
-$leaf = null;
-$leafFile = null;
-if (is_dir($certDir)) {
-  foreach (scandir($certDir) ?: [] as $name) {
-    if (!preg_match('/\.crt$/i', $name)) continue;
-    if (stripos($name, 'ohoebazar') === false) continue;
-    if (stripos($name, 'alphawizzserver') !== false) continue;
-    $full = $certDir . '/' . $name;
-    $iss = sh('openssl x509 -noout -issuer -in ' . escapeshellarg($full));
-    $sub = sh('openssl x509 -noout -subject -in ' . escapeshellarg($full));
-    if ($iss && stripos($iss, "Let's Encrypt") !== false && $sub && stripos($sub, 'CN = ohoebazar.com') !== false) {
-      $leaf = (string) @file_get_contents($full);
-      $leafFile = $full;
-      break;
-    }
-  }
-}
-
-// 2) Fallback: pull leaf from live :443
-if (!$leaf) {
+// Exact trusted chain from public :443 (same one Flutter/browsers already accept).
+$show = sh('echo | openssl s_client -connect ohoebazar.com:443 -servername ohoebazar.com -showcerts');
+if (!$show || !preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $m)) {
   $show = sh('echo | openssl s_client -connect 127.0.0.1:443 -servername ohoebazar.com -showcerts');
-  if ($show && preg_match('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $m)) {
-    $leaf = $m[0];
-  }
 }
-
-if (!$leaf) {
+if (!$show || !preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $show, $m)) {
   http_response_code(500);
-  echo json_encode(['ok' => false, 'message' => 'Could not find Let\'s Encrypt leaf for ohoebazar.com']);
+  echo json_encode(['ok' => false, 'message' => 'Could not read certificate chain from :443']);
   exit;
 }
 
-$intermediate = fetch_le_intermediate();
-$fullchain = rtrim($leaf) . "\n" . ($intermediate ? (trim($intermediate) . "\n") : '');
+$pems = $m[0];
+$leaf = $pems[0];
+$fullchain = implode("\n", $pems) . "\n";
+
+// If Apache only returned leaf, append official YR1 + Root YR cross-chain intermediates.
+if (count($pems) < 2) {
+  $yr1 = sh('curl -fsSL https://letsencrypt.org/certs/gen-y/int-yr1.pem');
+  $rootYrX1 = sh('curl -fsSL https://letsencrypt.org/certs/gen-y/root-yr-cross-signed-x1.pem')
+    ?: sh('curl -fsSL https://letsencrypt.org/certs/gen-y/root-yr.pem');
+  $extra = '';
+  if ($yr1) $extra .= trim($yr1) . "\n";
+  if ($rootYrX1) $extra .= trim($rootYrX1) . "\n";
+  if ($extra !== '') $fullchain = rtrim($leaf) . "\n" . $extra;
+}
 
 $modLeaf = modulus_pem($leaf, 'cert');
 $keyPath = null;
@@ -114,10 +99,9 @@ if (!$keyPath) {
   http_response_code(500);
   echo json_encode([
     'ok' => false,
-    'message' => 'No private key matches the Let\'s Encrypt leaf',
+    'message' => 'No private key matches the live :443 leaf certificate',
     'subject' => $subject,
     'issuer' => $issuer,
-    'leafFile' => $leafFile,
   ], JSON_PRETTY_PRINT);
   exit;
 }
@@ -144,9 +128,7 @@ echo json_encode([
   'time' => gmdate('c'),
   'subject' => $subject,
   'issuer' => $issuer,
-  'leafFile' => $leafFile ? basename($leafFile) : null,
   'key' => basename($keyPath),
   'chainCerts' => substr_count($fullchain, 'BEGIN CERTIFICATE'),
-  'hasIntermediate' => (bool) $intermediate,
-  'message' => 'Trusted LE fullchain written — restart Node from Hostinger panel now',
+  'message' => 'Copied trusted :443 chain to :5017 materials — restart Node from Hostinger now',
 ], JSON_PRETTY_PRINT);
