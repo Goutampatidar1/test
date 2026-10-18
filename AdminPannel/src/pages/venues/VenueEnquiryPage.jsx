@@ -10,19 +10,26 @@ import {
 import { logout } from "../../store/authSlice.js";
 import { mediaUrl } from "../../media.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
-import { AdminSearchField } from "../../components/AdminSearchField.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
+import { ListHeader, ListTable, ListTabs, ListToolbar } from "../../components/list/index.js";
+import { useListParams } from "../../hooks/useListParams.js";
 
 const LIST_LIMIT = 10;
 
-const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "pending", label: "Pending" },
-  { value: "accepted", label: "Accepted" },
-  { value: "converted", label: "Booked" },
-  { value: "rejected", label: "Rejected" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "expired", label: "Expired" },
+const KIND_TABS = [
+  { key: "quick", label: "Call request" },
+  { key: "standard", label: "Booking" },
+];
+
+const COLUMNS = [
+  { key: "enquiry", label: "Enquiry" },
+  { key: "venue", label: "Service" },
+  { key: "customer", label: "Customer" },
+  { key: "dates", label: "Dates" },
+  { key: "guests", label: "Guests" },
+  { key: "status", label: "Status" },
+  { key: "created", label: "Created" },
+  { key: "actions", label: "Actions" },
 ];
 
 const STATUS_PILL = {
@@ -48,6 +55,13 @@ function formatHold(seconds) {
   return h > 0 ? `${h}h ${m}m left to book` : `${m}m left to book`;
 }
 
+function formatInr(value) {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return "—";
+  return `₹${n.toLocaleString("en-IN")}`;
+}
+
 function StatusPill({ row }) {
   return <span className={STATUS_PILL[row.status] || "pill"}>{row.statusLabel || row.status}</span>;
 }
@@ -55,14 +69,15 @@ function StatusPill({ row }) {
 export function VenueEnquiryPage() {
   const dispatch = useDispatch();
   const adminToken = useSelector((s) => s.auth.adminToken);
+  const { params, setParams, searchInput, setSearchInput } = useListParams({
+    source: "quick",
+  });
+  const source = params.source === "standard" ? "standard" : "quick";
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [search, setSearch] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ source: {} });
   const [viewRow, setViewRow] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -81,33 +96,26 @@ export function VenueEnquiryPage() {
     if (!adminToken) return;
     setLoading(true);
     try {
-      const { enquiries, pagination } = await adminListVenueEnquiries(adminToken, {
-        page,
+      const { enquiries, pagination, counts: nextCounts } = await adminListVenueEnquiries(adminToken, {
+        page: params.page,
         limit: LIST_LIMIT,
-        status,
-        search: appliedSearch,
+        source,
+        search: params.search,
       });
       setRows(enquiries);
       setPages(pagination?.pages ?? 1);
       setTotal(pagination?.total ?? 0);
+      setCounts(nextCounts || { source: {} });
     } catch (e) {
       await handleError(e, "Load failed");
     } finally {
       setLoading(false);
     }
-  }, [adminToken, page, status, appliedSearch, handleError]);
+  }, [adminToken, handleError, params.page, params.search, source]);
 
   useEffect(() => {
     loadRows();
   }, [loadRows]);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setAppliedSearch(search.trim());
-      setPage(1);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [search]);
 
   const openView = async (row) => {
     setViewRow(row);
@@ -159,127 +167,87 @@ export function VenueEnquiryPage() {
   };
 
   const canAct = viewRow && ["pending", "accepted"].includes(viewRow.status);
+  const emptyText = source === "quick" ? "No call requests found." : "No booking enquiries found.";
 
   return (
     <div className="user-page">
-      <div className="page-card">
-        <div className="page-card__head" style={{ gap: 12, flexWrap: "wrap" }}>
-          <h2 className="page-card__title">Venue Enquiries</h2>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <AdminSearchField
-              value={search}
-              onChange={(e) => setSearch(e.target.value.slice(0, 60))}
-              placeholder="Enquiry no., name or phone"
-              aria-label="Search enquiries"
-            />
-            <label className="user-field" style={{ margin: 0, width: 200 }}>
-              <select
-                className="user-field__input"
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-                aria-label="Filter by status"
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Enquiry</th>
-                <th>Venue</th>
-                <th>Customer</th>
-                <th>Dates</th>
-                <th>Guests</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th className="data-table__actions-col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={8}>Loading…</td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>No enquiries found.</td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <ClickableTableRow key={row._id} onOpen={() => openView(row)}>
-                    <td>
-                      {row.enquiryNumber}
-                      {row.source === "quick" ? (
-                        <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>Call-back request</span>
-                      ) : null}
-                    </td>
-                    <td>
-                      {row.venue?.name || "—"}
-                      {row.venue?.city ? <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>{row.venue.city}</span> : null}
-                    </td>
-                    <td>
-                      {row.customer?.name || row.contact?.name || "—"}
-                      <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>
-                        {row.customer?.phone || row.contact?.phone || ""}
-                      </span>
-                    </td>
-                    <td className="data-table__muted">{row.summaryLabel || row.dateLabel}</td>
-                    <td>{row.guestCount || "—"}</td>
-                    <td>
-                      <StatusPill row={row} />
-                      {row.status === "accepted" && row.holdSecondsRemaining != null ? (
-                        <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>
-                          {formatHold(row.holdSecondsRemaining)}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="data-table__muted">{formatDateTime(row.createdAt)}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button type="button" className="icon-btn icon-btn--view" title="View" onClick={() => openView(row)}>
-                          <AiOutlineEye size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </ClickableTableRow>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <ListPagination page={page} pages={pages} total={total} onPageChange={setPage} />
+      <div className="page-card enquiry-list-page">
+        <ListHeader
+          title="Service enquiries"
+          subtitle="Switch between call requests and booking enquiries."
+        />
+        <ListToolbar
+          search={searchInput}
+          onSearch={(value) => setSearchInput(value.slice(0, 60))}
+          placeholder="Enquiry no., name or phone"
+        />
+        <ListTabs
+          tabs={KIND_TABS}
+          active={source}
+          counts={{
+            quick: counts.source?.quick,
+            standard: counts.source?.standard,
+          }}
+          onChange={(nextSource) => setParams({ source: nextSource })}
+          label="Enquiry type"
+        />
+        <ListTable
+          columns={COLUMNS}
+          rowCount={loading ? 0 : rows.length}
+          loading={loading}
+          emptyText={emptyText}
+        >
+          {rows.map((row) => (
+            <ClickableTableRow key={row._id} onOpen={() => openView(row)}>
+              <td>{row.enquiryNumber}</td>
+              <td>
+                {row.venue?.name || "—"}
+                {row.venue?.city ? (
+                  <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>
+                    {row.venue.city}
+                  </span>
+                ) : null}
+              </td>
+              <td>
+                {row.customer?.name || row.contact?.name || "—"}
+                <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>
+                  {row.customer?.phone || row.contact?.phone || ""}
+                </span>
+              </td>
+              <td className="data-table__muted">{row.summaryLabel || row.dateLabel}</td>
+              <td>{row.guestCount || "—"}</td>
+              <td>
+                <StatusPill row={row} />
+                {row.status === "accepted" && row.holdSecondsRemaining != null ? (
+                  <span className="data-table__muted" style={{ display: "block", fontSize: 12 }}>
+                    {formatHold(row.holdSecondsRemaining)}
+                  </span>
+                ) : null}
+              </td>
+              <td className="data-table__muted">{formatDateTime(row.createdAt)}</td>
+              <td>
+                <div className="row-actions">
+                  <button type="button" className="icon-btn icon-btn--view" title="View" onClick={() => openView(row)}>
+                    <AiOutlineEye size={18} />
+                  </button>
+                </div>
+              </td>
+            </ClickableTableRow>
+          ))}
+        </ListTable>
+        <ListPagination page={params.page} pages={pages} total={total} onPageChange={(page) => setParams({ page })} />
       </div>
 
       {viewRow ? (
         <div
           role="dialog"
           aria-modal="true"
+          className="enquiry-detail-overlay"
           onClick={() => setViewRow(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: 16,
-          }}
         >
           <div
-            className="page-card"
+            className="page-card enquiry-detail-dialog"
             onClick={(e) => e.stopPropagation()}
-            style={{ width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto" }}
           >
             <div className="page-card__head" style={{ marginBottom: 12 }}>
               <h2 className="page-card__title">Enquiry {viewRow.enquiryNumber}</h2>
@@ -341,11 +309,32 @@ export function VenueEnquiryPage() {
                 </div>
               ) : null}
               {viewRow.quote && Object.keys(viewRow.quote).length > 0 ? (
-                <div className="col-12">
-                  <strong>Quote:</strong>{" "}
-                  {viewRow.quote.total != null ? `₹${Number(viewRow.quote.total).toLocaleString("en-IN")}` : ""}
-                  {viewRow.quote.note ? <span className="data-table__muted"> · {viewRow.quote.note}</span> : null}
-                </div>
+                <>
+                  <div className="col-6">
+                    <strong>Booking total:</strong>{" "}
+                    {formatInr(viewRow.quote.grandTotal ?? viewRow.quote.total)}
+                  </div>
+                  {Number(viewRow.quote.tokenAmount) > 0 ? (
+                    <div className="col-6">
+                      <strong>Token amount:</strong> {formatInr(viewRow.quote.tokenAmount)}
+                    </div>
+                  ) : null}
+                  {Number(viewRow.quote.amountDueNow) > 0 ? (
+                    <div className="col-6">
+                      <strong>Due to book:</strong> {formatInr(viewRow.quote.amountDueNow)}
+                    </div>
+                  ) : null}
+                  {Number(viewRow.quote.remainingAmount) > 0 ? (
+                    <div className="col-6">
+                      <strong>Remaining after token:</strong> {formatInr(viewRow.quote.remainingAmount)}
+                    </div>
+                  ) : null}
+                  {viewRow.quote.note ? (
+                    <div className="col-12">
+                      <span className="data-table__muted">{viewRow.quote.note}</span>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
               {viewRow.vendorNote ? (
                 <div className="col-12">

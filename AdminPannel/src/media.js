@@ -18,10 +18,19 @@ function toAbsolute(urlLike) {
 }
 
 const BACKEND_DEV_PORT = "5001";
+const STALE_NODE_PORTS = new Set(["5000", "5001", "5017"]);
 
-/** Port the Node backend is reached on (from VITE_API_URL, e.g. :5017 on live), or "" when proxied on 443. */
+/** Port the Node backend is reached on (from VITE_API_URL), or "" when proxied on 443. */
 function backendPort() {
   return toAbsolute(getApiBase())?.port || "";
+}
+
+function rewriteUploadsPath(absolute) {
+  if (!absolute.pathname.startsWith("/uploads/") || absolute.pathname.startsWith("/api/uploads/")) {
+    return absolute;
+  }
+  absolute.pathname = `/api${absolute.pathname}`;
+  return absolute;
 }
 
 /** Same-origin on live (iPhone-safe). Keep :5001 only on local/LAN. */
@@ -37,7 +46,7 @@ export function mediaUrl(path) {
 
   if (!absolute) return raw;
 
-  if (!isDevHost(absolute.hostname) && (absolute.port === "5001" || absolute.port === "5000")) {
+  if (!isDevHost(absolute.hostname) && STALE_NODE_PORTS.has(absolute.port)) {
     absolute.port = backendPort();
   }
   return absolute.toString();
@@ -46,6 +55,7 @@ export function mediaUrl(path) {
 /**
  * Direct document links must use the proxied Backend route. Otherwise Apache
  * sends /uploads navigations to the Admin Panel SPA and displays its 404 page.
+ * Never send live traffic to :5001 — that port is local-only.
  */
 export function mediaDocumentUrl(path) {
   if (!path) return "";
@@ -54,26 +64,25 @@ export function mediaDocumentUrl(path) {
     return mediaUrl(raw);
   }
 
-  const nodeUrl = mediaUrlOnNodePort(raw);
-  if (nodeUrl) return nodeUrl;
+  const parsed = toAbsolute(mediaUrl(raw) || raw);
+  if (!parsed) return mediaUrl(raw);
 
-  if (/^https?:\/\//i.test(raw)) {
-    const absolute = toAbsolute(raw);
-    if (absolute?.pathname.startsWith("/uploads/")) {
-      absolute.pathname = `/api${absolute.pathname}`;
-      return mediaUrl(absolute.toString());
-    }
-    return mediaUrl(raw);
+  if (isDevHost(parsed.hostname)) {
+    const nodeUrl = mediaUrlOnNodePort(raw);
+    return nodeUrl || parsed.toString();
   }
 
-  return mediaUrl(raw.startsWith("/uploads/") ? `/api${raw}` : raw);
+  rewriteUploadsPath(parsed);
+  parsed.port = backendPort();
+  return parsed.toString();
 }
 
-/** Node static port — used when the public /uploads path is missing on Apache. */
+/** Node static port — local/LAN only, when Apache is not in front of /uploads. */
 export function mediaUrlOnNodePort(path) {
   const primary = mediaUrl(path);
   const parsed = toAbsolute(primary || path);
   if (!parsed || !/^https?:$/i.test(parsed.protocol)) return "";
+  if (!isDevHost(parsed.hostname)) return "";
   const nodePort = backendPort() || BACKEND_DEV_PORT;
   if (parsed.port === nodePort) return "";
   parsed.port = nodePort;

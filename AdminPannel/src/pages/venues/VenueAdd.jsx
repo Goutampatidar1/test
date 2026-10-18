@@ -73,14 +73,14 @@ function venueToFormValues(venue) {
   };
 }
 
-function validateStep1(values) {
+function validateStep1(values, mode = "create") {
   if (!values.name.trim()) return "Service name is required.";
   if (values.name.trim().length > LIMITS.name) return `Service name cannot exceed ${LIMITS.name} characters.`;
   if (values.description.trim().length > LIMITS.description) {
     return `Description cannot exceed ${LIMITS.description} characters.`;
   }
   if (!values.category) return "Category is required.";
-  if (!values.subDistrictId) return "Sub-district is required.";
+  if (mode !== "edit" && !values.subDistrictId) return "Sub-district is required.";
   if (values.dayPrice !== "") {
     const dayPrice = Number(values.dayPrice);
     if (Number.isNaN(dayPrice) || dayPrice < 0) return "Day price must be a valid non-negative number.";
@@ -106,7 +106,7 @@ function validateStep2(values, mode, initialVenue, thumbnailFile) {
 }
 
 function validate(values, mode, initialVenue, thumbnailFile) {
-  return validateStep1(values) || validateStep2(values, mode, initialVenue, thumbnailFile);
+  return validateStep1(values, mode) || validateStep2(values, mode, initialVenue, thumbnailFile);
 }
 
 function FormSectionTitle({ children }) {
@@ -400,7 +400,7 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
     e.preventDefault();
     if (step === 1) {
       if (!reportStepValidity(step1Ref.current)) return;
-      const stepMessage = validateStep1(values);
+      const stepMessage = validateStep1(values, mode);
       if (stepMessage) {
         await Swal.fire({ icon: "error", title: "Validation error", text: stepMessage });
         return;
@@ -415,7 +415,7 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
     const message = validate(values, mode, initialVenue, thumbnailFile);
     if (message) {
       await Swal.fire({ icon: "error", title: "Validation error", text: message });
-      if (validateStep1(values)) setStep(1);
+      if (validateStep1(values, mode)) setStep(1);
       return;
     }
 
@@ -432,8 +432,8 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
           ? { subCategory: "" }
           : {}),
       address: values.address.trim(),
-      city: selectedCity?.name || selectedSubDistrict?.city?.name || "",
-      state: selectedSubDistrict?.name || "",
+      city: selectedCity?.name || selectedSubDistrict?.city?.name || initialVenue?.city || "",
+      state: selectedSubDistrict?.name || initialVenue?.state || "",
       pincode: "",
       dayPrice: values.dayPrice === "" ? 0 : values.dayPrice,
       tokenAmountPercentage: values.tokenAmountPercentage,
@@ -555,41 +555,45 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
           />
         </div>
 
-        <div className="col-12 col-md-6">
-          <label htmlFor={id("city")} className="form-label">
-            City
-          </label>
-          <select id={id("city")} className="form-select" value={values.cityId} onChange={handleCityChange}>
-            <option value="">Select city</option>
-            {cityOptions.map((city) => (
-              <option key={city._id} value={city._id}>
-                {city.name}
-                {city.state?.name ? `, ${city.state.name}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+        {mode !== "edit" ? (
+          <>
+            <div className="col-12 col-md-6">
+              <label htmlFor={id("city")} className="form-label">
+                City
+              </label>
+              <select id={id("city")} className="form-select" value={values.cityId} onChange={handleCityChange}>
+                <option value="">Select city</option>
+                {cityOptions.map((city) => (
+                  <option key={city._id} value={city._id}>
+                    {city.name}
+                    {city.state?.name ? `, ${city.state.name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="col-12 col-md-6">
-          <label htmlFor={id("subDistrict")} className="form-label">
-            Sub-district <span className="text-danger">*</span>
-          </label>
-          <select
-            id={id("subDistrict")}
-            className="form-select"
-            value={values.subDistrictId}
-            onChange={handleSubDistrictChange}
-            required={step === 1}
-          >
-            <option value="">Select sub-district</option>
-            {filteredSubDistrictOptions.map((row) => (
-              <option key={row._id} value={row._id}>
-                {row.name}
-                {row.city?.name ? ` · ${row.city.name}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="col-12 col-md-6">
+              <label htmlFor={id("subDistrict")} className="form-label">
+                Sub-district <span className="text-danger">*</span>
+              </label>
+              <select
+                id={id("subDistrict")}
+                className="form-select"
+                value={values.subDistrictId}
+                onChange={handleSubDistrictChange}
+                required={step === 1}
+              >
+                <option value="">Select sub-district</option>
+                {filteredSubDistrictOptions.map((row) => (
+                  <option key={row._id} value={row._id}>
+                    {row.name}
+                    {row.city?.name ? ` · ${row.city.name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : null}
       </div>
 
       <div ref={step2Ref} hidden={step !== 2} className="row g-3">

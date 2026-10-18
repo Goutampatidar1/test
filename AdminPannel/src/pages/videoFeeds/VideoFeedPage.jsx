@@ -531,6 +531,7 @@ export function VideoFeedPage() {
               <th>Type</th>
               <th>Title</th>
               <th>Linked to</th>
+              <th>Likes</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -538,13 +539,13 @@ export function VideoFeedPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <p className="table-placeholder">Loading...</p>
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <p className="table-placeholder">No reels found.</p>
                 </td>
               </tr>
@@ -582,6 +583,7 @@ export function VideoFeedPage() {
                       ? row.venue?.name || row.venueVendor?.businessName || row.venueVendor?.name || "—"
                       : row.product?.name || row.vendor?.businessName || row.vendor?.name || "—"}
                   </td>
+                  <td>{Number(row.likeCount) || 0}</td>
                   <td>
                     <span className={`pill ${row.status === "active" ? "pill--active" : "pill--inactive"}`}>
                       {row.status || "—"}

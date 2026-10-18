@@ -91,16 +91,28 @@ function VenuePaymentBreakdown({ order }) {
   const amountPaid = Number(payment.amountPaid ?? order.amountPaid) || 0;
   const remainingAmount = Number(payment.remainingAmount ?? order.remainingAmount) || 0;
   const amountDueNow = Number(payment.amountDueNow ?? order.amountDueNow) || 0;
+  const grandTotal = Number(payment.grandTotal ?? order.grandTotal) || 0;
+  const usesToken = tokenAmount > 0 && (grandTotal <= 0 || tokenAmount < grandTotal);
+  const commissionPct = Number(payment.adminCommissionPercent ?? order.adminCommissionPercent) || 0;
+  const commissionAmount = Number(payment.adminCommissionAmount ?? order.adminCommissionAmount) || 0;
+  const vendorEarnings = Number(payment.vendorEarnings ?? order.vendorEarnings) || 0;
 
   return (
     <>
       <DetailRow label="Sub total" value={formatAmount(payment.subTotal ?? order.subTotal)} />
-      <DetailRow label="Grand total" value={formatAmount(payment.grandTotal ?? order.grandTotal)} />
-      {tokenPct > 0 ? <DetailRow label="Token %" value={`${tokenPct}%`} /> : null}
-      {tokenAmount > 0 ? <DetailRow label="Token amount" value={formatAmount(tokenAmount)} /> : null}
+      <DetailRow label="Booking total" value={formatAmount(grandTotal)} />
+      {usesToken && tokenPct > 0 ? <DetailRow label="Token %" value={`${tokenPct}%`} /> : null}
+      {usesToken ? <DetailRow label="Token amount" value={formatAmount(tokenAmount)} /> : null}
+      {commissionPct > 0 ? <DetailRow label="Admin commission %" value={`${commissionPct}%`} /> : null}
+      {commissionAmount > 0 ? <DetailRow label="Admin commission" value={formatAmount(commissionAmount)} /> : null}
+      {commissionAmount > 0 || vendorEarnings > 0 ? (
+        <DetailRow label="Vendor earnings" value={formatAmount(vendorEarnings)} />
+      ) : null}
       <DetailRow label="Amount paid" value={formatAmount(amountPaid)} />
       <DetailRow label="Remaining amount" value={formatAmount(remainingAmount)} />
-      {amountDueNow > 0 ? <DetailRow label="Amount due now" value={formatAmount(amountDueNow)} /> : null}
+      {amountDueNow > 0 && amountDueNow !== amountPaid ? (
+        <DetailRow label="Amount due now" value={formatAmount(amountDueNow)} />
+      ) : null}
     </>
   );
 }
@@ -117,6 +129,9 @@ function OrderPricingSummary({ order, isVenue }) {
   const amountPaid = Number(payment.amountPaid ?? order.amountPaid) || 0;
   const remainingAmount = Number(payment.remainingAmount ?? order.remainingAmount) || 0;
   const amountDueNow = Number(payment.amountDueNow ?? order.amountDueNow) || 0;
+  const commissionPct = Number(payment.adminCommissionPercent ?? order.adminCommissionPercent) || 0;
+  const commissionAmount = Number(payment.adminCommissionAmount ?? order.adminCommissionAmount) || 0;
+  const vendorEarnings = Number(payment.vendorEarnings ?? order.vendorEarnings) || 0;
 
   return (
     <div className="order-pricing-summary">
@@ -144,10 +159,22 @@ function OrderPricingSummary({ order, isVenue }) {
             <dd>{formatAmount(shippingCharge)}</dd>
           </div>
         ) : null}
-        {isVenue && tokenPct > 0 ? (
+        {isVenue && tokenAmount > 0 && (grandTotal <= 0 || tokenAmount < grandTotal) ? (
           <div className="order-pricing-summary__row">
-            <dt>Token ({tokenPct}%)</dt>
+            <dt>{tokenPct > 0 ? `Token (${tokenPct}%)` : "Token amount"}</dt>
             <dd>{formatAmount(tokenAmount)}</dd>
+          </div>
+        ) : null}
+        {isVenue && commissionAmount > 0 ? (
+          <div className="order-pricing-summary__row">
+            <dt>{commissionPct > 0 ? `Admin commission (${commissionPct}%)` : "Admin commission"}</dt>
+            <dd>−{formatAmount(commissionAmount)}</dd>
+          </div>
+        ) : null}
+        {isVenue && (commissionAmount > 0 || vendorEarnings > 0) ? (
+          <div className="order-pricing-summary__row">
+            <dt>Vendor earnings</dt>
+            <dd>{formatAmount(vendorEarnings)}</dd>
           </div>
         ) : null}
         {isVenue ? (
@@ -160,7 +187,7 @@ function OrderPricingSummary({ order, isVenue }) {
               <dt>Remaining</dt>
               <dd>{formatAmount(remainingAmount)}</dd>
             </div>
-            {amountDueNow > 0 ? (
+            {amountDueNow > 0 && amountDueNow !== amountPaid ? (
               <div className="order-pricing-summary__row">
                 <dt>Due now</dt>
                 <dd>{formatAmount(amountDueNow)}</dd>
