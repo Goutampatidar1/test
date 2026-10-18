@@ -284,9 +284,15 @@ function attachTokenPaymentToPricing(pricing, venue) {
     tokenAmount = calculateTokenAmount(grandTotal, tokenAmountPercentage);
   }
 
-  const usesTokenPayment = tokenAmount > 0 && tokenAmount < grandTotal;
-  const remainingAmount = tokenAmount > 0 ? Math.max(0, grandTotal - tokenAmount) : grandTotal;
-  const amountDueNow = tokenAmount > 0 ? Math.min(tokenAmount, grandTotal) : grandTotal;
+  // Token deposit must be a true partial amount. Never store full booking total as token.
+  if (!(tokenAmount > 0 && tokenAmount < grandTotal)) {
+    tokenAmount = 0;
+    tokenAmountPercentage = 0;
+  }
+
+  const usesTokenPayment = tokenAmount > 0;
+  const remainingAmount = usesTokenPayment ? Math.max(0, grandTotal - tokenAmount) : grandTotal;
+  const amountDueNow = usesTokenPayment ? tokenAmount : grandTotal;
 
   return {
     ...pricing,
@@ -748,6 +754,11 @@ function buildBookingPaymentSummary(order) {
 
   if (tokenAmountPercentage > 0 && tokenAmount <= 0 && grandTotal > 0) {
     tokenAmount = calculateTokenAmount(grandTotal, tokenAmountPercentage);
+  }
+
+  // Never expose full booking total as a token deposit (fixes older mis-stored orders too).
+  if (!(tokenAmount > 0 && tokenAmount < grandTotal)) {
+    tokenAmount = 0;
   }
 
   if (Number.isNaN(amountPaid)) {

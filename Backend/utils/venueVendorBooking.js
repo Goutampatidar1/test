@@ -29,6 +29,7 @@ const VENDOR_ALLOWED_ORDER_STATUSES = new Set([
   "pending",
   "confirmed",
   "processing",
+  "delivered",
   "cancelled",
 ]);
 
@@ -36,7 +37,16 @@ function mapOrderStatusToUi(orderStatus) {
   const status = String(orderStatus || "").toLowerCase();
   if (status === "cancelled" || status === "refunded") return "cancelled";
   if (status === "pending") return "pending";
+  if (status === "delivered") return "completed";
+  if (status === "processing") return "processing";
   return "confirmed";
+}
+
+function normalizeVendorOrderStatusInput(nextStatus) {
+  const normalized = String(nextStatus || "").trim().toLowerCase();
+  // UI may send "completed"; persist as delivered (same as Complete action).
+  if (normalized === "completed") return "delivered";
+  return normalized;
 }
 
 function mapPaymentStatusToUi(paymentStatus, transactionStatus) {
@@ -101,8 +111,12 @@ function buildVendorOrdersFilter(vendorVenueIds, { status, search } = {}) {
     filter.orderStatus = { $in: ["cancelled", "refunded"] };
   } else if (status === "pending") {
     filter.orderStatus = "pending";
+  } else if (status === "completed" || status === "delivered") {
+    filter.orderStatus = "delivered";
+  } else if (status === "processing") {
+    filter.orderStatus = "processing";
   } else if (status === "confirmed") {
-    filter.orderStatus = { $in: ["confirmed", "processing", "shipped", "delivered"] };
+    filter.orderStatus = { $in: ["confirmed", "processing", "shipped"] };
   }
 
   const query = String(search || "").trim();
@@ -383,7 +397,7 @@ async function getVenueVendorBookingDetail(vendorId, bookingRef, baseUrl) {
 }
 
 async function updateVenueVendorBookingStatus(vendorId, bookingRef, nextStatus) {
-  const normalized = String(nextStatus || "").trim().toLowerCase();
+  const normalized = normalizeVendorOrderStatusInput(nextStatus);
   if (!VENDOR_ALLOWED_ORDER_STATUSES.has(normalized)) {
     throw new AppError("Invalid booking status", 400);
   }
@@ -392,6 +406,11 @@ async function updateVenueVendorBookingStatus(vendorId, bookingRef, nextStatus) 
   const doc = await VenueOrder.findById(order._id);
   if (!doc) {
     throw new AppError("Booking not found", 404);
+  }
+
+  const current = String(doc.orderStatus || "").toLowerCase();
+  if (normalized === "delivered" && !["confirmed", "processing", "shipped", "delivered"].includes(current)) {
+    throw new AppError("Complete is only allowed after the booking is confirmed or processing", 400);
   }
 
   doc.orderStatus = normalized;
