@@ -5,6 +5,7 @@ const { asyncHandler } = require("../../utils/asyncHandler");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPagination, searchFilter } = require("../../utils/listQuery");
 const { buildAdminEcomPaymentSummariesForOrders } = require("../../utils/ecomOrderVendorEarnings");
+const { generateSimpleRef } = require("../../utils/simpleRefNumber");
 
 const ORDER_PAYMENT_FIELDS =
   "orderNumber grandTotal subTotal shippingCharge items paymentMethod paymentStatus orderStatus";
@@ -27,9 +28,7 @@ function asObject(value) {
 }
 
 function makeTransactionId() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `ETX-${stamp}-${rand}`;
+  return generateSimpleRef("TXN");
 }
 
 exports.listTransactions = asyncHandler(async (req, res) => {

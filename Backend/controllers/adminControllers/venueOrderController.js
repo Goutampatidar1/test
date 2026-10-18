@@ -24,6 +24,9 @@ function enrichVenueOrderResponse(order) {
     remainingAmount: payment.remainingAmount,
     amountDueNow: payment.amountDueNow,
     usesTokenPayment: payment.usesTokenPayment,
+    adminCommissionPercent: payment.adminCommissionPercent,
+    adminCommissionAmount: payment.adminCommissionAmount,
+    vendorEarnings: payment.vendorEarnings,
     payment,
     paymentSummary: payment,
   };

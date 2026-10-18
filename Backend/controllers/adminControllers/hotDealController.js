@@ -108,6 +108,22 @@ exports.deleteRule = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id);
   const rule = await HotDealRule.findByIdAndDelete(req.params.id);
   if (!rule) throw new AppError("Rule not found", 404);
+
+  // Clear opt-in state for products tied to this rule so they cannot linger as "approved".
+  await Product.updateMany(
+    { "hotDeal.rule": rule._id },
+    {
+      $set: {
+        "hotDeal.optIn": false,
+        "hotDeal.status": "none",
+        "hotDeal.requestedAt": null,
+        "hotDeal.reviewedAt": null,
+        "hotDeal.rejectionReason": "",
+        "hotDeal.rule": null,
+      },
+    }
+  );
+
   res.json({ message: "Hot deal rule deleted" });
 });
 

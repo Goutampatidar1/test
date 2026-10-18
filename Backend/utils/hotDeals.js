@@ -135,8 +135,8 @@ function notifyAdminsHotDealPending(product, vendorId) {
 }
 
 /**
- * Live hot deals: products an admin approved from the opt-in queue, plus products that satisfy
- * at least one live rule (best discount first).
+ * Live hot deals: approved opted-in products that satisfy at least one live rule
+ * (best discount first). No live rules → nothing is shown on the app.
  */
 async function listHotDealProducts({ limit } = {}) {
   const settings = await getFeatureSettings();
@@ -144,6 +144,8 @@ async function listHotDealProducts({ limit } = {}) {
   const requested = Math.trunc(Number(limit));
 
   const rules = await listLiveRules();
+  if (!rules.length) return [];
+
   const picked = new Map();
 
   const consider = (product, rule) => {
@@ -154,18 +156,6 @@ async function listHotDealProducts({ limit } = {}) {
       picked.set(key, { product, percent, rule });
     }
   };
-
-  const approved = await Product.find({
-    ...activePublicProductBaseFilter({ role: "Vendor" }),
-    "hotDeal.optIn": true,
-    "hotDeal.status": "approved",
-    stock: { $gte: 1 },
-  })
-    .populate("category", "name mode status")
-    .populate("subCategory", "name status")
-    .limit(CANDIDATE_CAP)
-    .lean();
-  approved.forEach((product) => consider(product, null));
 
   for (const rule of rules) {
     const candidates = await Product.find(buildRuleFilter(rule))

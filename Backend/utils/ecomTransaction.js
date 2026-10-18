@@ -4,9 +4,9 @@ const { resolveTransactionStatus } = require("./venueTransaction");
 
 function makeEcomTransactionId(orderNumber) {
   const slug = String(orderNumber || "")
-    .replace(/^EO-/i, "")
+    .replace(/^(EO|ORD)-/i, "")
     .trim();
-  return `TXN-${slug || Date.now().toString(36).toUpperCase()}`;
+  return `TXN-${slug || String(Date.now()).slice(-8)}`;
 }
 
 async function createEcomTransactionForOrder(order, options = {}) {
@@ -74,14 +74,14 @@ async function createEcomRefundTransaction(order, options = {}) {
 
   const amount = Number(options.amount ?? order.grandTotal) || 0;
   const slug = String(order.orderNumber || "")
-    .replace(/^EO-/i, "")
+    .replace(/^(EO|ORD)-/i, "")
     .trim();
 
   try {
     const transaction = await Transaction.create({
       order: order._id,
       user: order.user,
-      transactionId: `REF-${slug || Date.now().toString(36).toUpperCase()}`,
+      transactionId: `REF-${slug || String(Date.now()).slice(-8)}`,
       paymentMethod: String(order.paymentMethod || "wallet").toLowerCase(),
       gateway: options.gateway ?? "",
       type: "refund",

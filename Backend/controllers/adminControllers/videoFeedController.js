@@ -24,9 +24,29 @@ const {
   assertOptionalVideoUpload: assertOptionalVenueVideoUpload,
   toVenueVendorVideoFeedCard,
 } = require("../../utils/venueVideoFeed");
+const { getLikeMetaForFeeds } = require("../../utils/productVideoFeedLike");
+const { getVenueLikeMetaForFeeds } = require("../../utils/venueVideoFeedLike");
 
 const ECOM_FOLDER = "video-feed";
 const VENUE_FOLDER = "video-feed";
+
+async function attachLikeCounts(items = []) {
+  if (!items.length) return items;
+
+  const ecomIds = items.filter((row) => row.type !== "venue").map((row) => row._id);
+  const venueIds = items.filter((row) => row.type === "venue").map((row) => row._id);
+
+  const [ecomMeta, venueMeta] = await Promise.all([
+    ecomIds.length ? getLikeMetaForFeeds(ecomIds) : { countMap: new Map() },
+    venueIds.length ? getVenueLikeMetaForFeeds(venueIds) : { countMap: new Map() },
+  ]);
+
+  for (const row of items) {
+    const map = row.type === "venue" ? venueMeta.countMap : ecomMeta.countMap;
+    row.likeCount = map.get(String(row._id)) ?? 0;
+  }
+  return items;
+}
 
 function normalizeFeedType(raw, { required = true } = {}) {
   const value = String(raw ?? "").trim().toLowerCase();
@@ -182,6 +202,8 @@ exports.listVideoFeeds = asyncHandler(async (req, res) => {
     items.push(...mapped.slice(skip, skip + limit));
   }
 
+  await attachLikeCounts(items);
+
   return res.status(200).json({
     status: true,
     message: "Video feeds fetched",
@@ -221,12 +243,10 @@ exports.createVideoFeed = asyncHandler(async (req, res) => {
       title: "",
       status: "active",
     });
-    return sendSuccess(
-      res,
-      "Video feed added",
+    const [item] = await attachLikeCounts([
       { ...toVendorVideoFeedCard(feed.toObject(), product, baseUrl), type: "ecom" },
-      201
-    );
+    ]);
+    return sendSuccess(res, "Video feed added", item, 201);
   }
 
   assertVenueVideoUpload(req, "video");
@@ -244,12 +264,10 @@ exports.createVideoFeed = asyncHandler(async (req, res) => {
     title,
     status: "active",
   });
-  return sendSuccess(
-    res,
-    "Video feed added",
+  const [item] = await attachLikeCounts([
     { ...toVenueVendorVideoFeedCard(feed.toObject(), venue, baseUrl), type: "venue" },
-    201
-  );
+  ]);
+  return sendSuccess(res, "Video feed added", item, 201);
 });
 
 exports.updateVideoFeed = asyncHandler(async (req, res) => {
@@ -305,10 +323,10 @@ exports.updateVideoFeed = asyncHandler(async (req, res) => {
     }
     await feed.save();
     const freshProduct = feed.product ? await loadProductForAdmin(feed.product) : null;
-    return sendSuccess(res, "Video feed updated", {
-      ...toVendorVideoFeedCard(feed.toObject(), freshProduct, baseUrl),
-      type: "ecom",
-    });
+    const [item] = await attachLikeCounts([
+      { ...toVendorVideoFeedCard(feed.toObject(), freshProduct, baseUrl), type: "ecom" },
+    ]);
+    return sendSuccess(res, "Video feed updated", item);
   }
 
   const feed = await VenueVideoFeed.findById(feedId);
@@ -352,10 +370,10 @@ exports.updateVideoFeed = asyncHandler(async (req, res) => {
   }
   await feed.save();
   const freshVenue = feed.venue ? await loadVenueForAdmin(feed.venue) : null;
-  return sendSuccess(res, "Video feed updated", {
-    ...toVenueVendorVideoFeedCard(feed.toObject(), freshVenue, baseUrl),
-    type: "venue",
-  });
+  const [item] = await attachLikeCounts([
+    { ...toVenueVendorVideoFeedCard(feed.toObject(), freshVenue, baseUrl), type: "venue" },
+  ]);
+  return sendSuccess(res, "Video feed updated", item);
 });
 
 exports.deleteVideoFeed = asyncHandler(async (req, res) => {

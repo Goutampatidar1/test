@@ -27,24 +27,33 @@ exports.listEnquiries = asyncHandler(async (req, res) => {
   await expireStaleEnquiries();
   const { page, limit, skip } = getPagination(req.query);
   const status = String(req.query.status || "").trim().toLowerCase();
+  const source = String(req.query.source || "").trim().toLowerCase();
   const search = String(req.query.search ?? req.query.q ?? "").trim();
 
-  const filter = {};
-  if (status && status !== "all") filter.status = status;
+  const baseFilter = {};
   if (req.query.venueId) {
     assertObjectId(req.query.venueId, "Invalid venueId filter");
-    filter.venue = new mongoose.Types.ObjectId(String(req.query.venueId));
+    baseFilter.venue = new mongoose.Types.ObjectId(String(req.query.venueId));
   }
   if (req.query.vendorId) {
     assertObjectId(req.query.vendorId, "Invalid vendorId filter");
-    filter.vendor = new mongoose.Types.ObjectId(String(req.query.vendorId));
+    baseFilter.vendor = new mongoose.Types.ObjectId(String(req.query.vendorId));
   }
   if (search) {
     const rx = new RegExp(escapeRegex(search), "i");
-    filter.$or = [{ enquiryNumber: rx }, { "contact.name": rx }, { "contact.phone": rx }];
+    baseFilter.$or = [{ enquiryNumber: rx }, { "contact.name": rx }, { "contact.phone": rx }];
   }
 
-  const [rows, total] = await Promise.all([
+  const filter = { ...baseFilter };
+  if (status && status !== "all") filter.status = status;
+  if (source === "quick" || source === "standard") filter.source = source;
+
+  const sourceMatch = { ...baseFilter };
+  if (status && status !== "all") sourceMatch.status = status;
+  const statusMatch = { ...baseFilter };
+  if (source === "quick" || source === "standard") statusMatch.source = source;
+
+  const [rows, total, sourceAgg, statusAgg] = await Promise.all([
     VenueEnquiry.find(filter)
       .populate("venue", VENUE_POPULATE)
       .populate("user", USER_POPULATE)
@@ -53,7 +62,21 @@ exports.listEnquiries = asyncHandler(async (req, res) => {
       .limit(limit)
       .lean(),
     VenueEnquiry.countDocuments(filter),
+    VenueEnquiry.aggregate([{ $match: sourceMatch }, { $group: { _id: "$source", count: { $sum: 1 } } }]),
+    VenueEnquiry.aggregate([{ $match: statusMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }]),
   ]);
+
+  const sourceCounts = { all: 0, standard: 0, quick: 0 };
+  for (const row of sourceAgg) {
+    const key = row._id === "quick" ? "quick" : "standard";
+    sourceCounts[key] += row.count;
+    sourceCounts.all += row.count;
+  }
+  const statusCounts = { all: 0, pending: 0, accepted: 0, converted: 0, rejected: 0, cancelled: 0, expired: 0 };
+  for (const row of statusAgg) {
+    if (row._id in statusCounts) statusCounts[row._id] = row.count;
+    statusCounts.all += row.count;
+  }
 
   const baseUrl = getPublicBaseUrl(req);
   return res.status(200).json({
@@ -61,6 +84,7 @@ exports.listEnquiries = asyncHandler(async (req, res) => {
     message: "Enquiries fetched",
     data: rows.map((row) => toAdminPayload(row, baseUrl)),
     pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    counts: { source: sourceCounts, status: statusCounts },
   });
 });
 

@@ -6,15 +6,14 @@ const DeliveryWalletTransaction = require("../models/other/deliveryWalletTransac
 const DriverCodSettlement = require("../models/other/driverCodSettlement");
 const AppError = require("./AppError");
 const { normalizeAmount, formatInrAmount, makeWalletTransactionId } = require("./deliveryWallet");
+const { generateSimpleRef } = require("./simpleRefNumber");
 
 function toObjectId(value) {
   return new mongoose.Types.ObjectId(String(value));
 }
 
 function makeSettlementNumber() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `DCS-${stamp}-${rand}`;
+  return generateSimpleRef("DCS");
 }
 
 function orderCodPendingAmount(order) {
