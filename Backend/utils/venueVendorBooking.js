@@ -259,6 +259,8 @@ function toVendorBookingDetail(order, vendorVenueIds, baseUrl, transaction) {
     },
     booking: {
       date: bookingDates[0] || formatDateOnly(order.placedAt) || "—",
+      bookingDates,
+      numberOfDays: bookingDates.length || 0,
       time: formatBookingTime(item),
       guests: venue?.capacity ? String(venue.capacity) : "—",
       bookedOn: formatDateOnly(order.placedAt ?? order.createdAt) || "—",

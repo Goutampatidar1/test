@@ -91,12 +91,11 @@ function validateStep1(values, mode = "create") {
 function validateStep2(values, mode, initialVenue, thumbnailFile) {
   if (!values.address.trim()) return "Address is required.";
   if (values.address.trim().length > LIMITS.address) return `Address cannot exceed ${LIMITS.address} characters.`;
-  if (values.tokenAmountPercentage === "" || values.tokenAmountPercentage === null || values.tokenAmountPercentage === undefined) {
-    return "Token amount percentage is required.";
-  }
-  const tokenAmountPercentage = Number(values.tokenAmountPercentage);
-  if (Number.isNaN(tokenAmountPercentage) || tokenAmountPercentage < 1 || tokenAmountPercentage > 99) {
-    return "Token amount percentage must be between 1 and 99.";
+  if (values.tokenAmountPercentage !== "" && values.tokenAmountPercentage != null) {
+    const tokenAmountPercentage = Number(values.tokenAmountPercentage);
+    if (Number.isNaN(tokenAmountPercentage) || tokenAmountPercentage < 1 || tokenAmountPercentage > 99) {
+      return "Token amount percentage must be between 1 and 99 (or leave empty for no token).";
+    }
   }
   if (!Array.isArray(values.amenities) || values.amenities.length === 0) return "Select at least one facility.";
   if (mode === "create" && !thumbnailFile && !initialVenue?.thumbnail) {
@@ -436,7 +435,11 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
       state: selectedSubDistrict?.name || initialVenue?.state || "",
       pincode: "",
       dayPrice: values.dayPrice === "" ? 0 : values.dayPrice,
-      tokenAmountPercentage: values.tokenAmountPercentage,
+      tokenAmountPercentage:
+        values.tokenAmountPercentage === "" || values.tokenAmountPercentage == null
+          ? ""
+          : values.tokenAmountPercentage,
+      tokenAmount: 0,
       amenities: values.amenities,
       status: values.status,
       addedById: adminId,
@@ -617,7 +620,7 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
 
         <div className="col-12 col-sm-6">
           <label htmlFor={id("tokenAmountPercentage")} className="form-label">
-            Token amount (%) <span className="text-danger">*</span>
+            Token amount (%) <span className="text-muted fw-normal">(optional)</span>
           </label>
           <input
             id={id("tokenAmountPercentage")}
@@ -626,12 +629,14 @@ export function VenueForm({ mode = "create", venueId = "", initialVenue = null, 
             min="1"
             max="99"
             step="1"
-            required={step === 2}
             value={values.tokenAmountPercentage}
             onChange={handleChange("tokenAmountPercentage")}
-            placeholder="e.g. 20"
+            placeholder="e.g. 20 — leave empty for full payment"
           />
-          <div className="form-text">Advance due at booking. 20% of ₹1,00,000 = ₹20,000 token (pay rest later).</div>
+          <div className="form-text">
+            Optional advance at booking. Leave empty so customers pay the full amount. Example: 20% of ₹1,00,000 =
+            ₹20,000 token.
+          </div>
         </div>
 
         <div className="col-12 col-md-4">

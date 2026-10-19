@@ -17,11 +17,20 @@ function emptyUserForm() {
     password: "",
     passwordConfirm: "",
     phone: "",
+    dob: "",
+    gender: "",
     fcm_id: "",
     status: "active",
     cityId: "",
     subDistrictId: "",
   };
+}
+
+function formatDobForInput(dob) {
+  if (!dob) return "";
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
 }
 
 function userToFormValues(user) {
@@ -32,6 +41,8 @@ function userToFormValues(user) {
     password: "",
     passwordConfirm: "",
     phone: user.phone != null ? String(user.phone) : "",
+    dob: formatDobForInput(user.dob),
+    gender: user.gender != null ? String(user.gender).toLowerCase() : "",
     fcm_id: user.fcm_id != null ? String(user.fcm_id) : "",
     status: ["active", "inactive", "blocked"].includes(user.status) ? user.status : "active",
     cityId: "",
@@ -42,6 +53,13 @@ function userToFormValues(user) {
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
+];
+
+const GENDER_OPTIONS = [
+  { value: "", label: "Select gender (optional)" },
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
 ];
 
 function validateUserForm(values, mode) {
@@ -56,6 +74,14 @@ function validateUserForm(values, mode) {
   if (!phone) return "Mobile number is required.";
   const phoneError = validateIndianMobileMessage(phone, { required: true, label: "Mobile number" });
   if (phoneError) return phoneError;
+  if (values.dob) {
+    const dobDate = new Date(values.dob);
+    if (Number.isNaN(dobDate.getTime())) return "Please enter a valid Date of Birth.";
+    if (dobDate > new Date()) return "Date of birth cannot be in the future.";
+  }
+  if (values.gender && !["male", "female", "other"].includes(values.gender)) {
+    return "Invalid gender selected.";
+  }
   if (!values.status) return "Account status is required.";
   if (!values.subDistrictId) return "Sub-district is required.";
 
@@ -249,6 +275,8 @@ export function UserProfileForm({
       name: values.name.trim(),
       email: values.email.trim(),
       phone: values.phone.trim(),
+      dob: values.dob || "",
+      gender: values.gender || "",
       fcm_id: values.fcm_id.trim(),
       status: values.status,
       subDistrict: selectedSubDistrict?.name || "",
@@ -265,6 +293,8 @@ export function UserProfileForm({
       } else {
         const patchPayload = {
           name: payload.name,
+          dob: payload.dob,
+          gender: payload.gender,
           fcm_id: payload.fcm_id,
           status: payload.status,
           city: payload.city,
@@ -369,6 +399,25 @@ export function UserProfileForm({
             readOnly={mode === "edit"}
             tabIndex={mode === "edit" ? -1 : undefined}
           />
+        </label>
+        <label className="user-field">
+          <span className="user-field__label">Date of birth (optional)</span>
+          <input
+            type="date"
+            value={values.dob}
+            onChange={handleChange("dob")}
+            max={new Date().toISOString().slice(0, 10)}
+          />
+        </label>
+        <label className="user-field">
+          <span className="user-field__label">Gender (optional)</span>
+          <select value={values.gender} onChange={handleChange("gender")}>
+            {GENDER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </label>
         {/* <label className="user-field">
           <span className="user-field__label">FCM token</span>

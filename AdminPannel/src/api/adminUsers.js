@@ -54,7 +54,7 @@ function appendUserFields(fd, fields) {
   if (password != null && String(password).length > 0) fd.append("password", String(password));
   if (phone != null) fd.append("phone", String(phone).trim());
   if (dob !== undefined) fd.append("dob", dob === "" || dob == null ? "" : String(dob));
-  if (gender != null) fd.append("gender", String(gender));
+  if (gender !== undefined) fd.append("gender", gender === "" || gender == null ? "" : String(gender));
   if (fcm_id !== undefined) fd.append("fcm_id", fcm_id == null ? "" : String(fcm_id));
   if (status != null) fd.append("status", String(status));
   if (city !== undefined) fd.append("city", city == null ? "" : String(city));
@@ -86,8 +86,8 @@ export async function adminCreateUser(token, fields, file) {
         email: fields.email,
         password: fields.password,
         phone: fields.phone,
-        dob: fields.dob === "" ? undefined : fields.dob,
-        gender: fields.gender || "male",
+        dob: fields.dob === "" || fields.dob == null ? undefined : fields.dob,
+        gender: fields.gender && ["male", "female", "other"].includes(fields.gender) ? fields.gender : undefined,
         fcm_id: fields.fcm_id === "" ? undefined : fields.fcm_id,
         status: fields.status || "active",
         city: fields.city || undefined,
@@ -123,8 +123,8 @@ export async function adminUpdateUser(token, id, fields, file) {
   if (fields.email !== undefined) payload.email = fields.email;
   if (fields.password && String(fields.password).length > 0) payload.password = fields.password;
   if (fields.phone !== undefined) payload.phone = fields.phone;
-  if (fields.dob !== undefined) payload.dob = fields.dob === "" ? null : fields.dob;
-  if (fields.gender !== undefined) payload.gender = fields.gender;
+  if (fields.dob !== undefined) payload.dob = fields.dob === "" || fields.dob == null ? null : fields.dob;
+  if (fields.gender !== undefined) payload.gender = fields.gender === "" || fields.gender == null ? null : fields.gender;
   if (fields.fcm_id !== undefined) payload.fcm_id = fields.fcm_id;
   if (fields.status !== undefined) payload.status = fields.status;
   if (fields.city !== undefined) payload.city = fields.city;

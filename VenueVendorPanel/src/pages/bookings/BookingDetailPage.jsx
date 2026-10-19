@@ -290,9 +290,15 @@ export function BookingDetailPage() {
                 <dt>Total Amount</dt>
                 <dd>{formatInr(pay.total ?? pay.grandTotal)}</dd>
               </div>
-              {Number(pay.tokenAmountPercentage) > 0 ? (
+              {pay.usesTokenPayment ||
+              (Number(pay.tokenAmount) > 0 &&
+                Number(pay.tokenAmount) < Number(pay.total ?? pay.grandTotal ?? 0)) ? (
                 <div className="vendor-booking-payment__row">
-                  <dt>Token ({pay.tokenAmountPercentage}%)</dt>
+                  <dt>
+                    {Number(pay.tokenAmountPercentage) > 0
+                      ? `Token (${pay.tokenAmountPercentage}%)`
+                      : "Token amount"}
+                  </dt>
                   <dd>{formatInr(pay.tokenAmount)}</dd>
                 </div>
               ) : null}

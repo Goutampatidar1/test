@@ -102,11 +102,13 @@ function validate(values, mode, photoCount) {
   if (values.price === "" || Number.isNaN(price) || price <= 0) {
     return "Enter a valid price greater than 0.";
   }
-  const tokenAmount = Number(values.tokenAmount);
-  if (values.tokenAmount === "" || Number.isNaN(tokenAmount) || tokenAmount < 0) {
-    return "Enter a valid booking token amount.";
+  if (values.tokenAmount !== "" && values.tokenAmount != null) {
+    const tokenAmount = Number(values.tokenAmount);
+    if (Number.isNaN(tokenAmount) || tokenAmount < 0) {
+      return "Enter a valid booking token amount, or leave empty for no token.";
+    }
+    if (tokenAmount > price) return "Booking token cannot be greater than the service price.";
   }
-  if (tokenAmount > price) return "Booking token cannot be greater than the service price.";
   return "";
 }
 
@@ -289,7 +291,7 @@ export function VenueForm({
       category: values.category,
       priceType: values.priceType,
       price: values.price,
-      tokenAmount: values.tokenAmount,
+      tokenAmount: values.tokenAmount === "" || values.tokenAmount == null ? 0 : values.tokenAmount,
       amenities: [],
       city: selectedCity?.name || "",
       subDistrictId: values.subDistrictId,
@@ -511,7 +513,7 @@ export function VenueForm({
 
           <div className="service-add-form__field">
             <label htmlFor={id("tokenAmount")} className="service-add-form__label">
-              Booking token (₹)
+              Booking token (₹) <span className="text-muted fw-normal">(optional)</span>
             </label>
             <input
               id={id("tokenAmount")}
@@ -521,11 +523,10 @@ export function VenueForm({
               step="1"
               value={values.tokenAmount}
               onChange={handleChange("tokenAmount")}
-              placeholder="3000"
-              required
+              placeholder="Leave empty for full payment"
             />
             <div className="form-text service-add-form__help">
-              Paid by the customer at booking time.
+              Optional advance paid at booking. Leave empty so the customer pays the full amount now.
             </div>
           </div>
         </div>

@@ -121,6 +121,22 @@ export function UserView() {
             <DetailRow label="Full name" value={user.name} />
             <DetailRow label="Email ID" value={user.email} />
             <DetailRow label="Mobile Number" value={user.phone} />
+            <DetailRow
+              label="Date of birth"
+              value={
+                user.dob
+                  ? new Date(user.dob).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "—"
+              }
+            />
+            <DetailRow
+              label="Gender"
+              value={user.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1) : "—"}
+            />
             <DetailRow label="Sub-district" value={user.subDistrict} />
             <DetailRow label="City" value={user.city} />
             <DetailRow label="Status" value={user.status} />

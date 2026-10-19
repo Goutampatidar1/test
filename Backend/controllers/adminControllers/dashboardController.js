@@ -6,6 +6,7 @@ const VenueOrder = require("../../models/other/venueOrder");
 const RechargeTransaction = require("../../models/other/rechargeTransaction");
 const PromotionSubscription = require("../../models/other/promotionSubscription");
 const { AppConfig } = require("../../models");
+const { countBothVendors } = require("./vendorDirectoryController");
 const { asyncHandler } = require("../../utils/asyncHandler");
 
 const COLLECTED_ORDER_MATCH = {
@@ -189,6 +190,7 @@ exports.getStats = asyncHandler(async (req, res) => {
     totalUsers,
     ecomVendors,
     venueVendors,
+    bothVendors,
     totalOrders,
     ecomAdmin,
     venueCollected,
@@ -206,6 +208,7 @@ exports.getStats = asyncHandler(async (req, res) => {
     User.countDocuments(),
     Vendor.countDocuments(),
     VenueVendor.countDocuments(),
+    countBothVendors(),
     Order.countDocuments(),
     getEcomAdminCollection(commissions.vendor),
     sumGrandTotal(VenueOrder, COLLECTED_ORDER_MATCH),
@@ -233,6 +236,7 @@ exports.getStats = asyncHandler(async (req, res) => {
       totalUsers,
       ecomVendors,
       venueVendors,
+      bothVendors,
       totalOrders,
       revenue,
       totalRechargeTransactions,

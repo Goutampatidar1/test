@@ -132,11 +132,13 @@ export function UserList() {
       return;
     }
 
-    const headers = ["Name", "Email", "Phone", "Status", "Created At", "Updated At", "User ID"];
+    const headers = ["Name", "Email", "Phone", "DOB", "Gender", "Status", "Created At", "Updated At", "User ID"];
     const rows = users.map((u) => [
       u.name || "",
       u.email || "",
       u.phone || "",
+      u.dob ? String(u.dob).slice(0, 10) : "",
+      u.gender ? u.gender.charAt(0).toUpperCase() + u.gender.slice(1) : "",
       u.status || "",
       u.createdAt || "",
       u.updatedAt || "",

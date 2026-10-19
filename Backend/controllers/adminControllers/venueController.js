@@ -299,8 +299,9 @@ exports.createVenue = asyncHandler(async (req, res) => {
     };
   }
 
+  // Token deposit is optional: omit / empty → full payment at booking (no token).
   const tokenFields = resolveTokenFields(req.body, {
-    required: vendorSelfServe,
+    required: false,
     allowPercentageFallback: !vendorSelfServe,
   });
 
@@ -576,17 +577,25 @@ exports.updateVenue = asyncHandler(async (req, res) => {
     }
   }
   if (Object.prototype.hasOwnProperty.call(req.body, "tokenAmount")) {
-    venue.tokenAmount = parseTokenAmountInput(req.body.tokenAmount, { required: false }) ?? 0;
-    if (venue.tokenAmount > 0) {
-      venue.tokenAmountPercentage = undefined;
+    const rawToken = req.body.tokenAmount;
+    if (rawToken === "" || rawToken === null || rawToken === undefined) {
+      venue.tokenAmount = 0;
+    } else {
+      venue.tokenAmount = parseTokenAmountInput(rawToken, { required: false }) ?? 0;
+      if (venue.tokenAmount > 0) {
+        venue.tokenAmountPercentage = undefined;
+      }
     }
   }
   if (Object.prototype.hasOwnProperty.call(req.body, "tokenAmountPercentage")) {
-    venue.tokenAmountPercentage = parseTokenAmountPercentageInput(req.body.tokenAmountPercentage, {
-      required: !isVenueVendorRequest(req),
-    });
-    if (venue.tokenAmountPercentage !== undefined) {
-      venue.tokenAmount = 0;
+    const rawPct = req.body.tokenAmountPercentage;
+    if (rawPct === "" || rawPct === null || rawPct === undefined) {
+      venue.tokenAmountPercentage = undefined;
+    } else {
+      venue.tokenAmountPercentage = parseTokenAmountPercentageInput(rawPct, { required: false });
+      if (venue.tokenAmountPercentage !== undefined) {
+        venue.tokenAmount = 0;
+      }
     }
   }
   if (req.auth?.role !== "venueVendor" && Object.prototype.hasOwnProperty.call(req.body, "role")) {

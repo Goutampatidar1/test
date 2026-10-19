@@ -61,6 +61,7 @@ const venueEnquirySchema = new mongoose.Schema(
 );
 
 venueEnquirySchema.index({ vendor: 1, status: 1, createdAt: -1 });
+venueEnquirySchema.index({ vendor: 1, createdAt: -1 });
 venueEnquirySchema.index({ user: 1, createdAt: -1 });
 venueEnquirySchema.index({ venue: 1, status: 1, holdExpiresAt: 1 });
 

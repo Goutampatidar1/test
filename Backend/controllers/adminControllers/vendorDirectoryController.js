@@ -143,3 +143,15 @@ exports.listVendorDirectory = asyncHandler(async (req, res) => {
     counts,
   });
 });
+
+async function countBothVendors() {
+  const [ecomDocs, serviceDocs] = await Promise.all([
+    Vendor.find().select("phone vendorPanelType").lean(),
+    VenueVendor.find().select("phone vendorPanelType").lean(),
+  ]);
+  const all = mergeDirectory(ecomDocs, serviceDocs);
+  return all.filter((row) => row.vendorPanelType === "both").length;
+}
+
+exports.countBothVendors = countBothVendors;
+exports.mergeDirectory = mergeDirectory;

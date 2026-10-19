@@ -54,7 +54,7 @@ exports.listEnquiries = asyncHandler(async (req, res) => {
     VenueEnquiry.find(filter)
       .populate("venue", VENUE_POPULATE)
       .populate("user", USER_POPULATE)
-      .sort({ status: 1, createdAt: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
