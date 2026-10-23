@@ -1,17 +1,23 @@
 const config = require("../config");
 
-function isLoopbackHostname(hostname) {
-  const host = String(hostname || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^\[|\]$/g, "");
-  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+const LOOPBACK_HOST = /^(127\.\d+\.\d+\.\d+|localhost|0\.0\.0\.0|\[::1\])(:\d+)?$/i;
+// Apache proxies /api with Host 127.0.0.1:5017; URLs built from that host are unreachable from browsers.
+const PRODUCTION_FALLBACK_BASE_URL = "https://ohoebazar.com";
+
+function firstHeaderValue(value) {
+  return String(value || "")
+    .split(",")[0]
+    .trim();
+}
+
+function isLoopbackHost(host) {
+  return LOOPBACK_HOST.test(String(host || "").trim());
 }
 
 function isPublicHttpBase(value) {
   try {
     const url = new URL(value);
-    return /^https?:$/i.test(url.protocol) && !isLoopbackHostname(url.hostname);
+    return /^https?:$/i.test(url.protocol) && !isLoopbackHost(url.host);
   } catch {
     return false;
   }
@@ -20,17 +26,11 @@ function isPublicHttpBase(value) {
 /** Host the visitor actually used, when Apache proxies to 127.0.0.1. */
 function originFromRequest(req) {
   if (!req || typeof req.get !== "function") return "";
-  const forwardedHost = String(req.headers?.["x-forwarded-host"] || "")
-    .split(",")[0]
-    .trim();
+  const forwardedHost = firstHeaderValue(req.get("x-forwarded-host"));
+  const forwardedProto = firstHeaderValue(req.get("x-forwarded-proto"));
   const host = forwardedHost || String(req.get("host") || "").trim();
-  if (!host) return "";
-  const hostname = host.split(":")[0].replace(/^\[|\]$/g, "");
-  if (isLoopbackHostname(hostname)) return "";
-  const proto =
-    String(req.headers?.["x-forwarded-proto"] || req.protocol || "https")
-      .split(",")[0]
-      .trim() || "https";
+  if (!host || isLoopbackHost(host)) return "";
+  const proto = forwardedProto || (forwardedHost ? "https" : req.protocol || "https");
   return `${proto}://${host}`.replace(/\/$/, "");
 }
 
@@ -38,11 +38,13 @@ function getPublicBaseUrl(req) {
   const fromEnv = String(process.env.PUBLIC_BASE_URL || "")
     .trim()
     .replace(/\/$/, "");
+  // A loopback PUBLIC_BASE_URL would put 127.0.0.1 into every image link.
   if (isPublicHttpBase(fromEnv)) return fromEnv;
   const fromReq = originFromRequest(req);
   if (fromReq) return fromReq;
+  if (config.isProduction) return PRODUCTION_FALLBACK_BASE_URL;
   if (fromEnv) return fromEnv;
-  if (req) return `${req.protocol}://${req.get("host")}`;
+  if (req && req.get("host")) return `${req.protocol}://${req.get("host")}`;
   return `http://localhost:${config.port}`;
 }
 
@@ -69,7 +71,7 @@ function toAbsoluteUploadUrl(path, baseUrl) {
         u.pathname = u.pathname.slice(4);
       }
       const base = String(baseUrl || getPublicBaseUrl()).replace(/\/$/, "");
-      if (isLoopbackHostname(u.hostname) && isPublicHttpBase(base)) {
+      if (isLoopbackHost(u.host) && isPublicHttpBase(base) && u.pathname.startsWith("/uploads/")) {
         return `${base}${u.pathname}${u.search}`;
       }
       return u.toString();
