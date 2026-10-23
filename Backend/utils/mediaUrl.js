@@ -1,14 +1,38 @@
 const config = require("../config");
 
+const LOOPBACK_HOST = /^(127\.\d+\.\d+\.\d+|localhost|0\.0\.0\.0|\[::1\])(:\d+)?$/i;
+// Apache proxies /api with Host 127.0.0.1:5017; URLs built from that host are unreachable from browsers.
+const PRODUCTION_FALLBACK_BASE_URL = "https://ohoebazar.com";
+
+function firstHeaderValue(value) {
+  return String(value || "").split(",")[0].trim();
+}
+
 function getPublicBaseUrl(req) {
   const fromEnv = String(process.env.PUBLIC_BASE_URL || "").trim();
   if (fromEnv) {
     return fromEnv.replace(/\/$/, "");
   }
   if (req) {
-    return `${req.protocol}://${req.get("host")}`;
+    const forwardedHost = firstHeaderValue(req.get("x-forwarded-host"));
+    const forwardedProto = firstHeaderValue(req.get("x-forwarded-proto"));
+    const host = forwardedHost || req.get("host") || "";
+    const proto = forwardedProto || (forwardedHost ? "https" : req.protocol || "http");
+    if (host && !LOOPBACK_HOST.test(host)) {
+      return `${proto}://${host}`;
+    }
+    if (config.isProduction) {
+      return PRODUCTION_FALLBACK_BASE_URL;
+    }
+    if (host) {
+      return `${req.protocol}://${host}`;
+    }
   }
-  return `http://localhost:${config.port}`;
+  return config.isProduction ? PRODUCTION_FALLBACK_BASE_URL : `http://localhost:${config.port}`;
+}
+
+function isLoopbackUrl(url) {
+  return LOOPBACK_HOST.test(url.host);
 }
 
 function toPublicUploadPath(rel) {
@@ -32,12 +56,15 @@ function toAbsoluteUploadUrl(path, baseUrl) {
       const u = new URL(value);
       if (u.pathname.startsWith("/api/uploads/")) {
         u.pathname = u.pathname.slice(4);
-        return u.toString();
       }
+      if (isLoopbackUrl(u) && u.pathname.startsWith("/uploads/")) {
+        const base = String(baseUrl || getPublicBaseUrl()).replace(/\/$/, "");
+        return `${base}${u.pathname}${u.search}`;
+      }
+      return u.toString();
     } catch {
       return value;
     }
-    return value;
   }
 
   const base = String(baseUrl || getPublicBaseUrl()).replace(/\/$/, "");

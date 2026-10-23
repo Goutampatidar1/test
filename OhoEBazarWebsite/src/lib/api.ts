@@ -46,9 +46,22 @@ export const api = {
   hotDeals: (s?: AbortSignal) => get<PublicHotDeal>("/public/hot-deals", s),
 };
 
+const LOOPBACK_HOST = /^(127\.\d+\.\d+\.\d+|localhost|0\.0\.0\.0|\[::1\])(:\d+)?$/i;
+
 export function resolveMediaUrl(path?: string | null): string | undefined {
   if (!path?.trim()) return undefined;
-  if (/^https?:\/\//i.test(path)) return path;
   const origin = API_BASE.replace(/\/api\/?$/, "");
+  if (/^https?:\/\//i.test(path)) {
+    try {
+      const url = new URL(path);
+      // API behind a reverse proxy can leak its internal host into upload URLs.
+      if (LOOPBACK_HOST.test(url.host) && !LOOPBACK_HOST.test(new URL(origin).host)) {
+        return `${origin}${url.pathname}${url.search}`;
+      }
+    } catch {
+      return path;
+    }
+    return path;
+  }
   return `${origin}${path.startsWith("/") ? path : `/${path}`}`;
 }
