@@ -3,6 +3,7 @@ const Vendor = require("../models/entity/vendor");
 const VendorWalletTransaction = require("../models/other/vendorWalletTransaction");
 const VendorWithdrawalRequest = require("../models/other/vendorWithdrawalRequest");
 const AppError = require("./AppError");
+const { generateSimpleRef } = require("./simpleRefNumber");
 
 function toObjectId(value) {
   return new mongoose.Types.ObjectId(String(value));
@@ -20,15 +21,11 @@ function formatInrAmount(value) {
 }
 
 function makeWalletTransactionId() {
-  const stamp = Date.now().toString().slice(-7);
-  const rand = Math.floor(Math.random() * 9000 + 1000);
-  return `VWT-${stamp}${rand}`;
+  return generateSimpleRef("VWT");
 }
 
 function makeWithdrawalRequestNumber() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `VWR-${stamp}-${rand}`;
+  return generateSimpleRef("VWR");
 }
 
 function snapshotBankDetails(vendor) {

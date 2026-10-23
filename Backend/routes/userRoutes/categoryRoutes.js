@@ -4,10 +4,10 @@ const { optionalProtectUser } = require("../../middleware/auth");
 
 const router = express.Router();
 
-router.get("/categories", categoryController.listCategories);
-router.get("/category/:categoryId", categoryController.getCategoryDetail);
-router.get("/child-categories", categoryController.listChildCategories);
-router.get("/sub-categories/:categoryId", categoryController.listSubCategories);
+router.get("/categories", optionalProtectUser, categoryController.listCategories);
+router.get("/category/:categoryId", optionalProtectUser, categoryController.getCategoryDetail);
+router.get("/child-categories", optionalProtectUser, categoryController.listChildCategories);
+router.get("/sub-categories/:categoryId", optionalProtectUser, categoryController.listSubCategories);
 
 // Products by sub-category (Footwear, Upper Wear, etc.)
 router.get(

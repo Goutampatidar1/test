@@ -208,6 +208,7 @@ exports.getEnquiryBookingPreview = asyncHandler(async (req, res) => {
       subTotal: pricing.subTotal,
       grandTotal: pricing.grandTotal,
       tokenAmount: pricing.tokenAmount ?? 0,
+      amountDueNow: pricing.amountDueNow ?? pricing.grandTotal ?? 0,
       remainingAmount: pricing.remainingAmount ?? 0,
       usesTokenPayment: Boolean(pricing.usesTokenPayment),
       currency: pricing.currency,

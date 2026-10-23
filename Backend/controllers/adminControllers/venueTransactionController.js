@@ -1,9 +1,42 @@
 const VenueTransaction = require("../../models/other/venueTransaction");
 const VenueOrder = require("../../models/other/venueOrder");
+const VenueVendor = require("../../models/entity/venueVendor");
 const AppError = require("../../utils/AppError");
 const { asyncHandler } = require("../../utils/asyncHandler");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPagination, searchFilter } = require("../../utils/listQuery");
+const { buildBookingPaymentSummary } = require("../../utils/venueBooking");
+const { generateSimpleRef } = require("../../utils/simpleRefNumber");
+
+async function buildVenuePaymentSummariesForOrders(orders = []) {
+  if (!orders.length) return new Map();
+
+  const vendorIds = [
+    ...new Set(orders.map((order) => (order.vendor ? String(order.vendor) : "")).filter(Boolean)),
+  ];
+  const vendors = vendorIds.length
+    ? await VenueVendor.find({ _id: { $in: vendorIds } })
+        .select("name businessName")
+        .lean()
+    : [];
+  const vendorNameMap = new Map(
+    vendors.map((vendor) => [String(vendor._id), vendor.businessName || vendor.name || "Service vendor"])
+  );
+
+  const summaries = new Map();
+  for (const order of orders) {
+    const payment = buildBookingPaymentSummary(order);
+    summaries.set(String(order._id), {
+      vendorName: order.vendor ? vendorNameMap.get(String(order.vendor)) || "Service vendor" : "Admin",
+      adminCommission: payment.adminCommissionAmount,
+      vendorAmount: payment.vendorEarnings,
+      shippingCharge: 0,
+      totalAmount: payment.grandTotal,
+      adminCommissionPercent: payment.adminCommissionPercent,
+    });
+  }
+  return summaries;
+}
 
 const ALLOWED_TRANSACTION_STATUSES = new Set(["initiated", "pending", "success", "failed", "cancelled", "refunded"]);
 const ALLOWED_TRANSACTION_TYPES = new Set(["payment", "refund"]);
@@ -23,9 +56,7 @@ function asObject(value) {
 }
 
 function makeTransactionId() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `VTX-${stamp}-${rand}`;
+  return generateSimpleRef("TXN");
 }
 
 exports.listTransactions = asyncHandler(async (req, res) => {
@@ -62,7 +93,10 @@ exports.listTransactions = asyncHandler(async (req, res) => {
 
   const [transactions, total] = await Promise.all([
     VenueTransaction.find(filter)
-      .populate("order", "orderNumber grandTotal orderStatus paymentStatus")
+      .populate(
+        "order",
+        "orderNumber grandTotal orderStatus paymentStatus vendor adminCommissionPercent adminCommissionAmount vendorEarnings subTotal amountPaid remainingAmount tokenAmount"
+      )
       .populate("user", "name phone email")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -71,8 +105,17 @@ exports.listTransactions = asyncHandler(async (req, res) => {
     VenueTransaction.countDocuments(filter),
   ]);
 
+  const orders = transactions.map((row) => row.order).filter(Boolean);
+  const paymentSummaries = await buildVenuePaymentSummariesForOrders(orders);
+
   res.json({
-    transactions,
+    transactions: transactions.map((row) => {
+      const orderId = row.order?._id ? String(row.order._id) : "";
+      return {
+        ...row,
+        paymentSummary: orderId ? paymentSummaries.get(orderId) ?? null : null,
+      };
+    }),
     pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
   });
 });
@@ -80,11 +123,25 @@ exports.listTransactions = asyncHandler(async (req, res) => {
 exports.getTransactionById = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id);
   const transaction = await VenueTransaction.findById(req.params.id)
-    .populate("order", "orderNumber grandTotal orderStatus paymentStatus")
+    .populate(
+      "order",
+      "orderNumber grandTotal orderStatus paymentStatus vendor adminCommissionPercent adminCommissionAmount vendorEarnings subTotal amountPaid remainingAmount tokenAmount"
+    )
     .populate("user", "name phone email")
     .lean();
   if (!transaction) throw new AppError("Venue transaction not found", 404);
-  res.json({ transaction });
+
+  const paymentSummaries = transaction.order
+    ? await buildVenuePaymentSummariesForOrders([transaction.order])
+    : new Map();
+  const orderId = transaction.order?._id ? String(transaction.order._id) : "";
+
+  res.json({
+    transaction: {
+      ...transaction,
+      paymentSummary: orderId ? paymentSummaries.get(orderId) ?? null : null,
+    },
+  });
 });
 
 exports.createTransaction = asyncHandler(async (req, res) => {

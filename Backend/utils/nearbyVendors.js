@@ -158,14 +158,31 @@ async function resolveNearbyCityFromAddress(userId) {
 async function resolveNearbyLocation(userId, query = {}, { locationOptional = false } = {}) {
   const state = String(query.state ?? "").trim();
   let city = String(query.city ?? query.cityName ?? "").trim();
+  const rawCityId = String(query.cityId ?? query.city_id ?? "").trim();
+  const validCityId = mongoose.Types.ObjectId.isValid(rawCityId) ? rawCityId : null;
+  if (validCityId) {
+    const cityDoc = await City.findById(validCityId).select("_id name status").lean();
+    if (cityDoc?.name) {
+      city = String(cityDoc.name).trim();
+    }
+  }
+
   let subDistrict = readSubDistrictQuery(query);
   let subDistrictId = readSubDistrictIdQuery(query);
 
+  const hasExplicitCity = Boolean(city || validCityId);
+  const hasExplicitSubDistrict = Boolean(subDistrict || subDistrictId);
+
   if (userId) {
-    const fromUser = await resolveLocationFromUser(userId);
-    if (!subDistrictId) subDistrictId = fromUser.subDistrictId;
-    if (!subDistrict) subDistrict = fromUser.subDistrict;
-    if (!city) city = fromUser.city;
+    if (!hasExplicitCity && !hasExplicitSubDistrict) {
+      const fromUser = await resolveLocationFromUser(userId);
+      subDistrictId = fromUser.subDistrictId;
+      subDistrict = fromUser.subDistrict;
+      city = fromUser.city;
+    } else if (hasExplicitSubDistrict && !hasExplicitCity) {
+      const fromUser = await resolveLocationFromUser(userId);
+      if (!city) city = fromUser.city;
+    }
   }
 
   if (subDistrictId) {
@@ -357,6 +374,7 @@ async function listNearbyVendors(options = {}) {
   const {
     userId = null,
     city: queryCity,
+    cityId: queryCityId,
     state: queryState,
     subDistrict: querySubDistrict,
     subDistrictId: querySubDistrictId,
@@ -374,6 +392,7 @@ async function listNearbyVendors(options = {}) {
     {
       city: queryCity,
       cityName: queryCity,
+      cityId: queryCityId,
       state: queryState,
       subDistrict: querySubDistrict,
       subDistrictName: querySubDistrict,

@@ -9,6 +9,7 @@ const AppError = require("../../utils/AppError");
 const { asyncHandler } = require("../../utils/asyncHandler");
 const { assertObjectId } = require("../../utils/assertObjectId");
 const { getPagination, searchFilter } = require("../../utils/listQuery");
+const { generateSimpleRef } = require("../../utils/simpleRefNumber");
 
 const ALLOWED_TYPES = new Set(["mobile", "gas", "fastag"]);
 const ALLOWED_STATUSES = new Set(["pending", "success", "failed"]);
@@ -37,9 +38,7 @@ function asObject(value) {
 }
 
 function makeTransactionId() {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `RTX-${stamp}-${rand}`;
+  return generateSimpleRef("RCH");
 }
 
 async function hydrateTypeDetails(recharges) {

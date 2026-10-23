@@ -25,6 +25,7 @@ const {
   getVenueHourlyPrice,
   parseBookingCustomer,
 } = require("../../utils/venueBooking");
+const { resolveVenueBookingCommission } = require("../../utils/venueCommission");
 const { getVenueDisplayPrice } = require("../../utils/venuePricing");
 const { toVenuePriceBlock } = require("../../utils/venueDiscount");
 const {
@@ -308,10 +309,11 @@ async function createBookingCore(req, res, { venue, body, enquiry = null }) {
 
   const pricing = calculateVenueBookingPricingWithToken(venue, bookingRequest);
   const payNowAmount = resolvePaymentAmountFromBody(body, pricing);
+  const commission = await resolveVenueBookingCommission(venue, pricing.grandTotal);
 
   const items = buildOrderItems(venue, bookingRequest, pricing);
   const addressSnapshot = parseBookingCustomer(body, req.user);
-  const paymentSnapshot = buildOrderPaymentSnapshot(pricing);
+  const paymentSnapshot = buildOrderPaymentSnapshot(pricing, commission);
 
   const paymentMethod = String(body.paymentMethod || "online").trim().toLowerCase();
   const allowedMethods = new Set(["cod", "online", "wallet"]);
@@ -327,7 +329,7 @@ async function createBookingCore(req, res, { venue, body, enquiry = null }) {
   const order = await VenueOrder.create({
     enquiry: enquiry?._id ?? null,
     source: enquiry ? "enquiry" : "direct",
-    orderNumber: generateVenueOrderNumber(),
+    orderNumber: await generateVenueOrderNumber(),
     user: req.user._id,
     items,
     subTotal: pricing.subTotal,

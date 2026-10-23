@@ -132,17 +132,17 @@ function toDisplayRows(tabKey, rows) {
         raw: row,
       };
     }
-    if (tabKey === "order") {
+    if (tabKey === "order" || tabKey === "booking") {
       const summary = row.paymentSummary || {};
       return {
         id: row._id,
         transactionId: row.transactionId || "—",
         orderId: row.order?.orderNumber || "—",
         customer: row.user?.name || "—",
-        vendor: summary.vendorName || "—",
+        vendor: summary.vendorName || (tabKey === "booking" ? "Service Booking" : "—"),
         adminCommission: summary.adminCommission ?? 0,
         vendorAmount: summary.vendorAmount ?? 0,
-        shippingCharge: summary.shippingCharge ?? row.order?.shippingCharge ?? 0,
+        shippingCharge: tabKey === "booking" ? 0 : summary.shippingCharge ?? row.order?.shippingCharge ?? 0,
         totalAmount: summary.totalAmount ?? row.order?.grandTotal ?? row.amount ?? 0,
         amount: row.amount,
         method: row.paymentMethod || "—",
@@ -156,7 +156,7 @@ function toDisplayRows(tabKey, rows) {
       transactionId: row.transactionId || "—",
       orderId: row.order?.orderNumber || "—",
       customer: row.user?.name || "—",
-      vendor: tabKey === "booking" ? "Service Booking" : "Ecom Order",
+      vendor: "Ecom Order",
       amount: row.amount,
       method: row.paymentMethod || "—",
       date: row.createdAt || row.processedAt,
@@ -179,6 +179,19 @@ function exportCsv(fileName, rows, tabKey) {
           "Admin Commission",
           "Vendor Amount",
           "Shipping Charge",
+          "Total Amount",
+          "Method",
+          "Date",
+          "Status",
+        ]
+      : tabKey === "booking"
+      ? [
+          "Transaction ID",
+          "Order ID",
+          "Customer",
+          "Vendor",
+          "Admin Commission",
+          "Vendor Amount",
           "Total Amount",
           "Method",
           "Date",
@@ -209,6 +222,19 @@ function exportCsv(fileName, rows, tabKey) {
             String(row.adminCommission ?? ""),
             String(row.vendorAmount ?? ""),
             String(row.shippingCharge ?? ""),
+            String(row.totalAmount ?? ""),
+            row.method,
+            formatDate(row.date),
+            row.status,
+          ]
+        : tabKey === "booking"
+        ? [
+            row.transactionId,
+            row.orderId,
+            row.customer,
+            row.vendor,
+            String(row.adminCommission ?? ""),
+            String(row.vendorAmount ?? ""),
             String(row.totalAmount ?? ""),
             row.method,
             formatDate(row.date),
@@ -329,8 +355,10 @@ export function OrderAndBookingTransactionPage() {
   const displayRows = useMemo(() => toDisplayRows(activeTab, rows), [activeTab, rows]);
   const paymentKind = activeTab === "order" ? "ecom" : activeTab === "booking" ? "venue" : "recharge";
   const isOrderTab = activeTab === "order";
+  const isBookingTab = activeTab === "booking";
+  const showSettlementCols = isOrderTab || isBookingTab;
   const isRevenueTab = activeTab === "revenue";
-  const paymentColSpan = isOrderTab ? 12 : isRevenueTab ? 9 : 8;
+  const paymentColSpan = isOrderTab ? 12 : isBookingTab ? 11 : isRevenueTab ? 9 : 8;
   const isWithdrawalTab = activeTab === "withdrawal" || activeTab === "vendor_withdrawal";
   const withdrawalPartyLabel = activeTab === "vendor_withdrawal" ? "Vendor" : "Driver";
 
@@ -569,11 +597,11 @@ export function OrderAndBookingTransactionPage() {
                   <th>Order ID</th>
                   <th>Customer</th>
                   <th>Vendor</th>
-                  {isOrderTab ? (
+                  {showSettlementCols ? (
                     <>
                       <th>Admin Commission</th>
                       <th>Vendor Amount</th>
-                      <th>Shipping Charge</th>
+                      {isOrderTab ? <th>Shipping Charge</th> : null}
                       <th>Total Amount</th>
                     </>
                   ) : (
@@ -616,11 +644,11 @@ export function OrderAndBookingTransactionPage() {
                         </td>
                         <td>{row.customer}</td>
                         <td>{row.vendor}</td>
-                        {isOrderTab ? (
+                        {showSettlementCols ? (
                           <>
                             <td>{formatAmount(row.adminCommission)}</td>
                             <td>{formatAmount(row.vendorAmount)}</td>
-                            <td>{formatAmount(row.shippingCharge)}</td>
+                            {isOrderTab ? <td>{formatAmount(row.shippingCharge)}</td> : null}
                             <td>{formatAmount(row.totalAmount)}</td>
                           </>
                         ) : (

@@ -3,6 +3,7 @@ const AppError = require("./AppError");
 const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { getFeatureSettings } = require("./appFeatureSettings");
 const { queueAppNotification } = require("./appNotify");
+const { allocateUniqueRef } = require("./simpleRefNumber");
 const {
   parseBookingRequest,
   calculateVenueBookingPricingWithToken,
@@ -13,10 +14,8 @@ const {
 const OPEN_STATUSES = ["pending", "accepted"];
 const HOUR_MS = 60 * 60 * 1000;
 
-function generateEnquiryNumber() {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `ENQ-${ts}-${rand}`;
+async function generateEnquiryNumber() {
+  return allocateUniqueRef(VenueEnquiry, "enquiryNumber", "ENQ");
 }
 
 function normalizeDigits(value) {
@@ -94,6 +93,9 @@ function buildEnquiryFields({ venue, user, body = {}, source = "standard" }) {
       fields.quote = {
         grandTotal: pricing.grandTotal,
         tokenAmount: pricing.tokenAmount ?? 0,
+        amountDueNow: pricing.amountDueNow ?? pricing.grandTotal ?? 0,
+        remainingAmount: pricing.remainingAmount ?? 0,
+        usesTokenPayment: Boolean(pricing.usesTokenPayment),
         rateLabel: pricing.rateLabel,
         currency: pricing.currency,
         symbol: pricing.symbol,
@@ -142,7 +144,7 @@ async function createEnquiry({ venue, user, body, source = "standard" }) {
     String(venue.role || "") === "VenueVendor" ? venue.addedById?._id || venue.addedById : null;
 
   const enquiry = await VenueEnquiry.create({
-    enquiryNumber: generateEnquiryNumber(),
+    enquiryNumber: await generateEnquiryNumber(),
     user: user._id,
     venue: venue._id,
     vendor: vendorId || null,

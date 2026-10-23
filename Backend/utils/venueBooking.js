@@ -3,6 +3,8 @@ const AppError = require("./AppError");
 const { parseDateOnly, formatDateOnly } = require("./dateOnly");
 const { getVenueDayPrice, getVenueHourlyPrice } = require("./venuePricing");
 const { calculateBookingDiscount } = require("./venueDiscount");
+const { commissionFieldsFromOrder } = require("./venueCommission");
+const { allocateUniqueRef } = require("./simpleRefNumber");
 
 const MAX_BOOKING_DAYS = 60;
 const BLOCKED_ORDER_STATUSES = ["cancelled", "refunded"];
@@ -231,10 +233,8 @@ function parseAvailabilityRequest(body = {}) {
   };
 }
 
-function generateVenueOrderNumber() {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `VO-${ts}-${rnd}`;
+async function generateVenueOrderNumber() {
+  return allocateUniqueRef(VenueOrder, "orderNumber", "BK");
 }
 
 function assertHourlyBookingAllowed(venue) {
@@ -278,16 +278,21 @@ function attachTokenPaymentToPricing(pricing, venue) {
 
   if (flatToken > 0) {
     tokenAmount = Math.min(grandTotal, Math.round(flatToken));
-    if (grandTotal > 0) {
-      tokenAmountPercentage = Math.min(100, Math.round((tokenAmount / grandTotal) * 100));
-    }
+    // Flat deposits are authoritative; % may round to 0 for tiny amounts (e.g. ₹100 of ₹30,000).
+    tokenAmountPercentage = 0;
   } else {
     tokenAmount = calculateTokenAmount(grandTotal, tokenAmountPercentage);
   }
 
-  const usesToken = tokenAmount > 0;
-  const remainingAmount = usesToken ? grandTotal - tokenAmount : grandTotal;
-  const amountDueNow = usesToken ? tokenAmount : grandTotal;
+  // Token deposit must be a true partial amount. Never store full booking total as token.
+  if (!(tokenAmount > 0 && tokenAmount < grandTotal)) {
+    tokenAmount = 0;
+    tokenAmountPercentage = 0;
+  }
+
+  const usesTokenPayment = tokenAmount > 0;
+  const remainingAmount = usesTokenPayment ? Math.max(0, grandTotal - tokenAmount) : grandTotal;
+  const amountDueNow = usesTokenPayment ? tokenAmount : grandTotal;
 
   return {
     ...pricing,
@@ -295,7 +300,7 @@ function attachTokenPaymentToPricing(pricing, venue) {
     tokenAmount,
     remainingAmount,
     amountDueNow,
-    usesTokenPayment: usesToken,
+    usesTokenPayment,
   };
 }
 
@@ -694,13 +699,22 @@ function resolvePaymentAmountFromBody(body = {}, pricing = {}) {
   return amountDueNow;
 }
 
-function buildOrderPaymentSnapshot(pricing) {
-  return {
+function buildOrderPaymentSnapshot(pricing, commission = null) {
+  const snapshot = {
     tokenAmountPercentage: pricing.tokenAmountPercentage ?? 0,
     tokenAmount: pricing.tokenAmount ?? 0,
     remainingAmount: pricing.remainingAmount ?? pricing.grandTotal ?? 0,
     amountPaid: 0,
   };
+
+  if (commission) {
+    snapshot.vendor = commission.vendor ?? null;
+    snapshot.adminCommissionPercent = commission.adminCommissionPercent ?? 0;
+    snapshot.adminCommissionAmount = commission.adminCommissionAmount ?? 0;
+    snapshot.vendorEarnings = commission.vendorEarnings ?? 0;
+  }
+
+  return snapshot;
 }
 
 function resolvePayableAmountForOrder(order) {
@@ -713,9 +727,9 @@ function resolvePayableAmountForOrder(order) {
     return Math.max(0, grandTotal - amountPaid);
   }
 
-  const tokenPct = Number(order.tokenAmountPercentage) || 0;
   const tokenAmount = Number(order.tokenAmount) || 0;
-  if (tokenPct > 0 && tokenAmount > 0) return tokenAmount;
+  // Token deposit is authoritative even when % rounds to 0 (e.g. ₹100 of ₹30,000).
+  if (tokenAmount > 0 && tokenAmount < grandTotal) return tokenAmount;
   return grandTotal;
 }
 
@@ -740,6 +754,11 @@ function buildBookingPaymentSummary(order) {
 
   if (tokenAmountPercentage > 0 && tokenAmount <= 0 && grandTotal > 0) {
     tokenAmount = calculateTokenAmount(grandTotal, tokenAmountPercentage);
+  }
+
+  // Never expose full booking total as a token deposit (fixes older mis-stored orders too).
+  if (!(tokenAmount > 0 && tokenAmount < grandTotal)) {
+    tokenAmount = 0;
   }
 
   if (Number.isNaN(amountPaid)) {
@@ -772,7 +791,13 @@ function buildBookingPaymentSummary(order) {
   };
 
   const amountDueNow = resolvePayableAmountForOrder(normalizedOrder);
-  const usesTokenPayment = tokenAmountPercentage > 0 && tokenAmount > 0 && tokenAmount < grandTotal;
+  const usesTokenPayment = tokenAmount > 0 && tokenAmount < grandTotal;
+  const commission = commissionFieldsFromOrder({
+    ...normalizedOrder,
+    adminCommissionPercent: order?.adminCommissionPercent,
+    adminCommissionAmount: order?.adminCommissionAmount,
+    vendorEarnings: order?.vendorEarnings,
+  });
 
   return {
     subTotal,
@@ -788,6 +813,10 @@ function buildBookingPaymentSummary(order) {
     usesTokenPayment,
     paymentStatus,
     paymentMethod,
+    adminCommissionPercent: commission.adminCommissionPercent,
+    adminCommissionAmount: commission.adminCommissionAmount,
+    vendorEarnings: commission.vendorEarnings,
+    appliesCommission: commission.appliesCommission,
     currency: "INR",
     symbol: "₹",
     subTotalLabel: formatInrAmountLabel(subTotal),
@@ -797,6 +826,8 @@ function buildBookingPaymentSummary(order) {
     amountPaidLabel: formatInrAmountLabel(amountPaid),
     remainingAmountLabel: formatInrAmountLabel(remainingAmount),
     amountDueNowLabel: formatInrAmountLabel(amountDueNow),
+    adminCommissionAmountLabel: formatInrAmountLabel(commission.adminCommissionAmount),
+    vendorEarningsLabel: formatInrAmountLabel(commission.vendorEarnings),
   };
 }
 

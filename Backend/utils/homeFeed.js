@@ -14,6 +14,7 @@ const { listHotDealProducts } = require("./hotDeals");
 const { toAbsoluteUploadUrl } = require("./mediaUrl");
 const { getFeatureSettings } = require("./appFeatureSettings");
 const { exactRx } = require("./areaFilter");
+const { applyAreaToProductFilter } = require("./catalogLocation");
 
 const MAX_RECENT_VIEWS = 30;
 
@@ -31,8 +32,14 @@ function oid(value) {
 // ---------------------------------------------------------------------------
 // Hot deals
 // ---------------------------------------------------------------------------
-async function loadHotDealCards(req, { limit } = {}) {
-  const picked = await listHotDealProducts({ limit });
+async function loadHotDealCards(req, { limit, vendorIds = undefined } = {}) {
+  let resolvedVendorIds = vendorIds;
+  if (resolvedVendorIds === undefined) {
+    const { resolveShoppingArea, getAreaVendorIds } = require("./catalogLocation");
+    const area = await resolveShoppingArea(req);
+    resolvedVendorIds = await getAreaVendorIds(area);
+  }
+  const picked = await listHotDealProducts({ limit, vendorIds: resolvedVendorIds });
   const metaById = new Map(picked.map((row) => [String(row.product._id), row]));
   return buildProductCards(
     picked.map((row) => row.product),
@@ -59,10 +66,28 @@ async function loadHotDealCards(req, { limit } = {}) {
 // ---------------------------------------------------------------------------
 // Category-wise products
 // ---------------------------------------------------------------------------
-async function loadCategorySections(req, { baseUrl, perCategory = 8, maxCategories = 8, categoryId } = {}) {
-  let categoryIds = await getCategoryIdsWithPublicProducts(Product, {
-    categoryIds: categoryId ? [oid(categoryId)].filter(Boolean) : undefined,
-  });
+async function loadCategorySections(req, { baseUrl, perCategory = 8, maxCategories = 8, categoryId, vendorIds = undefined } = {}) {
+  let resolvedVendorIds = vendorIds;
+  if (resolvedVendorIds === undefined) {
+    const { resolveShoppingArea, getAreaVendorIds } = require("./catalogLocation");
+    const area = await resolveShoppingArea(req);
+    resolvedVendorIds = await getAreaVendorIds(area);
+  }
+
+  let categoryIds = [];
+  if (resolvedVendorIds !== null) {
+    if (!Array.isArray(resolvedVendorIds) || resolvedVendorIds.length === 0) return [];
+    const prodFilter = applyAreaToProductFilter(
+      activePublicProductBaseFilter(categoryId ? { category: oid(categoryId) } : {}),
+      resolvedVendorIds
+    );
+    categoryIds = await Product.distinct("category", prodFilter);
+  } else {
+    categoryIds = await getCategoryIdsWithPublicProducts(Product, {
+      categoryIds: categoryId ? [oid(categoryId)].filter(Boolean) : undefined,
+    });
+  }
+
   if (!categoryIds.length) return [];
 
   const categories = await Category.find({ _id: { $in: categoryIds }, mode: "ecom", status: "active" })
@@ -73,12 +98,16 @@ async function loadCategorySections(req, { baseUrl, perCategory = 8, maxCategori
   if (!categories.length) return [];
 
   const perCategoryDocs = await Promise.all(
-    categories.map((category) =>
-      Product.find(activePublicProductBaseFilter({ category: category._id }))
+    categories.map((category) => {
+      let prodCriteria = activePublicProductBaseFilter({ category: category._id });
+      if (resolvedVendorIds !== null) {
+        prodCriteria = applyAreaToProductFilter(prodCriteria, resolvedVendorIds);
+      }
+      return Product.find(prodCriteria)
         .sort(RANKED_SORT)
         .limit(perCategory * 2) // over-fetch: cards of closed vendors are dropped
-        .lean()
-    )
+        .lean();
+    })
   );
 
   const allProducts = perCategoryDocs.flat();
@@ -145,13 +174,20 @@ async function listRecentlyViewed(req, { limit = 12, baseUrl } = {}) {
  * already saved or opened. Anonymous users (or users with no history) get popular products.
  * With a `city`, vendor products are limited to shops of that city (platform products stay).
  */
-async function loadSuggestions(req, { limit = 12, baseUrl, city } = {}) {
+async function loadSuggestions(req, { limit = 12, baseUrl, city, vendorIds = null } = {}) {
   const userId = req.user?._id;
   let seedCategoryIds = [];
   const excludeIds = new Set();
 
   let areaScope = {};
-  if (city) {
+  if (vendorIds !== null) {
+    if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+      return { items: [], personalised: false };
+    }
+    areaScope = {
+      $or: [{ role: { $in: ["Admin", "admin"] } }, { role: "Vendor", addedById: { $in: vendorIds } }],
+    };
+  } else if (city) {
     const areaVendorIds = await Vendor.distinct("_id", activePublicVendorFilter({ city: exactRx(city) }));
     areaScope = {
       $or: [{ role: { $in: ["Admin", "admin"] } }, { role: "Vendor", addedById: { $in: areaVendorIds } }],
@@ -295,9 +331,13 @@ function nameTokenClause(field, search) {
 }
 
 /** Ecom vendors (public, open) whose shop name matches the search text. */
-async function findVendorsMatchingSearch(search, { limit = 10 } = {}) {
+async function findVendorsMatchingSearch(search, { limit = 10, vendorIds = null } = {}) {
   const clause = nameTokenClause("businessName", search);
   if (!clause) return [];
+  if (vendorIds !== null) {
+    if (!Array.isArray(vendorIds) || vendorIds.length === 0) return [];
+    clause._id = { $in: vendorIds };
+  }
   return Vendor.find(activePublicVendorFilter(clause))
     .select("businessName shopLogo city state subDistrict profileScore")
     .sort({ profileScore: -1 })

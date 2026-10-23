@@ -64,9 +64,9 @@ async function debitUserWallet(userId, amount) {
 
 function makeWalletOrderTransactionId(orderNumber) {
   const slug = String(orderNumber || "")
-    .replace(/^EO-/i, "")
+    .replace(/^(EO|ORD|BK|VO)-/i, "")
     .trim();
-  return `WPO-${slug || Date.now().toString(36).toUpperCase()}`;
+  return `WPO-${slug || String(Date.now()).slice(-8)}`;
 }
 
 async function createWalletPaymentForOrder(userId, order, amount) {

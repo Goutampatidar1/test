@@ -34,6 +34,7 @@ const {
   readGatewayPaymentId,
   isVenuePaymentConfirmed,
 } = require("./venueTransaction");
+const { allocateUniqueRef } = require("./simpleRefNumber");
 
 const PAYMENT_METHOD_LABELS = {
   cod: "Cash On Delivery",
@@ -41,10 +42,8 @@ const PAYMENT_METHOD_LABELS = {
   wallet: "Wallet",
 };
 
-function generateEcomOrderNumber() {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `EO-${ts}-${rnd}`;
+async function generateEcomOrderNumber() {
+  return allocateUniqueRef(Order, "orderNumber", "ORD");
 }
 
 function normalizePaymentMethod(value) {
@@ -367,7 +366,7 @@ async function placeCheckoutOrder(userId, body = {}, options = {}) {
     const paymentStatus = isWalletPayment || isOnlinePayment ? "paid" : "pending";
 
     order = await Order.create({
-      orderNumber: generateEcomOrderNumber(),
+      orderNumber: await generateEcomOrderNumber(),
       user: userId,
       items: orderItems,
       vendorFulfillments: await buildVendorFulfillmentsFromItems(orderItems),

@@ -155,6 +155,31 @@ const venueOrderSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    /** Owning VenueVendor when the service belongs to a service vendor; null for admin-owned. */
+    vendor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "VenueVendor",
+      default: null,
+      index: true,
+    },
+    /** Snapshot of App Settings "Service vendor commission" at booking time. */
+    adminCommissionPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    adminCommissionAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    /** Booking total minus platform commission (vendor settlement amount). */
+    vendorEarnings: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     paymentMethod: {
       type: String,
       enum: PAYMENT_METHODS,

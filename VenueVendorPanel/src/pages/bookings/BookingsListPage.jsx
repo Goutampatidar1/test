@@ -7,10 +7,14 @@ import { formatInr } from "../../utils/venueListMapper.js";
 function StatusBadge({ status }) {
   const labels = {
     confirmed: "Confirmed",
+    processing: "Processing",
+    completed: "Completed",
+    delivered: "Completed",
     pending: "Pending",
     cancelled: "Cancelled",
   };
-  return <span className={`vendor-dash-badge vendor-dash-badge--${status}`}>{labels[status] ?? status}</span>;
+  const key = status === "delivered" ? "completed" : status;
+  return <span className={`vendor-dash-badge vendor-dash-badge--${key}`}>{labels[status] ?? labels[key] ?? status}</span>;
 }
 
 function PaymentBadge({ status }) {
@@ -85,6 +89,8 @@ export function BookingsListPage() {
         >
           <option value="all">All statuses</option>
           <option value="confirmed">Confirmed</option>
+          <option value="processing">Processing</option>
+          <option value="completed">Completed</option>
           <option value="pending">Pending</option>
           <option value="cancelled">Cancelled</option>
         </VendorToolbarSelect>

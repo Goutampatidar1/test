@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";import {
   MdPhoneAndroid,
   MdShoppingCart,
   MdStore,
+  MdStoreMallDirectory,
   MdStorefront,
 } from "react-icons/md";
 import { adminGetDashboardStats } from "../api/adminDashboard.js";
@@ -19,6 +20,7 @@ const STAT_CARDS = [
   { key: "totalUsers", label: "Total Users", tone: "yellow", format: "number", Icon: MdPeople, to: "/admin/users" },
   { key: "ecomVendors", label: "Ecom Vendors", tone: "orange", format: "number", Icon: MdStore, to: "/admin/vendors?type=ecom" },
   { key: "venueVendors", label: "Service Vendors", tone: "orange", format: "number", Icon: MdBusiness, to: "/admin/vendors?type=service" },
+  { key: "bothVendors", label: "Both Vendors", tone: "orange", format: "number", Icon: MdStoreMallDirectory, to: "/admin/vendors?type=both" },
   { key: "totalOrders", label: "Total Orders", tone: "yellow", format: "number", Icon: MdShoppingCart, to: "/admin/orders?tab=order" },
   { key: "revenue", label: "Revenue", tone: "yellow", format: "currency", Icon: MdCurrencyRupee, to: "/admin/payments" },
   {

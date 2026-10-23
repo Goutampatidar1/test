@@ -168,12 +168,14 @@ export function PaymentTransactionDetailPage() {
                 {tx.order ? <DetailRow label="Order total" value={formatAmount(tx.order.grandTotal)} /> : null}
                 {tx.order ? <DetailRow label="Order status" value={tx.order.orderStatus} /> : null}
                 {tx.order ? <DetailRow label="Order payment" value={tx.order.paymentStatus} /> : null}
-                {kind === "ecom" && tx.paymentSummary ? (
+                {(kind === "ecom" || kind === "venue") && tx.paymentSummary ? (
                   <>
                     <DetailRow label="Vendor" value={tx.paymentSummary.vendorName} />
                     <DetailRow label="Admin commission" value={formatAmount(tx.paymentSummary.adminCommission)} />
                     <DetailRow label="Vendor amount" value={formatAmount(tx.paymentSummary.vendorAmount)} />
-                    <DetailRow label="Shipping charge" value={formatAmount(tx.paymentSummary.shippingCharge)} />
+                    {kind === "ecom" ? (
+                      <DetailRow label="Shipping charge" value={formatAmount(tx.paymentSummary.shippingCharge)} />
+                    ) : null}
                     <DetailRow label="Total amount" value={formatAmount(tx.paymentSummary.totalAmount)} />
                   </>
                 ) : null}

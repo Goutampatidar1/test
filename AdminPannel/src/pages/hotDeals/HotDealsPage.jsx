@@ -109,7 +109,7 @@ export function HotDealsPage({ initialTab = "rules" }) {
 
 
   return (
-    <div className="page-card">
+      <div className="page-card">
       <div className="page-card__head"><h2 className="page-card__title">Hot Deals Management</h2></div>
       <div className="settings-tabs-wrap">
         <div className="settings-tabs" role="tablist">{TABS.map(t=><button key={t.id} type="button" role="tab" aria-selected={tab===t.id} className={`settings-tabs__tab${tab===t.id?" settings-tabs__tab--active":""}`} onClick={()=>setTab(t.id)}>{t.label}</button>)}</div>

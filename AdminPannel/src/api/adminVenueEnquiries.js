@@ -4,11 +4,12 @@ function enquiriesBase() {
   return "/admin/venue/enquiries";
 }
 
-export async function adminListVenueEnquiries(token, { page = 1, limit = 10, status, search, venueId } = {}) {
+export async function adminListVenueEnquiries(token, { page = 1, limit = 10, status, source, search, venueId } = {}) {
   const q = new URLSearchParams();
   q.set("page", String(page));
   q.set("limit", String(limit));
   if (status) q.set("status", status);
+  if (source) q.set("source", source);
   if (venueId) q.set("venueId", venueId);
   if (search && String(search).trim()) q.set("search", String(search).trim());
   try {
@@ -16,6 +17,7 @@ export async function adminListVenueEnquiries(token, { page = 1, limit = 10, sta
     return {
       enquiries: Array.isArray(data.data) ? data.data : [],
       pagination: data.pagination ?? { page, limit, total: 0, pages: 1 },
+      counts: data.counts ?? { source: {}, status: {} },
     };
   } catch (error) {
     normalizeApiError(error);

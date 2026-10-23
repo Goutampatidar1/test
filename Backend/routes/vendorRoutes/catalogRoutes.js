@@ -1,7 +1,7 @@
 const express = require("express");
 const catalogController = require("../../controllers/vendorControllers/catalogController");
 const locationController = require("../../controllers/vendorControllers/locationController");
-const { protectVendor } = require("../../middleware/auth");
+const { protectVendor, optionalProtectUser } = require("../../middleware/auth");
 const {
   optionalVendorCategoryFile,
   optionalVendorSubCategoryFile,
@@ -39,7 +39,7 @@ router.get(
   "/categories/:categoryId/sub-categories",
   catalogController.listSubCategories
 );
-router.get("/child-categories", catalogController.listChildCategories);
+router.get("/child-categories", optionalProtectUser, catalogController.listChildCategories);
 router.get("/child-categories/mine", protectVendor, catalogController.listMyChildCategories);
 router.post(
   "/child-categories",
@@ -49,6 +49,7 @@ router.post(
 );
 router.get(
   "/sub-categories/:subCategoryId/child-categories",
+  optionalProtectUser,
   catalogController.listChildCategories
 );
 

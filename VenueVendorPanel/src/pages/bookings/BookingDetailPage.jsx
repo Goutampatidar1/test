@@ -8,12 +8,27 @@ import {
 } from "../../api/vendorBookings.js";
 import { formatInr } from "../../utils/venueListMapper.js";
 
-const STATUS_OPTIONS = [
+const BASE_STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "confirmed", label: "Confirmed" },
   { value: "processing", label: "Processing" },
   { value: "cancelled", label: "Cancelled" },
 ];
+
+const COMPLETE_OPTION = { value: "delivered", label: "Complete" };
+
+function statusOptionsFor(currentStatus) {
+  const current = String(currentStatus || "").toLowerCase();
+  const canComplete = ["confirmed", "processing", "shipped", "delivered"].includes(current);
+  if (!canComplete) return BASE_STATUS_OPTIONS;
+  return [...BASE_STATUS_OPTIONS, COMPLETE_OPTION];
+}
+
+function statusLabel(value) {
+  if (value === "delivered" || value === "completed") return "Completed";
+  const opt = [...BASE_STATUS_OPTIONS, COMPLETE_OPTION].find((row) => row.value === value);
+  return opt?.label || value;
+}
 
 function InfoRow({ label, value, icon }) {
   return (
@@ -117,12 +132,13 @@ export function BookingDetailPage() {
     setSaving(true);
     try {
       const updated = await vendorUpdateBookingStatus(id, status);
+      const nextStatus = updated.orderStatus ?? updated.status ?? status;
       setDetail(updated);
-      setStatus(updated.orderStatus ?? updated.status ?? status);
+      setStatus(nextStatus);
       Swal.fire({
         icon: "success",
         title: "Status updated",
-        text: `Booking ${detail.id} is now ${status}.`,
+        text: `Booking ${detail.id} is now ${statusLabel(nextStatus)}.`,
         timer: 2000,
         showConfirmButton: false,
       });
@@ -239,10 +255,10 @@ export function BookingDetailPage() {
               <select
                 id="booking-status"
                 className="vendor-venue-input"
-                value={status}
+                value={status === "completed" ? "delivered" : status}
                 onChange={(e) => setStatus(e.target.value)}
               >
-                {STATUS_OPTIONS.map((opt) => (
+                {statusOptionsFor(detail.orderStatus ?? detail.status ?? status).map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -274,9 +290,15 @@ export function BookingDetailPage() {
                 <dt>Total Amount</dt>
                 <dd>{formatInr(pay.total ?? pay.grandTotal)}</dd>
               </div>
-              {Number(pay.tokenAmountPercentage) > 0 ? (
+              {pay.usesTokenPayment ||
+              (Number(pay.tokenAmount) > 0 &&
+                Number(pay.tokenAmount) < Number(pay.total ?? pay.grandTotal ?? 0)) ? (
                 <div className="vendor-booking-payment__row">
-                  <dt>Token ({pay.tokenAmountPercentage}%)</dt>
+                  <dt>
+                    {Number(pay.tokenAmountPercentage) > 0
+                      ? `Token (${pay.tokenAmountPercentage}%)`
+                      : "Token amount"}
+                  </dt>
                   <dd>{formatInr(pay.tokenAmount)}</dd>
                 </div>
               ) : null}

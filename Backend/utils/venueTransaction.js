@@ -7,10 +7,10 @@ const { STATUS_LABELS, PAYMENT_METHOD_LABELS } = require("./transactionHistory")
 
 function makeVenueTransactionId(orderNumber, suffix = "") {
   const slug = String(orderNumber || "")
-    .replace(/^VO-/i, "")
+    .replace(/^(VO|BK)-/i, "")
     .trim();
   const extra = suffix ? `-${suffix}` : "";
-  return `TXN-${slug || Date.now().toString(36).toUpperCase()}${extra}`;
+  return `TXN-${slug || String(Date.now()).slice(-8)}${extra}`;
 }
 
 function resolveTransactionStatus(paymentMethod, paymentStatus) {
@@ -74,11 +74,11 @@ function resolveInitialVenuePaymentStatus(paymentMethod, body = {}, orderContext
 
 function resolvePaymentPhaseForOrder(order, paymentStatus = "") {
   const status = String(paymentStatus || order?.paymentStatus || "").toLowerCase();
-  const tokenPct = Number(order?.tokenAmountPercentage) || 0;
   const tokenAmount = Number(order?.tokenAmount) || 0;
+  const grandTotal = Number(order?.grandTotal) || 0;
 
   if (status === "partially_paid") return "balance";
-  if (tokenPct > 0 && tokenAmount > 0) return "token";
+  if (tokenAmount > 0 && (grandTotal <= 0 || tokenAmount < grandTotal)) return "token";
   return "full";
 }
 

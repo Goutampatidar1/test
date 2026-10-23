@@ -130,6 +130,15 @@ exports.createUser = asyncHandler(async (req, res) => {
     });
   }
 
+  let dobVal = undefined;
+  if (dob !== undefined && dob !== "" && dob !== null) {
+    const parsedDob = new Date(dob);
+    if (!Number.isNaN(parsedDob.getTime())) {
+      dobVal = parsedDob;
+    }
+  }
+  const genderVal = gender && ["male", "female", "other"].includes(gender) ? gender : undefined;
+
   let user;
   try {
     user = await User.create({
@@ -137,8 +146,8 @@ exports.createUser = asyncHandler(async (req, res) => {
       ...(emailNorm ? { email: emailNorm } : {}),
       ...(passwordHash ? { passwordHash } : {}),
       phone: phoneNorm,
-      ...(dob !== undefined && dob !== "" ? { dob } : {}),
-      ...(gender ? { gender } : {}),
+      ...(dobVal ? { dob: dobVal } : {}),
+      ...(genderVal ? { gender: genderVal } : {}),
       fcm_id,
       status: status || "active",
       profileImage: fromFile ?? profileImage ?? null,
@@ -235,10 +244,15 @@ exports.updateUser = asyncHandler(async (req, res) => {
     user.name = normalizeRequired(name);
   }
   if (dob !== undefined) {
-    user.dob = dob === "" ? null : dob;
+    if (dob === "" || dob === null) {
+      user.dob = null;
+    } else {
+      const parsedDob = new Date(dob);
+      user.dob = !Number.isNaN(parsedDob.getTime()) ? parsedDob : null;
+    }
   }
   if (gender !== undefined) {
-    user.gender = gender;
+    user.gender = gender && ["male", "female", "other"].includes(gender) ? gender : null;
   }
   if (fcm_id !== undefined) {
     user.fcm_id = fcm_id;

@@ -39,7 +39,7 @@ function isRuleLive(rule, now = new Date()) {
 }
 
 /** Mongo-expressible part of a rule (discount percent is checked afterwards in JS). */
-function buildRuleFilter(rule) {
+function buildRuleFilter(rule, vendorIds = null) {
   const filter = activePublicProductBaseFilter({ role: "Vendor" });
   filter.stock = { $gte: Math.max(1, Number(rule.minStock) || 1) };
   filter.$or = [{ discountValue: { $gt: 0 } }, { "combinations.discountValue": { $gt: 0 } }];
@@ -48,7 +48,19 @@ function buildRuleFilter(rule) {
   filter["hotDeal.status"] = "approved";
   if (rule.categories?.length) filter.category = { $in: toIds(rule.categories) };
   if (rule.subCategories?.length) filter.subCategory = { $in: toIds(rule.subCategories) };
-  if (rule.vendors?.length) filter.addedById = { $in: toIds(rule.vendors) };
+  if (vendorIds !== null) {
+    if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+      filter._id = { $in: [] };
+    } else if (rule.vendors?.length) {
+      const vendorSet = new Set(vendorIds.map(String));
+      const intersected = rule.vendors.filter((v) => vendorSet.has(String(v)));
+      filter.addedById = { $in: toIds(intersected) };
+    } else {
+      filter.addedById = { $in: toIds(vendorIds) };
+    }
+  } else if (rule.vendors?.length) {
+    filter.addedById = { $in: toIds(rule.vendors) };
+  }
   if (Number(rule.minPrice) > 0 || Number(rule.maxPrice) > 0) {
     filter.price = {};
     if (Number(rule.minPrice) > 0) filter.price.$gte = Number(rule.minPrice);
@@ -135,15 +147,20 @@ function notifyAdminsHotDealPending(product, vendorId) {
 }
 
 /**
- * Live hot deals: products an admin approved from the opt-in queue, plus products that satisfy
- * at least one live rule (best discount first).
+ * Live hot deals: approved opted-in products that satisfy at least one live rule
+ * (best discount first). No live rules → nothing is shown on the app.
  */
-async function listHotDealProducts({ limit } = {}) {
+async function listHotDealProducts({ limit, vendorIds = null } = {}) {
   const settings = await getFeatureSettings();
   if (!settings.hotDealsEnabled) return [];
+  if (vendorIds !== null && (!Array.isArray(vendorIds) || vendorIds.length === 0)) {
+    return [];
+  }
   const requested = Math.trunc(Number(limit));
 
   const rules = await listLiveRules();
+  if (!rules.length) return [];
+
   const picked = new Map();
 
   const consider = (product, rule) => {
@@ -155,20 +172,8 @@ async function listHotDealProducts({ limit } = {}) {
     }
   };
 
-  const approved = await Product.find({
-    ...activePublicProductBaseFilter({ role: "Vendor" }),
-    "hotDeal.optIn": true,
-    "hotDeal.status": "approved",
-    stock: { $gte: 1 },
-  })
-    .populate("category", "name mode status")
-    .populate("subCategory", "name status")
-    .limit(CANDIDATE_CAP)
-    .lean();
-  approved.forEach((product) => consider(product, null));
-
   for (const rule of rules) {
-    const candidates = await Product.find(buildRuleFilter(rule))
+    const candidates = await Product.find(buildRuleFilter(rule, vendorIds))
       .populate("category", "name mode status")
       .populate("subCategory", "name status")
       .limit(CANDIDATE_CAP)
