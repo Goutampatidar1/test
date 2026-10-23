@@ -7,12 +7,15 @@ const {
   listPromotedProducts,
 } = require("../../utils/promotionEngine");
 
+const { resolveShoppingArea } = require("../../utils/catalogLocation");
+
 /** GET /api/user/promotional-banners */
 exports.listPromotionalBanners = asyncHandler(async (req, res) => {
-  const cityId = req.query.cityId || req.query.city_id;
-  const subDistrictId = req.query.subDistrictId || req.query.sub_district_id;
-  if (!cityId || !subDistrictId) {
-    return sendSuccess(res, "cityId and subDistrictId are required", []);
+  const area = await resolveShoppingArea(req);
+  const cityId = area.cityId;
+  const subDistrictId = area.scope === "city" ? null : area.subDistrictId;
+  if (!cityId && !subDistrictId) {
+    return sendSuccess(res, "cityId or subDistrictId is required", []);
   }
   const items = await listPromotionalBanners({
     cityId,
@@ -25,10 +28,11 @@ exports.listPromotionalBanners = asyncHandler(async (req, res) => {
 
 /** GET /api/user/verified-vendors */
 exports.listVerifiedVendors = asyncHandler(async (req, res) => {
-  const cityId = req.query.cityId || req.query.city_id;
-  const subDistrictId = req.query.subDistrictId || req.query.sub_district_id;
-  if (!cityId || !subDistrictId) {
-    return sendSuccess(res, "cityId and subDistrictId are required", []);
+  const area = await resolveShoppingArea(req);
+  const cityId = area.cityId;
+  const subDistrictId = area.scope === "city" ? null : area.subDistrictId;
+  if (!cityId && !subDistrictId) {
+    return sendSuccess(res, "cityId or subDistrictId is required", []);
   }
   const items = await listVerifiedVendors({
     cityId,
@@ -40,10 +44,11 @@ exports.listVerifiedVendors = asyncHandler(async (req, res) => {
 
 /** GET /api/user/promoted-products */
 exports.listPromotedProducts = asyncHandler(async (req, res) => {
-  const cityId = req.query.cityId || req.query.city_id;
-  const subDistrictId = req.query.subDistrictId || req.query.sub_district_id;
-  if (!cityId || !subDistrictId) {
-    return sendSuccess(res, "cityId and subDistrictId are required", []);
+  const area = await resolveShoppingArea(req);
+  const cityId = area.cityId;
+  const subDistrictId = area.scope === "city" ? null : area.subDistrictId;
+  if (!cityId && !subDistrictId) {
+    return sendSuccess(res, "cityId or subDistrictId is required", []);
   }
   const search = req.query.search || req.query.q || "";
   const items = await listPromotedProducts({

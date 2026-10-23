@@ -49,6 +49,11 @@ const { findVendorsMatchingSearch, nameTokenClause, recordRecentView } = require
 const { toAbsoluteUploadUrl } = require("../../utils/mediaUrl");
 const { activePublicVenueListingFilter, activePublicVenueListingFilterOpen, isVenueListable } = require("../../utils/publicVenueList");
 const { resolveRequestArea, venueAreaClause, andClause } = require("../../utils/areaFilter");
+const {
+  resolveShoppingArea,
+  getAreaVendorIds,
+  applyAreaToProductFilter,
+} = require("../../utils/catalogLocation");
 
 const ALLOWED_MODES = new Set(["ecom", "venue"]);
 
@@ -351,8 +356,28 @@ exports.listCategories = asyncHandler(async (req, res) => {
   const includeEmpty = readIncludeEmpty(req.query);
 
   if (filter.mode === "ecom") {
-    if (!includeEmpty) {
-      filter._id = { $in: await getCategoryIdsWithPublicProducts(Product) };
+    const area = await resolveShoppingArea(req);
+    const vendorIds = await getAreaVendorIds(area);
+
+    if (vendorIds !== null) {
+      if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+        sendSuccess(res, "Categories fetched", []);
+        return;
+      }
+      const prodFilter = applyAreaToProductFilter(activePublicProductBaseFilter(), vendorIds);
+      const categoryIds = await Product.distinct("category", prodFilter);
+      if (!categoryIds.length) {
+        sendSuccess(res, "Categories fetched", []);
+        return;
+      }
+      filter._id = { $in: categoryIds };
+    } else if (!includeEmpty) {
+      const categoryIds = await getCategoryIdsWithPublicProducts(Product);
+      if (!categoryIds.length) {
+        sendSuccess(res, "Categories fetched", []);
+        return;
+      }
+      filter._id = { $in: categoryIds };
     }
 
     const categories = await Category.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean();
@@ -455,11 +480,29 @@ exports.listSubCategories = asyncHandler(async (req, res) => {
   const searchOr = searchFilter(search, ["name"]);
   if (searchOr) Object.assign(filter, searchOr);
 
-  if (!readIncludeEmpty(req.query)) {
-    if (filter.mode === "venue") {
+  if (filter.mode === "venue") {
+    if (!readIncludeEmpty(req.query)) {
       const areaClause = await venueAreaClause(await resolveRequestArea(req));
       filter._id = { $in: await subCategoryIdsWithVenues(categoryId, areaClause) };
-    } else {
+    }
+  } else {
+    const area = await resolveShoppingArea(req);
+    const vendorIds = await getAreaVendorIds(area);
+
+    if (vendorIds !== null) {
+      if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+        sendSuccess(res, "Sub-categories fetched", []);
+        return;
+      }
+      const prodCriteria = categoryId ? { category: categoryId } : {};
+      const prodFilter = applyAreaToProductFilter(activePublicProductBaseFilter(prodCriteria), vendorIds);
+      const subCategoryIds = await Product.distinct("subCategory", prodFilter);
+      if (!subCategoryIds.length) {
+        sendSuccess(res, "Sub-categories fetched", []);
+        return;
+      }
+      filter._id = { $in: subCategoryIds };
+    } else if (!readIncludeEmpty(req.query)) {
       filter._id = {
         $in: await getSubCategoryIdsWithPublicProducts(Product, {
           categoryId: categoryId ? new mongoose.Types.ObjectId(categoryId) : undefined,
@@ -587,10 +630,10 @@ exports.listProducts = asyncHandler(async (req, res) => {
   const subCategoryId = readCatalogSubCategoryId(req.query, req.params);
   const childCategoryId = readCatalogChildCategoryId(req.query);
   const vendorId = readCatalogVendorId(req.query);
-  const { search, variantType, sort } = req.query;
+  const { search, variantType, sort, minRating, minDiscount } = req.query;
   const { minPrice, maxPrice } = parseProductPriceRange(req.query);
 
-  const filter = activePublicProductBaseFilter();
+  let filter = activePublicProductBaseFilter();
 
   if (categoryId) {
     assertObjectId(categoryId, "Invalid category id");
@@ -617,8 +660,29 @@ exports.listProducts = asyncHandler(async (req, res) => {
     filter.variantType = vt;
   }
 
+  if (minRating) {
+    const r = Number(minRating);
+    if (!Number.isNaN(r) && r > 0) {
+      filter.averageRating = { $gte: r };
+    }
+  }
+  if (minDiscount) {
+    const d = Number(minDiscount);
+    if (!Number.isNaN(d) && d > 0) {
+      filter.discountValue = { $gte: d };
+    }
+  }
+
   const priceRangeFilter = buildProductPriceRangeFilter(minPrice, maxPrice);
   if (priceRangeFilter) Object.assign(filter, priceRangeFilter);
+
+  // vendor=<id> (shop page): do not apply city filter.
+  let areaVendorIds = null;
+  if (!vendorId) {
+    const area = await resolveShoppingArea(req);
+    areaVendorIds = await getAreaVendorIds(area);
+    filter = applyAreaToProductFilter(filter, areaVendorIds);
+  }
 
   const searchOr = searchFilter(search, ["name", "slug", "description", "shortDescription", "sku"]);
   let matchedVendors = [];
@@ -627,7 +691,7 @@ exports.listProducts = asyncHandler(async (req, res) => {
     const nameWords = nameTokenClause("name", search);
     if (nameWords) searchOr.$or.push(nameWords);
     if (!vendorId) {
-      matchedVendors = await findVendorsMatchingSearch(search, { limit: 10 });
+      matchedVendors = await findVendorsMatchingSearch(search, { limit: 10, vendorIds: areaVendorIds });
       if (matchedVendors.length) {
         searchOr.$or.push({ role: "Vendor", addedById: { $in: matchedVendors.map((v) => v._id) } });
       }

@@ -12,6 +12,8 @@ const { toVendorCategory, toVendorSubCategory, toVendorChildCategory } = require
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
 const { resolveVendorApprovalRequired } = require("../../utils/vendorApproval");
+const { resolveShoppingArea, getAreaVendorIds, applyAreaToProductFilter } = require("../../utils/catalogLocation");
+const { activePublicProductBaseFilter } = require("../../utils/publicProductList");
 
 const CATEGORY_UPLOAD_FOLDER = "category";
 const SUB_CATEGORY_UPLOAD_FOLDER = "sub-category";
@@ -570,6 +572,27 @@ exports.listChildCategories = asyncHandler(async (req, res) => {
 
   const searchOr = searchFilter(search, ["name"]);
   if (searchOr) Object.assign(filter, searchOr);
+
+  const area = await resolveShoppingArea(req);
+  const vendorIds = await getAreaVendorIds(area);
+
+  if (vendorIds !== null) {
+    if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+      return sendSuccess(res, "Child categories fetched", []);
+    }
+    const prodCriteria = { childCategory: { $ne: null } };
+    if (subCategoryId) prodCriteria.subCategory = subCategoryId;
+    if (categoryId) prodCriteria.category = categoryId;
+    const prodFilter = applyAreaToProductFilter(
+      activePublicProductBaseFilter(prodCriteria),
+      vendorIds
+    );
+    const childCategoryIds = await Product.distinct("childCategory", prodFilter);
+    if (!childCategoryIds.length) {
+      return sendSuccess(res, "Child categories fetched", []);
+    }
+    filter._id = { $in: childCategoryIds };
+  }
 
   const childCategories = await ChildCategory.find(filter)
     .populate("category", "name mode")

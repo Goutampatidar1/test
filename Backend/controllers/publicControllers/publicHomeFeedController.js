@@ -40,18 +40,30 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
   );
   const wants = new Set(order.map((s) => s.key));
 
+  const { resolveShoppingArea, getAreaVendorIds } = require("../../utils/catalogLocation");
+  const shoppingArea = await safe(
+    "shoppingArea",
+    () => resolveShoppingArea(req),
+    { hasFilter: false, scope: null, cityName: null, cityId: null, subDistrictName: null, subDistrictId: null }
+  );
+  const vendorIds = await safe("vendorIds", () => getAreaVendorIds(shoppingArea), null);
+
   const area = await safe(
     "area",
     () => resolveNearbyLocation(req.user?._id ?? null, req.query, { locationOptional: true }),
     { city: null, subDistrict: null, subDistrictId: null }
   );
-  const city = area.city || resolveRequestCity(req) || "";
+  const effectiveCity = shoppingArea.cityName || area.city || resolveRequestCity(req) || "";
+  const effectiveSubDistrict = shoppingArea.scope === "city" ? "" : (shoppingArea.subDistrictName || area.subDistrict || "");
+  const effectiveSubDistrictId = shoppingArea.scope === "city" ? null : (shoppingArea.subDistrictId || area.subDistrictId || null);
+
+  const city = effectiveCity;
   const areaPayload = {
-    city: area.city || "",
-    subDistrict: area.subDistrict || "",
-    subDistrictId: area.subDistrictId || null,
-    label: [area.subDistrict, area.city].filter(Boolean).join(", "),
-    isSet: Boolean(area.city || area.subDistrict),
+    city: effectiveCity,
+    subDistrict: effectiveSubDistrict,
+    subDistrictId: effectiveSubDistrictId,
+    label: [effectiveSubDistrict, effectiveCity].filter(Boolean).join(", "),
+    isSet: Boolean(effectiveCity || effectiveSubDistrict),
   };
 
   const perCategory = Math.min(Math.max(parseInt(req.query.perCategory, 10) || 8, 1), 20);
@@ -65,7 +77,7 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
       ? safe("banners", () => listActiveBanners({ city, targetType: "user", baseUrl }), [])
       : [],
     needCategories
-      ? safe("categories", () => loadCategorySections(req, { baseUrl, perCategory, maxCategories }), [])
+      ? safe("categories", () => loadCategorySections(req, { baseUrl, perCategory, maxCategories, vendorIds }), [])
       : [],
     wants.has("video")
       ? safe("video", () => loadVideoPage({ feedType: "all", limit: videoLimit, lite: true, baseUrl, userId: req.user?._id }), {
@@ -75,13 +87,13 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
         })
       : { items: [], hasMore: false, nextCursor: null },
     wants.has("hotDeals") && features.hotDealsEnabled !== false
-      ? safe("hotDeals", () => loadHotDealCards(req), [])
+      ? safe("hotDeals", () => loadHotDealCards(req, { vendorIds }), [])
       : [],
     wants.has("hotDeals") && features.hotDealsEnabled !== false
       ? safe("hotDealsTimer", () => getHotDealsTimer(), { startTime: "00:00", endTime: "23:59", percentOff: 50 })
       : { startTime: "00:00", endTime: "23:59", percentOff: 50 },
     wants.has("suggestions")
-      ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl, city: area.city }), {
+      ? safe("suggestions", () => loadSuggestions(req, { limit: 12, baseUrl, city: effectiveCity, vendorIds }), {
           items: [],
           personalised: false,
         })
@@ -89,7 +101,7 @@ exports.getHomeFeed = asyncHandler(async (req, res) => {
     wants.has("suggestions")
       ? safe(
           "suggestedVendors",
-          () => loadSuggestedVendors(req, { limit: 6, baseUrl, city: area.city, subDistrict: area.subDistrict }),
+          () => loadSuggestedVendors(req, { limit: 6, baseUrl, city: effectiveCity, subDistrict: effectiveSubDistrict }),
           []
         )
       : [],

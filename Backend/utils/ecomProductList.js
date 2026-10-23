@@ -51,21 +51,30 @@ function toSubCategoryHeader(subCategory) {
   };
 }
 
-async function listMobileProducts(query = {}, userId = null, baseUrl = "") {
+async function listMobileProducts(query = {}, userId = null, baseUrl = "", options = {}) {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
   const skip = (page - 1) * limit;
 
-  const { category, subCategory, search, variantType, sort } = query;
+  const { category, subCategory, search, variantType, sort, minRating, minDiscount } = query;
+  const childCategory = query.childCategory ?? query.childCategoryId ?? query.child_category;
+  const vendorId = query.vendor ?? query.vendorId ?? query.vendor_id;
   const { minPrice, maxPrice } = parseProductPriceRange(query);
 
-  const filter = activePublicProductBaseFilter();
+  let filter = activePublicProductBaseFilter();
 
   if (category) {
     filter.category = category;
   }
   if (subCategory) {
     filter.subCategory = subCategory;
+  }
+  if (childCategory) {
+    filter.childCategory = childCategory;
+  }
+  if (vendorId) {
+    filter.role = "Vendor";
+    filter.addedById = vendorId;
   }
   if (variantType) {
     const vt = String(variantType).trim();
@@ -74,10 +83,35 @@ async function listMobileProducts(query = {}, userId = null, baseUrl = "") {
     }
     filter.variantType = vt;
   }
+  if (minRating) {
+    const r = Number(minRating);
+    if (!Number.isNaN(r) && r > 0) {
+      filter.averageRating = { $gte: r };
+    }
+  }
+  if (minDiscount) {
+    const d = Number(minDiscount);
+    if (!Number.isNaN(d) && d > 0) {
+      filter.discountValue = { $gte: d };
+    }
+  }
 
   const priceRangeFilter = buildProductPriceRangeFilter(minPrice, maxPrice);
   if (priceRangeFilter) {
     Object.assign(filter, priceRangeFilter);
+  }
+
+  // Location filter:
+  // vendor=<id> (shop page): do not apply city filter.
+  let areaVendorIds = options.vendorIds;
+  if (!vendorId && areaVendorIds === undefined) {
+    const { resolveShoppingArea, getAreaVendorIds } = require("./catalogLocation");
+    const area = await resolveShoppingArea({ query, user: userId ? { _id: userId } : null });
+    areaVendorIds = await getAreaVendorIds(area);
+  }
+  if (!vendorId && areaVendorIds !== null && areaVendorIds !== undefined) {
+    const { applyAreaToProductFilter } = require("./catalogLocation");
+    filter = applyAreaToProductFilter(filter, areaVendorIds);
   }
 
   const searchOr = searchFilter(search, ["name", "slug", "description", "shortDescription", "sku"]);
@@ -154,16 +188,20 @@ async function listMobileProducts(query = {}, userId = null, baseUrl = "") {
       search: search ? String(search).trim() : null,
       category: category ?? null,
       subCategory: subCategory ?? null,
+      childCategory: childCategory ?? null,
+      vendor: vendorId ?? null,
       minPrice,
       maxPrice,
       sort: sort ? String(sort).trim().toLowerCase() : null,
       variantType: variantType ?? null,
+      minRating: minRating ? Number(minRating) : null,
+      minDiscount: minDiscount ? Number(minDiscount) : null,
     },
     sortOptions: PRODUCT_SORT_OPTIONS,
   };
 }
 
-async function listSubCategoryProducts(subCategoryId, query = {}, userId = null, baseUrl = "") {
+async function listSubCategoryProducts(subCategoryId, query = {}, userId = null, baseUrl = "", options = {}) {
   const subCategory = await assertEcomSubCategory(subCategoryId);
   const result = await listMobileProducts(
     {
@@ -174,7 +212,8 @@ async function listSubCategoryProducts(subCategoryId, query = {}, userId = null,
         : String(subCategory.category || ""),
     },
     userId,
-    baseUrl
+    baseUrl,
+    options
   );
 
   return {

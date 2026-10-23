@@ -73,12 +73,18 @@ exports.listRecentlyViewed = asyncHandler(async (req, res) => {
 exports.listSuggestions = asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 30);
   const baseUrl = getPublicBaseUrl(req);
-  const area = await resolveRequestArea(req);
+  const { resolveShoppingArea, getAreaVendorIds } = require("../../utils/catalogLocation");
+  const shoppingArea = await resolveShoppingArea(req);
+  const vendorIds = await getAreaVendorIds(shoppingArea);
+
+  const effectiveCity = shoppingArea.cityName || null;
+  const effectiveSubDistrict = shoppingArea.scope === "city" ? null : (shoppingArea.subDistrictName || null);
+
   const [suggestions, vendors] = await Promise.all([
-    loadSuggestions(req, { limit, baseUrl, city: area.city }),
+    loadSuggestions(req, { limit, baseUrl, city: effectiveCity, vendorIds }),
     req.query.vendors === "0"
       ? []
-      : loadSuggestedVendors(req, { limit: 6, baseUrl, city: area.city, subDistrict: area.subDistrict }),
+      : loadSuggestedVendors(req, { limit: 6, baseUrl, city: effectiveCity, subDistrict: effectiveSubDistrict }),
   ]);
   const features = await getFeatureSettings();
   return res.status(200).json({

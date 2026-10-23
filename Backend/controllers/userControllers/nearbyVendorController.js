@@ -7,6 +7,7 @@ const { loadSuggestedVendors } = require("../../utils/homeFeed");
 function readVendorListQuery(query = {}) {
   return {
     city: normalizeOptionalQuery(query.city ?? query.cityName),
+    cityId: normalizeOptionalQuery(query.cityId ?? query.city_id),
     state: normalizeOptionalQuery(query.state),
     subDistrict: normalizeOptionalQuery(
       query.subDistrict ??

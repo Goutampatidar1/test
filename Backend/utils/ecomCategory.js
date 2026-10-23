@@ -10,7 +10,9 @@ const {
   getCategoryIdsWithPublicProducts,
   getSubCategoryIdsWithPublicProducts,
   getChildCategoryIdsWithPublicProducts,
+  activePublicProductBaseFilter,
 } = require("./publicProductList");
+const { applyAreaToProductFilter } = require("./catalogLocation");
 
 function toObjectId(value) {
   return new mongoose.Types.ObjectId(String(value));
@@ -103,7 +105,13 @@ async function assertEcomCategory(categoryId) {
   return category;
 }
 
-async function listEcomCategories({ search, skip = 0, limit = 100, onlyWithProducts = true } = {}) {
+async function listEcomCategories({
+  search,
+  skip = 0,
+  limit = 100,
+  onlyWithProducts = true,
+  vendorIds = null,
+} = {}) {
   const filter = { status: "active", mode: "ecom" };
   const searchOr = searchFilter(search, ["name"]);
 
@@ -112,9 +120,17 @@ async function listEcomCategories({ search, skip = 0, limit = 100, onlyWithProdu
   }
 
   if (onlyWithProducts) {
-    const categoryIds = await getCategoryIdsWithPublicProducts(Product);
-    if (!categoryIds.length) return [];
-    filter._id = { $in: categoryIds.map((id) => toObjectId(id)) };
+    if (vendorIds !== null) {
+      if (!Array.isArray(vendorIds) || vendorIds.length === 0) return [];
+      const prodFilter = applyAreaToProductFilter(activePublicProductBaseFilter(), vendorIds);
+      const categoryIds = await Product.distinct("category", prodFilter);
+      if (!categoryIds.length) return [];
+      filter._id = { $in: categoryIds.map((id) => toObjectId(id)) };
+    } else {
+      const categoryIds = await getCategoryIdsWithPublicProducts(Product);
+      if (!categoryIds.length) return [];
+      filter._id = { $in: categoryIds.map((id) => toObjectId(id)) };
+    }
   }
 
   return Category.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean();
@@ -122,7 +138,7 @@ async function listEcomCategories({ search, skip = 0, limit = 100, onlyWithProdu
 
 async function listEcomSubCategories(
   categoryId,
-  { search, skip = 0, limit = 100, onlyWithProducts = true } = {}
+  { search, skip = 0, limit = 100, onlyWithProducts = true, vendorIds = null } = {}
 ) {
   await assertEcomCategory(categoryId);
 
@@ -138,11 +154,22 @@ async function listEcomSubCategories(
   }
 
   if (onlyWithProducts) {
-    const subCategoryIds = await getSubCategoryIdsWithPublicProducts(Product, {
-      categoryId: toObjectId(categoryId),
-    });
-    if (!subCategoryIds.length) return [];
-    filter._id = { $in: subCategoryIds.map((id) => toObjectId(id)) };
+    if (vendorIds !== null) {
+      if (!Array.isArray(vendorIds) || vendorIds.length === 0) return [];
+      const prodFilter = applyAreaToProductFilter(
+        activePublicProductBaseFilter({ category: toObjectId(categoryId) }),
+        vendorIds
+      );
+      const subCategoryIds = await Product.distinct("subCategory", prodFilter);
+      if (!subCategoryIds.length) return [];
+      filter._id = { $in: subCategoryIds.map((id) => toObjectId(id)) };
+    } else {
+      const subCategoryIds = await getSubCategoryIdsWithPublicProducts(Product, {
+        categoryId: toObjectId(categoryId),
+      });
+      if (!subCategoryIds.length) return [];
+      filter._id = { $in: subCategoryIds.map((id) => toObjectId(id)) };
+    }
   }
 
   return SubCategory.find(filter)
@@ -181,6 +208,7 @@ async function listEcomChildCategories({
   categoryId,
   subCategoryId,
   onlyWithProducts = true,
+  vendorIds = null,
 } = {}) {
   if (subCategoryId) {
     await assertEcomSubCategory(subCategoryId, { categoryId });
@@ -205,12 +233,26 @@ async function listEcomChildCategories({
   }
 
   if (onlyWithProducts) {
-    const childCategoryIds = await getChildCategoryIdsWithPublicProducts(Product, {
-      categoryId: categoryId ? toObjectId(categoryId) : undefined,
-      subCategoryId: subCategoryId ? toObjectId(subCategoryId) : undefined,
-    });
-    if (!childCategoryIds.length) return [];
-    filter._id = { $in: childCategoryIds.map((id) => toObjectId(id)) };
+    if (vendorIds !== null) {
+      if (!Array.isArray(vendorIds) || vendorIds.length === 0) return [];
+      const prodCriteria = { childCategory: { $ne: null } };
+      if (categoryId) prodCriteria.category = toObjectId(categoryId);
+      if (subCategoryId) prodCriteria.subCategory = toObjectId(subCategoryId);
+      const prodFilter = applyAreaToProductFilter(
+        activePublicProductBaseFilter(prodCriteria),
+        vendorIds
+      );
+      const childCategoryIds = await Product.distinct("childCategory", prodFilter);
+      if (!childCategoryIds.length) return [];
+      filter._id = { $in: childCategoryIds.map((id) => toObjectId(id)) };
+    } else {
+      const childCategoryIds = await getChildCategoryIdsWithPublicProducts(Product, {
+        categoryId: categoryId ? toObjectId(categoryId) : undefined,
+        subCategoryId: subCategoryId ? toObjectId(subCategoryId) : undefined,
+      });
+      if (!childCategoryIds.length) return [];
+      filter._id = { $in: childCategoryIds.map((id) => toObjectId(id)) };
+    }
   }
 
   return ChildCategory.find(filter)
@@ -223,12 +265,12 @@ async function listEcomChildCategories({
 }
 
 async function getCategoryScreenPayload(categoryId, baseUrl, options = {}) {
-  const { search = "" } = options;
+  const { search = "", vendorIds = null } = options;
   const selectedCategory = await assertEcomCategory(categoryId);
 
   const [categories, subCategories] = await Promise.all([
-    listEcomCategories({ search: "" }),
-    listEcomSubCategories(categoryId, { search }),
+    listEcomCategories({ search: "", vendorIds }),
+    listEcomSubCategories(categoryId, { search, vendorIds }),
   ]);
 
   const selectedId = String(selectedCategory._id);
