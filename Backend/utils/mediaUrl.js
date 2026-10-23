@@ -1,13 +1,48 @@
 const config = require("../config");
 
+function isLoopbackHostname(hostname) {
+  const host = String(hostname || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+}
+
+function isPublicHttpBase(value) {
+  try {
+    const url = new URL(value);
+    return /^https?:$/i.test(url.protocol) && !isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Host the visitor actually used, when Apache proxies to 127.0.0.1. */
+function originFromRequest(req) {
+  if (!req || typeof req.get !== "function") return "";
+  const forwardedHost = String(req.headers?.["x-forwarded-host"] || "")
+    .split(",")[0]
+    .trim();
+  const host = forwardedHost || String(req.get("host") || "").trim();
+  if (!host) return "";
+  const hostname = host.split(":")[0].replace(/^\[|\]$/g, "");
+  if (isLoopbackHostname(hostname)) return "";
+  const proto =
+    String(req.headers?.["x-forwarded-proto"] || req.protocol || "https")
+      .split(",")[0]
+      .trim() || "https";
+  return `${proto}://${host}`.replace(/\/$/, "");
+}
+
 function getPublicBaseUrl(req) {
-  const fromEnv = String(process.env.PUBLIC_BASE_URL || "").trim();
-  if (fromEnv) {
-    return fromEnv.replace(/\/$/, "");
-  }
-  if (req) {
-    return `${req.protocol}://${req.get("host")}`;
-  }
+  const fromEnv = String(process.env.PUBLIC_BASE_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+  if (isPublicHttpBase(fromEnv)) return fromEnv;
+  const fromReq = originFromRequest(req);
+  if (fromReq) return fromReq;
+  if (fromEnv) return fromEnv;
+  if (req) return `${req.protocol}://${req.get("host")}`;
   return `http://localhost:${config.port}`;
 }
 
@@ -32,12 +67,15 @@ function toAbsoluteUploadUrl(path, baseUrl) {
       const u = new URL(value);
       if (u.pathname.startsWith("/api/uploads/")) {
         u.pathname = u.pathname.slice(4);
-        return u.toString();
       }
+      const base = String(baseUrl || getPublicBaseUrl()).replace(/\/$/, "");
+      if (isLoopbackHostname(u.hostname) && isPublicHttpBase(base)) {
+        return `${base}${u.pathname}${u.search}`;
+      }
+      return u.toString();
     } catch {
       return value;
     }
-    return value;
   }
 
   const base = String(baseUrl || getPublicBaseUrl()).replace(/\/$/, "");

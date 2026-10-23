@@ -312,6 +312,10 @@ function toEnquiryPayload(enquiry, { baseUrl = "", audience = "user", vendorCont
     updatedAt: row.updatedAt,
   };
 
+  if (audience === "user") {
+    payload.isUnread = row.userUnread !== false;
+  }
+
   if (audience === "vendor") {
     payload.customer = {
       _id: user?._id || row.user,

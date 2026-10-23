@@ -51,6 +51,12 @@ const venueEnquirySchema = new mongoose.Schema(
 
     responseDueAt: { type: Date, default: null, index: true },
     respondedAt: { type: Date, default: null },
+    /**
+     * Open Enquiry badge. Missing or true means the user has not opened this
+     * enquiry since it was created or since the vendor last updated it.
+     * false means POST /enquiries/:id/read has been called.
+     */
+    userUnread: { type: Boolean, default: true },
     acceptedAt: { type: Date, default: null },
     /** After acceptance the user must book before this time; dates are held until then. */
     holdExpiresAt: { type: Date, default: null, index: true },
@@ -63,6 +69,7 @@ const venueEnquirySchema = new mongoose.Schema(
 venueEnquirySchema.index({ vendor: 1, status: 1, createdAt: -1 });
 venueEnquirySchema.index({ vendor: 1, createdAt: -1 });
 venueEnquirySchema.index({ user: 1, createdAt: -1 });
+venueEnquirySchema.index({ user: 1, status: 1, source: 1, userUnread: 1 });
 venueEnquirySchema.index({ venue: 1, status: 1, holdExpiresAt: 1 });
 
 venueEnquirySchema.statics.STATUSES = ENQUIRY_STATUSES;

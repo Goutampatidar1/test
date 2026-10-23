@@ -46,9 +46,24 @@ export const api = {
   hotDeals: (s?: AbortSignal) => get<PublicHotDeal>("/public/hot-deals", s),
 };
 
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i;
+
+/** API stores some uploads as http://127.0.0.1:5017/uploads/... — browsers cannot load that. */
 export function resolveMediaUrl(path?: string | null): string | undefined {
   if (!path?.trim()) return undefined;
-  if (/^https?:\/\//i.test(path)) return path;
   const origin = API_BASE.replace(/\/api\/?$/, "");
+  if (/^https?:\/\//i.test(path)) {
+    try {
+      const url = new URL(path);
+      if (!LOOPBACK_HOST.test(url.hostname)) return url.toString();
+      const base = new URL(origin);
+      url.protocol = base.protocol;
+      url.hostname = base.hostname;
+      url.port = base.port;
+      return url.toString();
+    } catch {
+      return path;
+    }
+  }
   return `${origin}${path.startsWith("/") ? path : `/${path}`}`;
 }

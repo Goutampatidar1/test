@@ -107,9 +107,14 @@ exports.listMyEnquiries = asyncHandler(async (req, res) => {
   const status = String(req.query.status || "").trim().toLowerCase();
   const filter = { user: req.user._id };
   if (status === "open") filter.status = { $in: OPEN_STATUSES };
-  else if (status && status !== "all") filter.status = status;
+  else if (status === "pending") {
+    // Open Enquiry: waiting standard rows only. Quick and call-request stay out.
+    filter.status = "pending";
+    filter.source = "standard";
+  } else if (status && status !== "all") filter.status = status;
 
-  const [rows, total] = await Promise.all([
+  const unreadFilter = { ...filter, userUnread: { $ne: false } };
+  const [rows, total, unreadCount] = await Promise.all([
     VenueEnquiry.find(filter)
       .populate("venue", VENUE_POPULATE)
       .sort({ createdAt: -1 })
@@ -117,17 +122,21 @@ exports.listMyEnquiries = asyncHandler(async (req, res) => {
       .limit(limit)
       .lean(),
     VenueEnquiry.countDocuments(filter),
+    VenueEnquiry.countDocuments(unreadFilter),
   ]);
 
   const baseUrl = getPublicBaseUrl(req);
   const data = rows.map((row) => toEnquiryPayload(row, { baseUrl, audience: "user" }));
-  return res.status(200).json({
-    status: data.length > 0,
+  const body = {
+    status: true,
     message: "Enquiries fetched",
+    unreadCount,
     data,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
     filters: { status: status || "all" },
-  });
+  };
+  if (status === "pending") body.unreadCounts = { pending: unreadCount };
+  return res.status(200).json(body);
 });
 
 async function findOwnEnquiry(req) {
@@ -141,6 +150,16 @@ async function findOwnEnquiry(req) {
 exports.getMyEnquiry = asyncHandler(async (req, res) => {
   const enquiry = await findOwnEnquiry(req);
   return respondWithEnquiry(req, res, "Enquiry fetched", enquiry);
+});
+
+/** Clears the Open Enquiry badge for this row. Next pending list returns unreadCount one lower. */
+exports.markMyEnquiryRead = asyncHandler(async (req, res) => {
+  const enquiry = await findOwnEnquiry(req);
+  if (enquiry.userUnread !== false) {
+    enquiry.userUnread = false;
+    await enquiry.save();
+  }
+  return respondWithEnquiry(req, res, "Enquiry marked as read", enquiry);
 });
 
 exports.cancelMyEnquiry = asyncHandler(async (req, res) => {

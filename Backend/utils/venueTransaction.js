@@ -1,7 +1,7 @@
 const VenueTransaction = require("../models/other/venueTransaction");
 const VenueOrder = require("../models/other/venueOrder");
 const AppError = require("./AppError");
-const { resolvePayableAmountForOrder } = require("./venueBooking");
+const { buildBookingPaymentSummary } = require("./venueBooking");
 
 const { STATUS_LABELS, PAYMENT_METHOD_LABELS } = require("./transactionHistory");
 
@@ -39,12 +39,13 @@ function readGatewayPaymentId(body = {}) {
 }
 
 function readPaidAmount(body = {}) {
+  const paymentType = String(body.paymentType || body.payment_type || "").trim().toLowerCase();
+  // amountPaid is the running total. remainingAmount is not this charge and not the new balance.
   const raw =
     body.paidAmount ??
     body.payableAmount ??
-    body.amountPaid ??
     body.amount ??
-    body.totalAmount;
+    (paymentType === "remaining" ? undefined : body.amountPaid);
   if (raw === undefined || raw === null || raw === "") return null;
   const amount = Number(raw);
   return Number.isNaN(amount) ? null : amount;
@@ -82,10 +83,11 @@ function resolvePaymentPhaseForOrder(order, paymentStatus = "") {
   return "full";
 }
 
-function applyVenueOrderPaymentState(doc, paidIncrement) {
+function applyVenueOrderPaymentState(doc, paidIncrement, basePaid) {
   const grandTotal = Number(doc.grandTotal) || 0;
   const increment = Math.max(0, Number(paidIncrement) || 0);
-  const nextPaid = Math.min(grandTotal, (Number(doc.amountPaid) || 0) + increment);
+  const alreadyPaid = basePaid == null ? Number(doc.amountPaid) || 0 : Number(basePaid) || 0;
+  const nextPaid = Math.min(grandTotal, alreadyPaid + increment);
 
   doc.amountPaid = nextPaid;
   doc.remainingAmount = Math.max(0, grandTotal - nextPaid);
@@ -112,9 +114,10 @@ async function markVenueOrderPaymentPaid(orderRef, options = {}) {
   if (!doc) throw new AppError("Booking not found", 404);
 
   const grandTotal = Number(doc.grandTotal) || 0;
-  const amountPaid = Number(doc.amountPaid) || 0;
-  const paymentStatus = String(doc.paymentStatus || "").toLowerCase();
-  if (paymentStatus === "paid" && amountPaid >= grandTotal && grandTotal > 0) {
+  const figures = buildBookingPaymentSummary(doc);
+  const amountPaid = figures.amountPaid;
+  const paymentStatus = figures.paymentStatus;
+  if (paymentStatus === "paid" && amountPaid >= grandTotal && figures.remainingAmount <= 0 && grandTotal > 0) {
     const fresh = await VenueOrder.findById(doc._id).lean();
     const transaction = await VenueTransaction.findOne({
       order: doc._id,
@@ -126,7 +129,7 @@ async function markVenueOrderPaymentPaid(orderRef, options = {}) {
     return { order: fresh, transaction };
   }
 
-  const payableNow = resolvePayableAmountForOrder(doc);
+  const payableNow = figures.amountDueNow;
   const maxPayable = Math.max(0, grandTotal - amountPaid);
 
   const explicitPaid = readPaidAmount(options);
@@ -145,9 +148,12 @@ async function markVenueOrderPaymentPaid(orderRef, options = {}) {
   const gatewayPaymentId = String(options.gatewayPaymentId || "").trim();
   const gateway = String(options.gateway || "").trim();
   const gatewayOrderId = String(options.gatewayOrderId || "").trim();
-  const paymentPhase = resolvePaymentPhaseForOrder(doc, paymentStatus);
+  const paymentPhase = resolvePaymentPhaseForOrder(
+    { ...doc.toObject(), amountPaid, paymentStatus, remainingAmount: figures.remainingAmount },
+    paymentStatus
+  );
 
-  applyVenueOrderPaymentState(doc, paidIncrement);
+  applyVenueOrderPaymentState(doc, paidIncrement, amountPaid);
   await doc.save();
 
   let tx = await VenueTransaction.findOne({

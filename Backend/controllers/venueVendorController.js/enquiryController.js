@@ -165,7 +165,11 @@ exports.rejectEnquiry = asyncHandler(async (req, res) => {
 /** Private-to-vendor call notes shown back on the enquiry (also visible to the customer as vendorNote). */
 exports.updateNote = asyncHandler(async (req, res) => {
   const enquiry = await findVendorEnquiry(req);
-  enquiry.vendorNote = String(req.body?.note ?? "").trim().slice(0, 1000);
+  const note = String(req.body?.note ?? "").trim().slice(0, 1000);
+  if (note !== (enquiry.vendorNote || "")) {
+    enquiry.vendorNote = note;
+    enquiry.userUnread = true;
+  }
   await enquiry.save();
   return respond(req, res, "Note saved", enquiry);
 });

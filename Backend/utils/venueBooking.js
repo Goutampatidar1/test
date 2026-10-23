@@ -669,31 +669,39 @@ function assertTotalAmount(clientAmount, expectedTotal) {
   }
 }
 
+function firstMoney(values) {
+  for (const raw of values) {
+    if (raw === undefined || raw === null || raw === "") continue;
+    const amount = Number(raw);
+    if (!Number.isNaN(amount) && amount >= 0) return amount;
+  }
+  return null;
+}
+
 /**
  * Amount the client is paying in this request.
- * totalAmount = full booking total; payableAmount = pay-now (token or full).
- * Server pricing always wins for order totals — client fields are not strictly validated.
+ * `amount` / `payableAmount` / `paidAmount` are this charge.
+ * `amountPaid` is the running total, not this charge.
+ * `remainingAmount` in the body is not the new balance to store.
  */
 function resolvePaymentAmountFromBody(body = {}, pricing = {}) {
   const grandTotal = Number(pricing.grandTotal) || 0;
   const amountDueNow = Number(pricing.amountDueNow) || grandTotal;
+  const paymentType = String(body.paymentType || body.payment_type || "").trim().toLowerCase();
+  const usesToken =
+    Boolean(pricing.usesTokenPayment) || (amountDueNow > 0 && grandTotal > 0 && amountDueNow < grandTotal);
+  const thisPayment = firstMoney([body.amount, body.payableAmount, body.paidAmount]);
 
-  const payableRaw = body.payableAmount ?? body.paidAmount ?? body.amountPaid;
-  if (payableRaw !== undefined && payableRaw !== null && payableRaw !== "") {
-    const payable = Number(payableRaw);
-    if (!Number.isNaN(payable) && payable >= 0) {
-      return Math.min(payable, grandTotal || payable);
-    }
+  if (paymentType === "remaining") {
+    if (thisPayment !== null && thisPayment > 0) return Math.min(thisPayment, grandTotal || thisPayment);
+    return amountDueNow;
   }
 
-  const totalRaw = body.totalAmount;
-  if (totalRaw !== undefined && totalRaw !== null && totalRaw !== "") {
-    const total = Number(totalRaw);
-    if (!Number.isNaN(total) && total >= 0) {
-      if (total === grandTotal) return amountDueNow;
-      if (total < grandTotal) return total;
+  if (thisPayment !== null && thisPayment > 0) {
+    if (usesToken && grandTotal > 0 && thisPayment >= grandTotal && amountDueNow < grandTotal) {
       return amountDueNow;
     }
+    return Math.min(thisPayment, grandTotal || thisPayment);
   }
 
   return amountDueNow;
@@ -749,7 +757,7 @@ function buildBookingPaymentSummary(order) {
   const tokenAmountPercentage = normalizeTokenAmountPercentage(order?.tokenAmountPercentage);
   let tokenAmount = Number(order?.tokenAmount) || 0;
   let amountPaid = Number(order?.amountPaid);
-  const paymentStatus = String(order?.paymentStatus || "pending").toLowerCase();
+  let paymentStatus = String(order?.paymentStatus || "pending").toLowerCase();
   const paymentMethod = String(order?.paymentMethod || "online").toLowerCase();
 
   if (tokenAmountPercentage > 0 && tokenAmount <= 0 && grandTotal > 0) {
@@ -774,10 +782,26 @@ function buildBookingPaymentSummary(order) {
   let remainingAmount = Number(order?.remainingAmount);
   if (Number.isNaN(remainingAmount)) {
     remainingAmount = Math.max(0, grandTotal - amountPaid);
-  } else if (paymentStatus === "paid") {
-    remainingAmount = 0;
   } else {
     remainingAmount = Math.max(0, Math.min(grandTotal, remainingAmount));
+  }
+
+  const usesTokenPayment = tokenAmount > 0 && tokenAmount < grandTotal;
+  // Token checkouts used to store the full booking total in amountPaid and leave the balance untouched.
+  if (usesTokenPayment && grandTotal > 0 && remainingAmount > 0 && amountPaid >= grandTotal) {
+    amountPaid = Math.max(0, grandTotal - remainingAmount);
+    if (paymentStatus === "paid") paymentStatus = "partially_paid";
+  }
+
+  if (grandTotal > 0 && amountPaid >= grandTotal && remainingAmount <= 0) {
+    amountPaid = grandTotal;
+    remainingAmount = 0;
+    if (paymentStatus === "pending" || paymentStatus === "partially_paid") paymentStatus = "paid";
+  } else if (amountPaid > 0 && amountPaid < grandTotal) {
+    remainingAmount = Math.max(0, grandTotal - amountPaid);
+    if (paymentStatus === "paid" || paymentStatus === "pending") paymentStatus = "partially_paid";
+  } else if (paymentStatus === "paid") {
+    remainingAmount = 0;
   }
 
   const normalizedOrder = {
@@ -791,7 +815,6 @@ function buildBookingPaymentSummary(order) {
   };
 
   const amountDueNow = resolvePayableAmountForOrder(normalizedOrder);
-  const usesTokenPayment = tokenAmount > 0 && tokenAmount < grandTotal;
   const commission = commissionFieldsFromOrder({
     ...normalizedOrder,
     adminCommissionPercent: order?.adminCommissionPercent,

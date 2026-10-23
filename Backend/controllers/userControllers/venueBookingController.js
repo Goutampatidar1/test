@@ -17,6 +17,7 @@ const {
   buildOrderPaymentSnapshot,
   resolvePayableAmountForOrder,
   resolvePaymentAmountFromBody,
+  buildBookingPaymentSummary: summarizeBookingPayment,
   assertVenueAvailableForBooking,
   getVenueAvailabilityByDates,
   formatBookingDateLabel,
@@ -482,7 +483,8 @@ exports.confirmBookingPayment = asyncHandler(async (req, res) => {
     throw new AppError("Cash bookings do not require online payment confirmation", 400);
   }
 
-  if (String(order.paymentStatus || "").toLowerCase() === "paid") {
+  const currentPayment = summarizeBookingPayment(order);
+  if (currentPayment.paymentStatus === "paid" && currentPayment.remainingAmount <= 0) {
     const fresh = await VenueOrder.findById(order._id)
       .populate("items.venue", "name thumbnail address city basePrice dayPrice hourlyPrice")
       .lean();
@@ -492,13 +494,15 @@ exports.confirmBookingPayment = asyncHandler(async (req, res) => {
     return sendSuccess(res, "Payment already confirmed", {
       order: fresh,
       transaction: tx ? toVenueTransactionHistoryItem(tx, fresh) : null,
+      ...summarizeBookingPayment(fresh),
     });
   }
 
-  const payableNow = resolvePayableAmountForOrder(order);
+  const payableNow = currentPayment.amountDueNow;
   const paidAmount = resolvePaymentAmountFromBody(req.body ?? {}, {
     grandTotal: order.grandTotal,
     amountDueNow: payableNow,
+    usesTokenPayment: currentPayment.usesTokenPayment,
   });
 
   const { order: paidOrder, transaction } = await markVenueOrderPaymentPaid(order, {
@@ -518,11 +522,17 @@ exports.confirmBookingPayment = asyncHandler(async (req, res) => {
       ? "Token payment confirmed. Booking confirmed."
       : "Booking payment confirmed";
 
+  const payment = summarizeBookingPayment(fresh);
   sendSuccess(res, message, {
     order: fresh,
     transaction: transaction ? toVenueTransactionHistoryItem(transaction, fresh) : null,
-    amountPaid: fresh.amountPaid ?? 0,
-    remainingAmount: fresh.remainingAmount ?? 0,
+    grandTotal: payment.grandTotal,
+    totalAmount: payment.totalAmount,
+    tokenAmount: payment.tokenAmount,
+    usesTokenPayment: payment.usesTokenPayment,
+    amountPaid: payment.amountPaid,
+    remainingAmount: payment.remainingAmount,
+    paymentStatus: payment.paymentStatus,
   });
 });
 
