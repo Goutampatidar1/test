@@ -1,0 +1,91 @@
+Backend notes — confirm-booking-payment (token / remaining)
+===========================================================
+Audience: backend team (this repo: Backend/controllers + utils).
+Related stale booking: BK-619597 (amountPaid wrongly = grandTotal, remainingAmount = 0
+after only the token was collected).
+
+Routes (user)
+-------------
+POST /api/confirm-booking-payment/:bookingId
+POST /api/confirm-booking-balance/:bookingId   (same handler)
+POST /api/venue-bookings/:id/confirm-payment
+
+Handler
+-------
+Backend/controllers/userControllers/venueBookingController.js → confirmBookingPayment
+Payment apply: Backend/utils/venueTransaction.js → markVenueOrderPaymentPaid
+Body amount resolve: Backend/utils/venueBooking.js → resolvePaymentAmountFromBody
+Response normalize: Backend/utils/venueBooking.js → buildBookingPaymentSummary
+
+Expected client body — TOKEN confirm (first payment)
+----------------------------------------------------
+{
+  "paymentType": "token",
+  "paymentStatus": "partially_paid",
+  "amount": <tokenAmount>,          // this charge (preferred)
+  "payableAmount": <tokenAmount>,   // alias
+  "remainingAmount": <grandTotal - tokenAmount>,  // informational; NOT stored as-is
+  "tokenAmount": <tokenAmount>,
+  "grandTotal": <grandTotal>,
+  "razorpay_payment_id": "...",     // or gatewayPaymentId
+  "gateway": "razorpay"
+}
+
+Do NOT send amountPaid = grandTotal on token confirm.
+amountPaid on the order is a running total maintained by the server.
+If the client sends amountPaid, readPaidAmount treats it as this charge only when
+paymentType is NOT "remaining" — prefer `amount` / `payableAmount` / `paidAmount`.
+
+Expected client body — REMAINING / balance confirm
+--------------------------------------------------
+{
+  "paymentType": "remaining",
+  "paymentStatus": "paid",
+  "amount": <remainingAmount>,      // this charge only
+  "payableAmount": <remainingAmount>,
+  "razorpay_payment_id": "...",
+  "gateway": "razorpay"
+}
+
+When paymentType=remaining, body.amountPaid is IGNORED (avoids double-count when
+clients wrongly send amountPaid: grandTotal, e.g. 3500 after a 500 token).
+
+Server behaviour checklist
+--------------------------
+1. resolvePaymentAmountFromBody
+   - paymentType=remaining → use amount/payableAmount/paidAmount or amountDueNow
+   - token checkout: if client sends thisPayment >= grandTotal, clamp to amountDueNow (token)
+
+2. markVenueOrderPaymentPaid
+   - Adds paidIncrement to current amountPaid (never replaces with grandTotal blindly)
+   - Sets remainingAmount = grandTotal - amountPaid
+   - paymentStatus: partially_paid until amountPaid >= grandTotal, then paid
+   - paymentPhase: token | balance | full (one success txn per phase)
+   - Stale repair: if ledger says paid/full but only a deposit-sized success txn exists
+     (no balance txn), rewrite to partially_paid before applying the next payment
+
+3. buildBookingPaymentSummary (API responses)
+   - If token booking, remainingAmount > 0, amountPaid >= grandTotal → treat amountPaid as
+     grandTotal - remainingAmount and status partially_paid
+   - If ops PATCHes paymentStatus=partially_paid while amountPaid was still grandTotal and
+     remaining was 0 → rebuild from tokenAmount
+
+4. Early return "Payment already confirmed"
+   - Only when summary says paid AND remainingAmount <= 0 AND amountPaid >= grandTotal
+   - After stale repair, remaining confirm must proceed
+
+Ops repair for existing bad rows
+--------------------------------
+scripts/admin-fix-booking-bk619597.sh
+PATCH /api/admin/venue/orders/:id with:
+  paymentStatus=partially_paid, tokenAmount, amountPaid=token, remainingAmount, grandTotal
+
+Admin updateOrder accepts amountPaid / remainingAmount / tokenAmount /
+tokenAmountPercentage and re-normalizes via buildBookingPaymentSummary.
+
+App-side (separate repo)
+------------------------
+BookingEntry defensive UI: if token booking but API still returns remainingAmount=0 +
+full paid, show Pay Now = grandTotal - token, Amount Paid = token, Partially Paid.
+Future creates: buildConfirmBookingPaymentBody / buildContactPaymentBody must send the
+token breakdown above so new rows never land in the stale state.

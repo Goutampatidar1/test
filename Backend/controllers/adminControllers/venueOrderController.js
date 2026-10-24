@@ -274,13 +274,41 @@ exports.updateOrder = asyncHandler(async (req, res) => {
     order.items = items;
   }
 
-  const numericFields = ["subTotal", "discountTotal", "taxTotal", "grandTotal"];
+  const numericFields = [
+    "subTotal",
+    "discountTotal",
+    "taxTotal",
+    "grandTotal",
+    "tokenAmount",
+    "tokenAmountPercentage",
+    "amountPaid",
+    "remainingAmount",
+  ];
   for (const field of numericFields) {
     if (Object.prototype.hasOwnProperty.call(req.body, field)) {
       const value = Number(req.body[field]);
       if (Number.isNaN(value) || value < 0) throw new AppError(`Invalid ${field}`, 400);
+      if (field === "tokenAmountPercentage" && value > 100) {
+        throw new AppError("Invalid tokenAmountPercentage", 400);
+      }
       order[field] = value;
     }
+  }
+
+  // Keep ledger coherent when ops patches payment fields (e.g. stale token bookings).
+  const paymentTouched =
+    Object.prototype.hasOwnProperty.call(req.body, "amountPaid") ||
+    Object.prototype.hasOwnProperty.call(req.body, "remainingAmount") ||
+    Object.prototype.hasOwnProperty.call(req.body, "paymentStatus") ||
+    Object.prototype.hasOwnProperty.call(req.body, "tokenAmount") ||
+    Object.prototype.hasOwnProperty.call(req.body, "grandTotal");
+  if (paymentTouched) {
+    const summary = buildBookingPaymentSummary(order);
+    order.tokenAmount = summary.tokenAmount;
+    order.tokenAmountPercentage = summary.tokenAmountPercentage;
+    order.amountPaid = summary.amountPaid;
+    order.remainingAmount = summary.remainingAmount;
+    order.paymentStatus = summary.paymentStatus;
   }
 
   await order.save();
@@ -288,7 +316,7 @@ exports.updateOrder = asyncHandler(async (req, res) => {
     .populate("user", "name phone email")
     .populate("items.venue", "name address city basePrice thumbnail")
     .lean();
-  res.json({ message: "Venue order updated", order: fresh });
+  res.json({ message: "Venue order updated", order: enrichVenueOrderResponse(fresh) });
 });
 
 exports.deleteOrder = asyncHandler(async (req, res) => {

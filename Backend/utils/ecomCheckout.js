@@ -2,6 +2,7 @@ const Order = require("../models/other/order");
 const Product = require("../models/other/product");
 const Cart = require("../models/other/cart");
 const Transaction = require("../models/other/transaction");
+const Vendor = require("../models/entity/vendor");
 const AppError = require("./AppError");
 const { getUserShippingAddress, toShippingAddressItem } = require("./shippingAddress");
 const { getOrCreateCart, refreshCartTotals, validateCartForCheckout } = require("./cart");
@@ -186,6 +187,73 @@ async function buildAddressSnapshot(addressRow) {
   };
 }
 
+function normalizeLocationToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function locationTokensMatch(a, b) {
+  const left = normalizeLocationToken(a);
+  const right = normalizeLocationToken(b);
+  return Boolean(left && right && left === right);
+}
+
+/**
+ * Local delivery only: every cart vendor must share the buyer's city AND tehsil (subDistrict).
+ * Admin-owned lines (no vendor) are skipped.
+ */
+async function assertVendorsDeliverableToAddress(checkoutLines, addressSnapshot) {
+  const vendorIds = [
+    ...new Set(
+      (checkoutLines || [])
+        .map((line) => (line?.vendor ? String(line.vendor) : ""))
+        .filter(Boolean)
+    ),
+  ];
+  if (!vendorIds.length) return;
+
+  const deliveryCity = normalizeLocationToken(addressSnapshot?.city);
+  const deliveryTehsil = normalizeLocationToken(
+    addressSnapshot?.subDistrict ?? addressSnapshot?.subDistrictName
+  );
+
+  if (!deliveryCity || !deliveryTehsil) {
+    throw new AppError(
+      "Order not deliverable. Delivery address must include city and tehsil.",
+      400
+    );
+  }
+
+  const vendors = await Vendor.find({ _id: { $in: vendorIds } })
+    .select("businessName name city subDistrict")
+    .lean();
+
+  if (vendors.length !== vendorIds.length) {
+    throw new AppError("One or more vendors in the cart were not found", 400);
+  }
+
+  const mismatched = vendors.filter(
+    (vendor) =>
+      !locationTokensMatch(vendor.city, deliveryCity) ||
+      !locationTokensMatch(vendor.subDistrict, deliveryTehsil)
+  );
+
+  if (!mismatched.length) return;
+
+  const names = mismatched
+    .map((vendor) => String(vendor.businessName || vendor.name || "Vendor").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const who = names.length ? ` (${names.join(", ")}${mismatched.length > 3 ? ", …" : ""})` : "";
+
+  throw new AppError(
+    `Order not deliverable${who}. Vendor city and tehsil must match the delivery address.`,
+    400
+  );
+}
+
 function buildCustomerSnapshot(userDoc, addressSnapshot) {
   const user = userDoc && typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
 
@@ -306,6 +374,7 @@ async function placeCheckoutOrder(userId, body = {}, options = {}) {
   }
 
   const checkoutLines = await validateCartForCheckout(cart);
+  await assertVendorsDeliverableToAddress(checkoutLines, addressSnapshot);
   const orderItems = buildOrderItems(checkoutLines);
 
   let subTotal = 0;

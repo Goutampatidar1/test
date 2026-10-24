@@ -2579,6 +2579,24 @@ a.btn:hover {
   font-size: 0.8125rem;
 }
 
+.product-list-price {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+}
+
+.product-list-price__original {
+  color: var(--admin-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: line-through;
+}
+
+.product-list-price__sale {
+  font-weight: 600;
+}
+
 .data-table--compact tbody td {
   padding: 12px 14px;
 }

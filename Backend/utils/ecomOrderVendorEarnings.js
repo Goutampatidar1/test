@@ -8,15 +8,33 @@ function toObjectId(value) {
   return new mongoose.Types.ObjectId(String(value));
 }
 
+function money(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function sumItemTotals(items) {
   return items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
 }
 
-function computeVendorShippingShare(order, vendorSubTotal) {
-  const orderSub = Number(order.subTotal) || 0;
-  if (orderSub <= 0 || vendorSubTotal <= 0) return 0;
-  const ratio = vendorSubTotal / orderSub;
-  return Math.round(Number(order.shippingCharge || 0) * ratio * 100) / 100;
+/** Merchandise only — must match order.subTotal basis (tax excluded). */
+function sumItemMerchandise(items) {
+  return money(
+    items.reduce((sum, item) => {
+      const qty = Number(item.quantity) || 0;
+      const unit = Number(item.unitPrice) || 0;
+      return sum + unit * qty;
+    }, 0)
+  );
+}
+
+function computeVendorShippingShare(order, vendorMerchandiseTotal) {
+  const orderShipping = money(order.shippingCharge);
+  const orderSub = money(order.subTotal);
+  const vendorMerch = money(vendorMerchandiseTotal);
+  if (orderShipping <= 0 || orderSub <= 0 || vendorMerch <= 0) return 0;
+  if (Math.abs(vendorMerch - orderSub) <= 0.05) return orderShipping;
+  const ratio = Math.min(1, vendorMerch / orderSub);
+  return money(orderShipping * ratio);
 }
 
 async function getVendorProductIdSet(vendorId) {
@@ -47,11 +65,12 @@ async function getVendorCommissionPercent() {
 }
 
 function buildVendorEarningsAmount(order, vendorItems, commissionPercent) {
-  const subTotal = sumItemTotals(vendorItems);
-  const shippingCost = computeVendorShippingShare(order, subTotal);
-  const grossTotal = Math.round((subTotal + shippingCost) * 100) / 100;
-  const commissionAmount = Math.round(((subTotal * commissionPercent) / 100) * 100) / 100;
-  return Math.round((grossTotal - commissionAmount) * 100) / 100;
+  const merchandise = sumItemMerchandise(vendorItems);
+  const taxAmount = money(sumItemTotals(vendorItems) - merchandise);
+  const shippingCost = computeVendorShippingShare(order, merchandise);
+  const grossTotal = money(merchandise + Math.max(0, taxAmount) + shippingCost);
+  const commissionAmount = money((merchandise * (Number(commissionPercent) || 0)) / 100);
+  return money(Math.max(0, grossTotal - commissionAmount));
 }
 
 function isVendorOrderEarningEligible(order) {
@@ -169,11 +188,13 @@ async function buildAdminEcomPaymentSummariesForOrders(orders = []) {
 
     for (const [vendorId, vendorItems] of groups) {
       vendorNames.push(vendorNameMap.get(vendorId) || "Unknown Vendor");
-      const subTotal = sumItemTotals(vendorItems);
-      const shippingShare = computeVendorShippingShare(order, subTotal);
-      const commissionAmount = Math.round(((subTotal * commissionPercent) / 100) * 100) / 100;
+      const merchandise = sumItemMerchandise(vendorItems);
+      const lineTotal = sumItemTotals(vendorItems);
+      const taxAmount = money(Math.max(0, lineTotal - merchandise));
+      const shippingShare = computeVendorShippingShare(order, merchandise);
+      const commissionAmount = money((merchandise * commissionPercent) / 100);
       adminCommission += commissionAmount;
-      vendorAmount += Math.round((subTotal + shippingShare - commissionAmount) * 100) / 100;
+      vendorAmount += money(merchandise + taxAmount + shippingShare - commissionAmount);
     }
 
     summaries.set(String(order._id), {

@@ -40,6 +40,7 @@ const {
   createVenueTransactionForOrder,
   cancelVenueTransactionForOrder,
   markVenueOrderPaymentPaid,
+  repairVenueOrderPaymentLedger,
   isVenuePaymentConfirmed,
   readGatewayPaymentId,
 } = require("../../utils/venueTransaction");
@@ -354,6 +355,8 @@ async function createBookingCore(req, res, { venue, body, enquiry = null }) {
   if (shouldApplyPayment) {
     await markVenueOrderPaymentPaid(order, {
       paidAmount: payNowAmount,
+      paymentType: String(body.paymentType || body.payment_type || "").trim() ||
+        (pricing.usesTokenPayment ? "token" : "full"),
       gatewayPaymentId: readGatewayPaymentId(body),
       gateway: String(body.gateway || body.paymentGateway || "razorpay").trim(),
       gatewayOrderId: String(body.gatewayOrderId || body.razorpay_order_id || "").trim(),
@@ -364,7 +367,15 @@ async function createBookingCore(req, res, { venue, body, enquiry = null }) {
   if (enquiry) {
     await VenueEnquiry.updateOne(
       { _id: enquiry._id },
-      { $set: { status: "converted", convertedAt: new Date(), order: order._id } }
+      {
+        $set: {
+          status: "converted",
+          convertedAt: new Date(),
+          order: order._id,
+          // Drop Open Enquiry / My enquiries badge once converted to a booking.
+          userUnread: false,
+        },
+      }
     );
     if (enquiry.vendor) {
       queueAppNotification({
@@ -483,6 +494,7 @@ exports.confirmBookingPayment = asyncHandler(async (req, res) => {
     throw new AppError("Cash bookings do not require online payment confirmation", 400);
   }
 
+  await repairVenueOrderPaymentLedger(order);
   const currentPayment = summarizeBookingPayment(order);
   if (currentPayment.paymentStatus === "paid" && currentPayment.remainingAmount <= 0) {
     const fresh = await VenueOrder.findById(order._id)
@@ -507,6 +519,7 @@ exports.confirmBookingPayment = asyncHandler(async (req, res) => {
 
   const { order: paidOrder, transaction } = await markVenueOrderPaymentPaid(order, {
     paidAmount,
+    paymentType: String(req.body?.paymentType || req.body?.payment_type || "").trim(),
     gatewayPaymentId: readGatewayPaymentId(req.body ?? {}),
     gateway: String(req.body?.gateway || req.body?.paymentGateway || "razorpay").trim(),
     gatewayOrderId: String(req.body?.gatewayOrderId || req.body?.razorpay_order_id || "").trim(),
@@ -655,11 +668,18 @@ exports.cancelBooking = asyncHandler(async (req, res) => {
 exports.getMyBookingById = asyncHandler(async (req, res) => {
   const bookingId = resolveBookingIdParam(req);
   assertObjectId(bookingId, "Invalid booking id");
-  const order = await VenueOrder.findOne({ _id: bookingId, user: req.user._id })
-    .populate("items.venue", "name thumbnail address city basePrice dayPrice hourlyPrice")
-    .lean();
+  let order = await VenueOrder.findOne({ _id: bookingId, user: req.user._id }).populate(
+    "items.venue",
+    "name thumbnail address city basePrice dayPrice hourlyPrice"
+  );
 
   if (!order) throw new AppError("Booking not found", 404);
+
+  // Heal double-counted token (create + confirm) and other stale ledgers before response.
+  await repairVenueOrderPaymentLedger(order);
+  order = await VenueOrder.findById(order._id)
+    .populate("items.venue", "name thumbnail address city basePrice dayPrice hourlyPrice")
+    .lean();
 
   const baseUrl = getPublicBaseUrl(req);
   const venueId = getPrimaryVenueIdFromOrder(order);

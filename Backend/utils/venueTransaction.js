@@ -74,12 +74,21 @@ function resolveInitialVenuePaymentStatus(paymentMethod, body = {}, orderContext
 }
 
 function resolvePaymentPhaseForOrder(order, paymentStatus = "") {
-  const status = String(paymentStatus || order?.paymentStatus || "").toLowerCase();
   const tokenAmount = Number(order?.tokenAmount) || 0;
   const grandTotal = Number(order?.grandTotal) || 0;
+  const amountPaid = Number(order?.amountPaid) || 0;
+  const usesToken = tokenAmount > 0 && (grandTotal <= 0 || tokenAmount < grandTotal);
 
+  // Use collected amount, not paymentStatus alone — partially_paid used to always map to
+  // "balance", so a second token confirm (create + confirm) double-counted the deposit.
+  if (usesToken) {
+    if (amountPaid + 0.001 < tokenAmount) return "token";
+    if (amountPaid + 0.001 < grandTotal) return "balance";
+    return "balance";
+  }
+
+  const status = String(paymentStatus || order?.paymentStatus || "").toLowerCase();
   if (status === "partially_paid") return "balance";
-  if (tokenAmount > 0 && (grandTotal <= 0 || tokenAmount < grandTotal)) return "token";
   return "full";
 }
 
@@ -106,6 +115,121 @@ function applyVenueOrderPaymentState(doc, paidIncrement, basePaid) {
   }
 }
 
+function amountsNearlyEqual(a, b, eps = 0.01) {
+  return Math.abs(Number(a) - Number(b)) <= eps;
+}
+
+/**
+ * Create+confirm used to apply the token twice: first as token, then again as a "balance"
+ * txn for the same ₹token (e.g. Amount Paid ₹1000 when token is ₹500). Undo that fingerprint.
+ */
+async function repairDoubleCountedTokenDeposit(doc, figures) {
+  const grandTotal = Number(doc.grandTotal) || 0;
+  const tokenAmount = Number(figures.tokenAmount) || Number(doc.tokenAmount) || 0;
+  const amountPaid = Number(figures.amountPaid) || 0;
+  if (!(tokenAmount > 0 && tokenAmount < grandTotal)) return figures;
+  if (!amountsNearlyEqual(amountPaid, tokenAmount * 2)) return figures;
+  if (amountPaid + 0.01 >= grandTotal) return figures;
+
+  const txs = await VenueTransaction.find({
+    order: doc._id,
+    type: "payment",
+    status: "success",
+  });
+
+  const tokenTx = txs.find((tx) => String(tx.paymentPhase || "").toLowerCase() === "token");
+  const balanceTx = txs.find((tx) => String(tx.paymentPhase || "").toLowerCase() === "balance");
+  if (!tokenTx || !balanceTx) return figures;
+  if (!amountsNearlyEqual(balanceTx.amount, tokenAmount)) return figures;
+  if (!amountsNearlyEqual(tokenTx.amount, tokenAmount) && Number(tokenTx.amount) > tokenAmount + 0.01) {
+    return figures;
+  }
+
+  const sameGateway =
+    tokenTx.gatewayPaymentId &&
+    balanceTx.gatewayPaymentId &&
+    String(tokenTx.gatewayPaymentId) === String(balanceTx.gatewayPaymentId);
+
+  // Same Razorpay id = definite duplicate. Equal token-sized balance without a larger pay-in
+  // is the create→confirm double-count fingerprint (BK-872038-class).
+  if (!sameGateway && Number(balanceTx.amount) !== Number(tokenAmount)) return figures;
+
+  balanceTx.status = "cancelled";
+  balanceTx.remarks = `${balanceTx.remarks || ""} (cancelled duplicate token confirm)`.trim();
+  await balanceTx.save();
+
+  doc.amountPaid = tokenAmount;
+  doc.remainingAmount = Math.max(0, grandTotal - tokenAmount);
+  doc.paymentStatus = "partially_paid";
+  await doc.save();
+
+  return buildBookingPaymentSummary(doc);
+}
+
+/**
+ * If ledger says fully paid but only a token (or under-full) success txn exists and no balance
+ * txn, rewrite amountPaid/remaining so remaining confirm is not blocked (BK-619597-class rows).
+ */
+async function repairStaleTokenLedgerFromTransactions(doc, figures) {
+  const grandTotal = Number(doc.grandTotal) || 0;
+  const tokenAmount = Number(figures.tokenAmount) || Number(doc.tokenAmount) || 0;
+  if (!(tokenAmount > 0 && tokenAmount < grandTotal)) return figures;
+
+  let next = await repairDoubleCountedTokenDeposit(doc, figures);
+  if (next.amountPaid !== figures.amountPaid || next.remainingAmount !== figures.remainingAmount) {
+    figures = next;
+  }
+
+  if (
+    !(
+      figures.paymentStatus === "paid" &&
+      figures.amountPaid >= grandTotal &&
+      figures.remainingAmount <= 0 &&
+      grandTotal > 0
+    )
+  ) {
+    return figures;
+  }
+
+  const txs = await VenueTransaction.find({
+    order: doc._id,
+    type: "payment",
+    status: "success",
+  }).lean();
+
+  if (!txs.length) return figures;
+  if (txs.some((tx) => String(tx.paymentPhase || "").toLowerCase() === "balance")) {
+    return figures;
+  }
+
+  const collected = txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  if (!(collected > 0 && collected < grandTotal)) return figures;
+
+  // Deposit-only: prefer tokenAmount; fall back to collected when token missing/mismatched.
+  const repairedPaid =
+    tokenAmount > 0 && collected <= tokenAmount
+      ? collected || tokenAmount
+      : tokenAmount > 0
+        ? tokenAmount
+        : collected;
+
+  doc.amountPaid = repairedPaid;
+  doc.remainingAmount = Math.max(0, grandTotal - repairedPaid);
+  doc.paymentStatus = "partially_paid";
+  await doc.save();
+
+  return buildBookingPaymentSummary(doc);
+}
+
+/** Persist ledger repairs for detail/confirm responses (mutates DB when needed). */
+async function repairVenueOrderPaymentLedger(orderRef) {
+  const doc = orderRef?.save ? orderRef : await VenueOrder.findById(orderRef?._id ?? orderRef);
+  if (!doc) return null;
+  let figures = buildBookingPaymentSummary(doc);
+  figures = await repairStaleTokenLedgerFromTransactions(doc, figures);
+  return { order: doc, figures };
+}
+
 async function markVenueOrderPaymentPaid(orderRef, options = {}) {
   const orderId = orderRef?._id ?? orderRef;
   if (!orderId) throw new AppError("Invalid order for payment update", 400);
@@ -114,9 +238,29 @@ async function markVenueOrderPaymentPaid(orderRef, options = {}) {
   if (!doc) throw new AppError("Booking not found", 404);
 
   const grandTotal = Number(doc.grandTotal) || 0;
-  const figures = buildBookingPaymentSummary(doc);
+  let figures = buildBookingPaymentSummary(doc);
+  figures = await repairStaleTokenLedgerFromTransactions(doc, figures);
   const amountPaid = figures.amountPaid;
   const paymentStatus = figures.paymentStatus;
+  const tokenAmount = Number(figures.tokenAmount) || Number(doc.tokenAmount) || 0;
+  const gatewayPaymentId = String(options.gatewayPaymentId || "").trim();
+  const paymentType = String(options.paymentType || options.payment_type || "").trim().toLowerCase();
+
+  if (gatewayPaymentId) {
+    const existingByGateway = await VenueTransaction.findOne({
+      order: doc._id,
+      type: "payment",
+      status: "success",
+      gatewayPaymentId,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (existingByGateway) {
+      const fresh = await VenueOrder.findById(doc._id).lean();
+      return { order: fresh, transaction: existingByGateway };
+    }
+  }
+
   if (paymentStatus === "paid" && amountPaid >= grandTotal && figures.remainingAmount <= 0 && grandTotal > 0) {
     const fresh = await VenueOrder.findById(doc._id).lean();
     const transaction = await VenueTransaction.findOne({
@@ -127,6 +271,34 @@ async function markVenueOrderPaymentPaid(orderRef, options = {}) {
       .sort({ createdAt: -1 })
       .lean();
     return { order: fresh, transaction };
+  }
+
+  // Token already on the ledger — ignore a second *token-sized* confirm (create+confirm).
+  // Remaining / balance charges (amount > token, or paymentType remaining|balance) must apply.
+  if (
+    tokenAmount > 0 &&
+    amountPaid + 0.01 >= tokenAmount &&
+    amountPaid + 0.01 < grandTotal &&
+    paymentType !== "remaining" &&
+    paymentType !== "balance"
+  ) {
+    const explicitPaid = readPaidAmount(options);
+    const isTokenSizedCharge =
+      explicitPaid != null && explicitPaid > 0 && explicitPaid <= tokenAmount + 0.01;
+    const looksLikeTokenReplay =
+      isTokenSizedCharge && (paymentType === "token" || paymentType === "" || paymentType === "full");
+    if (looksLikeTokenReplay) {
+      const fresh = await VenueOrder.findById(doc._id).lean();
+      const transaction = await VenueTransaction.findOne({
+        order: doc._id,
+        type: "payment",
+        status: "success",
+        paymentPhase: { $in: ["token", "full"] },
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+      return { order: fresh, transaction };
+    }
   }
 
   const payableNow = figures.amountDueNow;
@@ -145,7 +317,6 @@ async function markVenueOrderPaymentPaid(orderRef, options = {}) {
   }
 
   const now = new Date();
-  const gatewayPaymentId = String(options.gatewayPaymentId || "").trim();
   const gateway = String(options.gateway || "").trim();
   const gatewayOrderId = String(options.gatewayOrderId || "").trim();
   const paymentPhase = resolvePaymentPhaseForOrder(
@@ -301,6 +472,7 @@ module.exports = {
   createVenueTransactionForOrder,
   cancelVenueTransactionForOrder,
   markVenueOrderPaymentPaid,
+  repairVenueOrderPaymentLedger,
   makeVenueTransactionId,
   resolveTransactionStatus,
   resolveInitialVenuePaymentStatus,

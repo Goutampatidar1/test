@@ -137,6 +137,10 @@ function orderOwnedEntirelyByVendor(order, productIdSet, vendorId) {
   return items.length > 0 && items.every((item) => itemBelongsToVendor(item, vendorId, productIdSet));
 }
 
+function money(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function sumItemTotals(items) {
   return items.reduce((sum, item) => sum + (Number(item.totalPrice) || 0), 0);
 }
@@ -145,11 +149,120 @@ function sumItemQuantities(items) {
   return items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 }
 
-function computeVendorShippingShare(order, vendorSubTotal) {
-  const orderSub = Number(order.subTotal) || 0;
-  if (orderSub <= 0 || vendorSubTotal <= 0) return 0;
-  const ratio = vendorSubTotal / orderSub;
-  return Math.round(Number(order.shippingCharge || 0) * ratio * 100) / 100;
+/**
+ * Split order.shippingCharge across vendors by *merchandise* share (order.subTotal).
+ * Never pass tax-inclusive line totals here — that inflated ₹40 → ₹47.2 (≈ ×1.18).
+ */
+function computeVendorShippingShare(order, vendorMerchandiseTotal) {
+  const orderShipping = money(order.shippingCharge);
+  const orderSub = money(order.subTotal);
+  const vendorMerch = money(vendorMerchandiseTotal);
+  if (orderShipping <= 0 || orderSub <= 0 || vendorMerch <= 0) return 0;
+
+  // Single-vendor / full merchandise match → exact configured shipping (e.g. ₹40).
+  if (Math.abs(vendorMerch - orderSub) <= 0.05) {
+    return orderShipping;
+  }
+
+  const ratio = Math.min(1, vendorMerch / orderSub);
+  return money(orderShipping * ratio);
+}
+
+/**
+ * Split one order line into merchandise + tax using stored line tax when present,
+ * otherwise product taxType/taxValue (exclusive add-on or inclusive extract).
+ */
+function resolveVendorLineMoney(item, product) {
+  const qty = Math.max(0, Number(item.quantity) || 0);
+  const unitPrice = Number(item.unitPrice) || 0;
+  const storedTaxPerUnit = Number(item.taxValue) || 0;
+  const percent = Number(product?.taxValue) || 0;
+  const taxType = String(product?.taxType || "").trim().toLowerCase();
+
+  if (storedTaxPerUnit > 0) {
+    return {
+      productAmount: money(unitPrice * qty),
+      taxAmount: money(storedTaxPerUnit * qty),
+      taxPercent: percent > 0 ? percent : money(unitPrice > 0 ? (storedTaxPerUnit / unitPrice) * 100 : 0),
+      taxType: taxType === "inclusive" ? "inclusive" : "exclusive",
+    };
+  }
+
+  if (percent > 0 && taxType === "exclusive") {
+    const taxPerUnit = Math.round((unitPrice * percent) / 100);
+    return {
+      productAmount: money(unitPrice * qty),
+      taxAmount: money(taxPerUnit * qty),
+      taxPercent: percent,
+      taxType: "exclusive",
+    };
+  }
+
+  if (percent > 0 && taxType === "inclusive") {
+    const basePerUnit = money(unitPrice / (1 + percent / 100));
+    const taxPerUnit = money(unitPrice - basePerUnit);
+    return {
+      productAmount: money(basePerUnit * qty),
+      taxAmount: money(taxPerUnit * qty),
+      taxPercent: percent,
+      taxType: "inclusive",
+    };
+  }
+
+  // Last resort: order line totalPrice may already include tax while taxValue was 0.
+  const lineTotal = Number(item.totalPrice);
+  if (Number.isFinite(lineTotal) && lineTotal > unitPrice * qty + 0.01) {
+    return {
+      productAmount: money(unitPrice * qty),
+      taxAmount: money(lineTotal - unitPrice * qty),
+      taxPercent: 0,
+      taxType: "exclusive",
+    };
+  }
+
+  return {
+    productAmount: money(unitPrice * qty),
+    taxAmount: 0,
+    taxPercent: 0,
+    taxType: taxType === "inclusive" ? "inclusive" : "exclusive",
+  };
+}
+
+function summarizeVendorLineMoney(vendorItems, productMap = new Map()) {
+  let productPrice = 0;
+  let taxAmount = 0;
+  const taxVotes = new Map();
+
+  for (const item of vendorItems) {
+    const product = productMap.get(String(item.product));
+    const line = resolveVendorLineMoney(item, product);
+    productPrice = money(productPrice + line.productAmount);
+    taxAmount = money(taxAmount + line.taxAmount);
+    if (line.taxPercent > 0) {
+      const key = `${line.taxType}:${line.taxPercent}`;
+      taxVotes.set(key, (taxVotes.get(key) || 0) + 1);
+    }
+  }
+
+  let taxType = "exclusive";
+  let taxPercent = 0;
+  if (taxVotes.size) {
+    let bestKey = null;
+    let bestCount = -1;
+    for (const [key, count] of taxVotes) {
+      if (count > bestCount) {
+        bestKey = key;
+        bestCount = count;
+      }
+    }
+    const [type, percentRaw] = String(bestKey).split(":");
+    taxType = type === "inclusive" ? "inclusive" : "exclusive";
+    taxPercent = Number(percentRaw) || 0;
+  } else if (taxAmount > 0 && productPrice > 0) {
+    taxPercent = money((taxAmount / productPrice) * 100);
+  }
+
+  return { productPrice, taxAmount, taxPercent, taxType };
 }
 
 async function getVendorCommissionPercent() {
@@ -271,28 +384,79 @@ async function loadVendorOrderCustomerReviews(order, vendorItems, user, productM
   return reviews;
 }
 
-function buildVendorPaymentDetail(order, vendorItems, commissionPercent) {
-  const subTotal = sumItemTotals(vendorItems);
-  const shippingCost = computeVendorShippingShare(order, subTotal);
-  const grossTotal = Math.round((subTotal + shippingCost) * 100) / 100;
-  const commissionAmount = Math.round((subTotal * commissionPercent) / 100 * 100) / 100;
-  const netTotal = Math.round((grossTotal - commissionAmount) * 100) / 100;
+function buildVendorPaymentDetail(order, vendorItems, commissionPercent, productMap = new Map()) {
+  let { productPrice, taxAmount, taxPercent, taxType } = summarizeVendorLineMoney(
+    vendorItems,
+    productMap
+  );
+
+  // Multi-vendor / legacy rows: allocate order.taxTotal by merchandise share when lines have no tax.
+  const orderTaxTotal = Number(order.taxTotal) || 0;
+  const orderSubTotal = Number(order.subTotal) || 0;
+  if (taxAmount <= 0 && orderTaxTotal > 0 && orderSubTotal > 0 && productPrice > 0) {
+    taxAmount = money(orderTaxTotal * (productPrice / orderSubTotal));
+    if (!(taxPercent > 0)) {
+      taxPercent = money((taxAmount / productPrice) * 100);
+      taxType = "exclusive";
+    }
+  }
+
+  const subTotal = productPrice;
+  const shippingCost = computeVendorShippingShare(order, productPrice);
+  const grossTotal = money(productPrice + taxAmount + shippingCost);
+  const percent = Number(commissionPercent) || 0;
+  // Commission on merchandise (product price), not tax — matches vendor app payment breakdown.
+  const commissionAmount = money((productPrice * percent) / 100);
+  const netTotal = money(Math.max(0, grossTotal - commissionAmount));
+  const paymentMethodLabel =
+    PAYMENT_METHOD_LABELS[order.paymentMethod] ?? order.paymentMethod ?? "";
+  const taxLineLabel =
+    taxPercent > 0
+      ? `Tax (${taxPercent}% ${taxType === "inclusive" ? "inclusive" : "exclusive"})`
+      : taxAmount > 0
+        ? "Tax"
+        : "";
 
   return {
+    productPrice,
+    productPriceLabel: formatInrAmount(productPrice),
+    productTotal: productPrice,
+    itemsSubtotal: productPrice,
+    merchandiseTotal: productPrice,
+    lineItemsTotal: productPrice,
     subTotal,
+    subtotal: subTotal,
     subTotalLabel: formatInrAmount(subTotal),
+    subtotalLabel: formatInrAmount(subTotal),
+    discountTotal: money(
+      vendorItems.reduce(
+        (sum, item) => sum + (Number(item.discountValue) || 0) * (Number(item.quantity) || 0),
+        0
+      )
+    ),
+    taxPercent,
+    taxType: taxType === "inclusive" ? "inclusive" : "exclusive",
+    taxAmount,
+    tax: taxAmount,
+    taxFees: taxAmount,
+    gstAmount: taxAmount,
+    taxTotal: taxAmount,
+    taxAmountLabel: formatInrAmount(taxAmount),
+    taxLineLabel,
     shippingCost,
     shippingCostLabel: formatInrAmount(shippingCost),
-    adminCommissionPercent: commissionPercent,
-    adminCommissionLabel: commissionPercent > 0 ? `-${commissionPercent}%` : "0%",
+    adminCommissionPercent: percent,
+    adminCommissionLabel: percent > 0 ? `${percent}%` : "0%",
     adminCommissionAmount: commissionAmount,
-    adminCommissionAmountLabel: commissionAmount > 0 ? `-${formatInrAmount(commissionAmount)}` : formatInrAmount(0),
+    adminCommissionAmountLabel: formatInrAmount(commissionAmount),
     total: grossTotal,
+    grandTotal: grossTotal,
     totalLabel: formatInrAmount(grossTotal),
+    grandTotalLabel: formatInrAmount(grossTotal),
     vendorEarnings: netTotal,
     vendorEarningsLabel: formatInrAmount(netTotal),
-    paymentMethod: order.paymentMethod,
-    paymentMethodLabel: PAYMENT_METHOD_LABELS[order.paymentMethod] ?? order.paymentMethod,
+    paymentMethod: paymentMethodLabel,
+    paymentMethodLabel,
     paymentStatus: order.paymentStatus,
   };
 }
@@ -483,7 +647,7 @@ async function hydrateVendorOrderContext(vendorId, orders, baseUrl) {
 
   const products = productIds.length
     ? await Product.find({ _id: { $in: productIds.map((id) => toObjectId(id)) } })
-        .select("_id thumbnail addedById")
+        .select("_id thumbnail addedById taxType taxValue price")
         .lean()
     : [];
 
@@ -609,7 +773,12 @@ function toVendorOrderDetail(order, context) {
     vendorFulfillment,
     ownsEntireOrder
   );
-  const paymentDetail = buildVendorPaymentDetail(order, vendorItems, context.commissionPercent);
+  const paymentDetail = buildVendorPaymentDetail(
+    order,
+    vendorItems,
+    context.commissionPercent,
+    context.productMap
+  );
   const driverId = vendorFulfillment?.deliveryBoy || order.deliveryBoy;
   const driverAccepted = isDriverDeliveryAccepted(order);
   const driver =
@@ -643,6 +812,7 @@ function toVendorOrderDetail(order, context) {
     driver: driverDetail,
     driverDetail,
     paymentDetail,
+    payment: paymentDetail,
     customerReviews: context.customerReviews ?? [],
     cancellationReason: order.cancellationReason || "",
     cancelledAt: order.cancelledAt ?? null,
@@ -820,7 +990,7 @@ async function computeVendorHomeStats(vendorId, productIdSet) {
 
     if (vendorStatus === "delivered" && isEarningEligible(order)) {
       const vendorItems = filterVendorItems(order, productIdSet, vendorId);
-      const paymentDetail = buildVendorPaymentDetail(order, vendorItems, commissionPercent);
+      const paymentDetail = buildVendorPaymentDetail(order, vendorItems, commissionPercent, new Map());
       totalEarnings += paymentDetail.vendorEarnings;
     }
   }
@@ -1122,4 +1292,5 @@ module.exports = {
   markVendorOrderProcessing,
   toVendorOrderCard,
   toVendorOrderDetail,
+  buildVendorPaymentDetail,
 };

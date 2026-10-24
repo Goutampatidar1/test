@@ -7,6 +7,8 @@ const { optionalUserFile } = require("../../middleware/authMultipart");
 const router = express.Router();
 
 router.get("/me", protectUser, authController.getMe);
+router.get("/counts", protectUser, authController.getProfileCounts);
+router.get("/profile/counts", protectUser, authController.getProfileCounts);
 router.patch("/me/password", protectUser, authController.changePassword);
 router.patch("/me", protectUser, optionalUserFile, authController.updateMe);
 router.delete("/me", protectUser, authController.deleteMe);

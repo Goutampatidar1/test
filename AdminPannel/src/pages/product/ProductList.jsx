@@ -16,6 +16,7 @@ import { logout } from "../../store/authSlice.js";
 import { ListPagination } from "../../components/ListPagination.jsx";
 import { AdminSearchField } from "../../components/AdminSearchField.jsx";
 import { ClickableTableRow } from "../../components/ClickableTableRow.jsx";
+import { formatMoney } from "../../utils/listFormat.js";
 
 const LIST_LIMIT = 10;
 
@@ -30,6 +31,29 @@ function addedByLabel(row) {
   const who = row.addedById;
   if (!who || typeof who !== "object") return "—";
   return who.businessName || who.name || who.email || "—";
+}
+
+function discountedPrice(row) {
+  const price = Number(row?.price);
+  const value = Number(row?.discountValue) || 0;
+  if (!Number.isFinite(price) || price <= 0 || value <= 0) return null;
+  const off =
+    row.discountType === "percentage"
+      ? (price * Math.min(value, 100)) / 100
+      : Math.min(value, price);
+  const finalPrice = Math.max(0, price - off);
+  return finalPrice < price ? finalPrice : null;
+}
+
+function ProductListPrice({ row }) {
+  const salePrice = discountedPrice(row);
+  if (salePrice == null) return formatMoney(row.price);
+  return (
+    <div className="product-list-price">
+      <span className="product-list-price__original">{formatMoney(row.price)}</span>
+      <span className="product-list-price__sale">{formatMoney(salePrice)}</span>
+    </div>
+  );
 }
 
 export function ProductList() {
@@ -205,6 +229,7 @@ export function ProductList() {
                 <th>Added by</th>
                 <th>Category</th>
                 <th>Sub-Category</th>
+                <th>Price</th>
                 <th>Approval</th>
                 <th>Status</th>
                 <th className="data-table__actions-col">Actions</th>
@@ -213,13 +238,13 @@ export function ProductList() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <p className="table-placeholder">Loading products...</p>
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <p className="table-placeholder">No products found.</p>
                   </td>
                 </tr>
@@ -232,6 +257,9 @@ export function ProductList() {
                     <td>{addedByLabel(row)}</td>
                     <td>{row.category?.name || "—"}</td>
                     <td>{row.subCategory?.name || "—"}</td>
+                    <td className="data-table__mono">
+                      <ProductListPrice row={row} />
+                    </td>
                     <td>
                       {row.role === "Vendor" ? (
                         row.adminApproved ? (

@@ -657,6 +657,13 @@ exports.getMe = asyncHandler(async (req, res) => {
   sendSuccess(res, "Profile fetched", { user });
 });
 
+/** Profile tile badges: Order History / Booking History / My enquiries */
+exports.getProfileCounts = asyncHandler(async (req, res) => {
+  const { getUserProfileCounts } = require("../../utils/userProfileCounts");
+  const counts = await getUserProfileCounts(req.user._id);
+  sendSuccess(res, "Profile counts fetched", counts);
+});
+
 exports.updateMe = asyncHandler(async (req, res) => {
   const { name, phone, dob, gender, fcm_id, profileImage, city, subDistrict } = req.body;
 

@@ -792,6 +792,9 @@ function buildBookingPaymentSummary(order) {
     amountPaid = Math.max(0, grandTotal - remainingAmount);
     if (paymentStatus === "paid") paymentStatus = "partially_paid";
   }
+  // remainingAmount=0 + amountPaid=grandTotal is ambiguous (stale token vs real full pay).
+  // Ops must PATCH amountPaid/remainingAmount explicitly (see scripts/admin-fix-booking-bk619597.sh).
+  // markVenueOrderPaymentPaid also repairs from deposit-only success transactions.
 
   if (grandTotal > 0 && amountPaid >= grandTotal && remainingAmount <= 0) {
     amountPaid = grandTotal;
@@ -849,6 +852,8 @@ function buildBookingPaymentSummary(order) {
     amountPaidLabel: formatInrAmountLabel(amountPaid),
     remainingAmountLabel: formatInrAmountLabel(remainingAmount),
     amountDueNowLabel: formatInrAmountLabel(amountDueNow),
+    adminCommissionLabel:
+      commission.adminCommissionPercent > 0 ? `${commission.adminCommissionPercent}%` : "0%",
     adminCommissionAmountLabel: formatInrAmountLabel(commission.adminCommissionAmount),
     vendorEarningsLabel: formatInrAmountLabel(commission.vendorEarnings),
   };
