@@ -10,14 +10,14 @@ export const BANNER_SPECS = {
     previewStyle: { width: 339, height: 128 },
   },
   venue: {
-    label: "Service vendor web",
-    recommendedWidth: 1200,
-    recommendedHeight: 400,
-    aspectRatio: 3,
-    aspectTolerance: 0.2,
-    minWidth: 800,
-    minHeight: 200,
-    previewStyle: { width: "100%", maxWidth: 480, aspectRatio: "3 / 1" },
+    label: "Service vendor",
+    recommendedWidth: 339,
+    recommendedHeight: 128,
+    aspectRatio: 2.6,
+    aspectTolerance: 0.12,
+    minWidth: 280,
+    minHeight: 90,
+    previewStyle: { width: 339, height: 128 },
   },
   user: {
     label: "User",
@@ -45,7 +45,7 @@ function isAspectRatioValid(width, height, spec) {
 }
 
 export function validateBannerImageDimensions(targetType, width, height) {
-  const spec = BANNER_SPECS[targetType];
+  const spec = BANNER_SPECS[targetType] || BANNER_SPECS.ecom;
   if (!spec) return "Please select a valid banner type.";
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return "Could not read image dimensions.";
@@ -84,9 +84,6 @@ export function bannerRelatedLabel(related) {
 }
 
 export function bannerImageHint(targetType) {
-  if (targetType === "venue") {
-    return "Use 1200×400 px (3:1) for responsive web. Minimum 800×200 px.";
-  }
-  // user + ecom share the same mobile carousel size
+  void targetType;
   return "Use 339×128 px (2.6:1). Minimum 280×90 px.";
 }

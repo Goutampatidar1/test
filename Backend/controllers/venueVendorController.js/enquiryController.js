@@ -37,20 +37,82 @@ async function respond(req, res, message, enquiry) {
   );
 }
 
+/** Normalize list `source` query: callback requests are stored as `quick`. */
+function normalizeEnquirySourceFilter(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "quick" || value === "callback") return "quick";
+  if (value === "standard") return "standard";
+  return null;
+}
+
+async function buildVendorEnquirySummary(vendorId) {
+  const [bySourceStatus, byStatus] = await Promise.all([
+    VenueEnquiry.aggregate([
+      { $match: { vendor: vendorId } },
+      {
+        $group: {
+          _id: {
+            source: "$source",
+            status: "$status",
+            unread: { $ne: ["$vendorUnread", false] },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    VenueEnquiry.aggregate([
+      { $match: { vendor: vendorId } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const quick = { total: 0, pending: 0, unread: 0 };
+  const standard = { total: 0, pending: 0, unread: 0 };
+  for (const row of bySourceStatus) {
+    const bucket = row._id?.source === "quick" ? quick : standard;
+    bucket.total += row.count;
+    if (row._id?.status === "pending") {
+      bucket.pending += row.count;
+      if (row._id?.unread) bucket.unread += row.count;
+    }
+  }
+
+  const statusSummary = Object.fromEntries(byStatus.map((row) => [row._id, row.count]));
+  return {
+    pendingStandard: standard.pending,
+    pendingQuick: quick.pending,
+    unreadStandard: standard.unread,
+    unreadQuick: quick.unread,
+    totalStandard: standard.total,
+    totalQuick: quick.total,
+    quick: { total: quick.total, pending: quick.pending, unread: quick.unread },
+    standard: { total: standard.total, pending: standard.pending, unread: standard.unread },
+    pending: statusSummary.pending || 0,
+    accepted: statusSummary.accepted || 0,
+    rejected: statusSummary.rejected || 0,
+    converted: statusSummary.converted || 0,
+    expired: statusSummary.expired || 0,
+    cancelled: statusSummary.cancelled || 0,
+  };
+}
+
 exports.listEnquiries = asyncHandler(async (req, res) => {
   await expireStaleEnquiries();
   const { page, limit, skip } = getPagination(req.query);
   const status = String(req.query.status || "").trim().toLowerCase();
+  const source = normalizeEnquirySourceFilter(req.query.source);
   const search = String(req.query.search ?? req.query.q ?? "").trim();
+  const vendorId = new mongoose.Types.ObjectId(String(req.auth.sub));
 
   const filter = { vendor: req.auth.sub };
   if (status && status !== "all") filter.status = status;
+  if (source) filter.source = source;
   if (search) {
     const rx = new RegExp(escapeRegex(search), "i");
     filter.$or = [{ enquiryNumber: rx }, { "contact.name": rx }, { "contact.phone": rx }];
   }
 
-  const [rows, total, counts] = await Promise.all([
+  const [rows, total, summary] = await Promise.all([
     VenueEnquiry.find(filter)
       .populate("venue", VENUE_POPULATE)
       .populate("user", USER_POPULATE)
@@ -59,31 +121,74 @@ exports.listEnquiries = asyncHandler(async (req, res) => {
       .limit(limit)
       .lean(),
     VenueEnquiry.countDocuments(filter),
-    VenueEnquiry.aggregate([
-      { $match: { vendor: new mongoose.Types.ObjectId(String(req.auth.sub)) } },
-      { $group: { _id: "$status", count: { $sum: 1 } } },
-    ]),
+    buildVendorEnquirySummary(vendorId),
   ]);
 
   const baseUrl = getPublicBaseUrl(req);
   const data = rows.map((row) => toEnquiryPayload(row, { baseUrl, audience: "vendor" }));
-  const summary = Object.fromEntries(counts.map((row) => [row._id, row.count]));
 
   return res.status(200).json({
     status: data.length > 0,
     message: "Enquiries fetched",
     data,
-    summary: {
-      pending: summary.pending || 0,
-      accepted: summary.accepted || 0,
-      rejected: summary.rejected || 0,
-      converted: summary.converted || 0,
-      expired: summary.expired || 0,
-      cancelled: summary.cancelled || 0,
-    },
+    summary,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
-    filters: { status: status || "all", search: search || null },
+    filters: {
+      status: status || "all",
+      source: source || "all",
+      search: search || null,
+    },
   });
+});
+
+/** Clear vendor-unread for every enquiry in a source segment (quick/callback or standard). */
+exports.markSegmentSeen = asyncHandler(async (req, res) => {
+  const source = normalizeEnquirySourceFilter(req.body?.source);
+  if (!source) {
+    throw new AppError('source must be "quick", "callback", or "standard"', 400);
+  }
+
+  const result = await VenueEnquiry.updateMany(
+    {
+      vendor: req.auth.sub,
+      source,
+      vendorUnread: { $ne: false },
+    },
+    { $set: { vendorUnread: false } }
+  );
+
+  const summary = await buildVendorEnquirySummary(
+    new mongoose.Types.ObjectId(String(req.auth.sub))
+  );
+
+  return res.status(200).json({
+    status: true,
+    message: "Segment marked as seen",
+    data: [
+      {
+        source,
+        cleared: result.modifiedCount || 0,
+        summary: {
+          pendingQuick: summary.pendingQuick,
+          pendingStandard: summary.pendingStandard,
+          unreadQuick: summary.unreadQuick,
+          unreadStandard: summary.unreadStandard,
+          quick: summary.quick,
+          standard: summary.standard,
+        },
+      },
+    ],
+  });
+});
+
+/** Mark a single enquiry/callback as read for the vendor. */
+exports.markEnquiryRead = asyncHandler(async (req, res) => {
+  const enquiry = await findVendorEnquiry(req);
+  if (enquiry.vendorUnread !== false) {
+    enquiry.vendorUnread = false;
+    await enquiry.save();
+  }
+  return respond(req, res, "Enquiry marked as read", enquiry);
 });
 
 exports.getEnquiry = asyncHandler(async (req, res) => {
@@ -108,6 +213,7 @@ exports.acceptEnquiry = asyncHandler(async (req, res) => {
   enquiry.acceptedAt = new Date();
   enquiry.respondedAt = enquiry.acceptedAt;
   enquiry.holdExpiresAt = new Date(enquiry.acceptedAt.getTime() + windowHours * HOUR_MS);
+  enquiry.vendorUnread = false;
   if (req.body?.note !== undefined) {
     enquiry.vendorNote = String(req.body.note).trim().slice(0, 1000);
   }
@@ -143,6 +249,7 @@ exports.rejectEnquiry = asyncHandler(async (req, res) => {
   enquiry.status = "rejected";
   enquiry.rejectionReason = reason.slice(0, 500);
   enquiry.respondedAt = new Date();
+  enquiry.vendorUnread = false;
   await enquiry.save();
 
   queueAppNotification({

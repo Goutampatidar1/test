@@ -57,11 +57,12 @@ function formatShortOrderDate(value) {
   return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
+/** Same human order id as admin / user (`ORD-852240`). */
 function formatOrderDisplayId(order) {
-  const orderNumber = String(order.orderNumber || "").trim();
-  if (orderNumber) return `#${orderNumber}`;
-  const raw = String(order._id || "");
-  return `#ORD-${raw.slice(-7).toUpperCase()}`;
+  const orderNumber = String(order?.orderNumber || "").trim();
+  if (orderNumber) return orderNumber;
+  const raw = String(order?._id || "");
+  return raw ? `ORD-${raw.slice(-6).toUpperCase()}` : "";
 }
 
 function normalizeStatusTab(value) {

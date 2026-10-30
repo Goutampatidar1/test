@@ -150,6 +150,8 @@ async function createEnquiry({ venue, user, body, source = "standard" }) {
     vendor: vendorId || null,
     ...fields,
     status: "pending",
+    vendorUnread: true,
+    userUnread: true,
     responseDueAt: new Date(Date.now() + settings.enquiryResponseHours * HOUR_MS),
   });
 
@@ -214,7 +216,7 @@ async function expireStaleEnquiries(now = new Date()) {
   for (const row of stale) {
     const res = await VenueEnquiry.updateOne(
       { _id: row._id, status: row.status },
-      { $set: { status: "expired" } }
+      { $set: { status: "expired", vendorUnread: false } }
     );
     if (!res.modifiedCount) continue;
     expired += 1;
@@ -317,6 +319,7 @@ function toEnquiryPayload(enquiry, { baseUrl = "", audience = "user", vendorCont
   }
 
   if (audience === "vendor") {
+    payload.isUnread = row.vendorUnread !== false;
     payload.customer = {
       _id: user?._id || row.user,
       name: row.contact?.name || user?.name || "",

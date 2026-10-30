@@ -57,6 +57,11 @@ const venueEnquirySchema = new mongoose.Schema(
      * false means POST /enquiries/:id/read has been called.
      */
     userUnread: { type: Boolean, default: true },
+    /**
+     * Vendor inbox badge. Missing or true = vendor has not seen this enquiry yet.
+     * Cleared by mark-read / mark-seen, and on accept/reject.
+     */
+    vendorUnread: { type: Boolean, default: true },
     acceptedAt: { type: Date, default: null },
     /** After acceptance the user must book before this time; dates are held until then. */
     holdExpiresAt: { type: Date, default: null, index: true },
@@ -68,6 +73,7 @@ const venueEnquirySchema = new mongoose.Schema(
 
 venueEnquirySchema.index({ vendor: 1, status: 1, createdAt: -1 });
 venueEnquirySchema.index({ vendor: 1, createdAt: -1 });
+venueEnquirySchema.index({ vendor: 1, source: 1, status: 1, vendorUnread: 1 });
 venueEnquirySchema.index({ user: 1, createdAt: -1 });
 venueEnquirySchema.index({ user: 1, status: 1, source: 1, userUnread: 1 });
 venueEnquirySchema.index({ venue: 1, status: 1, holdExpiresAt: 1 });

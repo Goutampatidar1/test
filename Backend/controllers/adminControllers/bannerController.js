@@ -8,7 +8,11 @@ const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 const { publicUploadPathFromFile, getMulterUploadFile } = require("../../utils/publicUploadPath");
 const { normalizeImageFile } = require("../../utils/imageNormalize");
 
-const { normalizeTargetType, normalizeRelatedType } = require("../../utils/bannerSpecs");
+const {
+  normalizeTargetType,
+  normalizeRelatedType,
+  assertBannerUploadDimensions,
+} = require("../../utils/bannerSpecs");
 const Product = require("../../models/other/product");
 const Vendor = require("../../models/entity/vendor");
 
@@ -305,6 +309,7 @@ exports.createBanner = asyncHandler(async (req, res) => {
     }
 
     const content = readContentFields(req.body);
+    await assertBannerUploadDimensions(getMulterUploadFile(req), targetType);
     const imageMeta = await normalizeBannerUpload(req);
 
     const banner = await Banner.create({
@@ -393,6 +398,7 @@ exports.updateBanner = asyncHandler(async (req, res) => {
 
   if (req.file) {
     const uploadedImage = publicUploadPathFromFile(req, UPLOAD_FOLDER);
+    await assertBannerUploadDimensions(getMulterUploadFile(req), banner.targetType || "ecom");
     const imageMeta = await normalizeBannerUpload(req);
     deleteUploadFileByPublicUrl(banner.image);
     banner.image = uploadedImage;

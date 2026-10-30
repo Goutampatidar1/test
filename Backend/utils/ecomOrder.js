@@ -66,9 +66,12 @@ function toObjectId(value) {
   return new mongoose.Types.ObjectId(String(value));
 }
 
+/** Same human order id as admin / vendor (`ORD-852240`). */
 function formatOrderDisplayId(order) {
-  const raw = String(order._id || "");
-  return `OID${raw.slice(-4).toUpperCase()}`;
+  const orderNumber = String(order?.orderNumber || "").trim();
+  if (orderNumber) return orderNumber;
+  const raw = String(order?._id || "");
+  return raw ? `ORD-${raw.slice(-6).toUpperCase()}` : "";
 }
 
 function formatOrderPlacedLabel(value) {

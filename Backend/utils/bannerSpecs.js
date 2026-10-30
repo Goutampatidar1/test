@@ -1,33 +1,28 @@
 const ALLOWED_TARGET_TYPES = new Set(["ecom", "venue", "user"]);
 const ALLOWED_RELATED_TYPES = new Set(["none", "category", "product", "vendor"]);
 
+/** Shared mobile carousel size — admin, ecom vendor, and venue vendor banners. */
+const MOBILE_BANNER_SPEC = {
+  recommendedWidth: 339,
+  recommendedHeight: 128,
+  aspectRatio: 2.6,
+  aspectTolerance: 0.12,
+  minWidth: 280,
+  minHeight: 90,
+};
+
 const BANNER_SPECS = {
   ecom: {
     label: "E-commerce",
-    recommendedWidth: 339,
-    recommendedHeight: 128,
-    aspectRatio: 2.6,
-    aspectTolerance: 0.12,
-    minWidth: 280,
-    minHeight: 90,
+    ...MOBILE_BANNER_SPEC,
   },
   venue: {
-    label: "Venue vendor web",
-    recommendedWidth: 1200,
-    recommendedHeight: 400,
-    aspectRatio: 3,
-    aspectTolerance: 0.2,
-    minWidth: 800,
-    minHeight: 200,
+    label: "Service vendor",
+    ...MOBILE_BANNER_SPEC,
   },
   user: {
     label: "User app",
-    recommendedWidth: 339,
-    recommendedHeight: 128,
-    aspectRatio: 2.6,
-    aspectTolerance: 0.12,
-    minWidth: 280,
-    minHeight: 90,
+    ...MOBILE_BANNER_SPEC,
   },
 };
 
@@ -49,9 +44,8 @@ function isAspectRatioValid(width, height, spec) {
 }
 
 function validateBannerDimensions(targetType, width, height) {
-  const type = normalizeTargetType(targetType);
-  if (!type) return "Invalid banner target type.";
-  const spec = BANNER_SPECS[type];
+  const type = normalizeTargetType(targetType) || "ecom";
+  const spec = BANNER_SPECS[type] || BANNER_SPECS.ecom;
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return "Could not read image dimensions.";
   }
@@ -64,11 +58,27 @@ function validateBannerDimensions(targetType, width, height) {
   return "";
 }
 
+/**
+ * Validate a multer file / disk path against banner pixel rules.
+ * Soft-skips when sharp cannot read the file (dev without native binary).
+ */
+async function assertBannerUploadDimensions(fileOrPath, targetType = "ecom") {
+  if (!fileOrPath) return;
+  const { inspectImageFile } = require("./imageNormalize");
+  const AppError = require("./AppError");
+  const meta = await inspectImageFile(fileOrPath);
+  if (!meta) return;
+  const message = validateBannerDimensions(targetType, meta.width, meta.height);
+  if (message) throw new AppError(message, 400);
+}
+
 module.exports = {
   ALLOWED_TARGET_TYPES,
   ALLOWED_RELATED_TYPES,
   BANNER_SPECS,
+  MOBILE_BANNER_SPEC,
   normalizeTargetType,
   normalizeRelatedType,
   validateBannerDimensions,
+  assertBannerUploadDimensions,
 };

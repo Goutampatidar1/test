@@ -16,6 +16,7 @@ const {
   toPublicProductListCard,
 } = require("./publicProductList");
 const { getVendorRatingStatsMap } = require("./nearbyVendors");
+const { istCalendarDate, startOfIstDay, addIstCalendarDays } = require("./dateOnly");
 
 const PLAN_TYPE_LABELS = {
   banner: "Banner Promotion",
@@ -29,26 +30,47 @@ const DURATION_LABELS = {
   monthly: "Monthly",
 };
 
+/** Promotion day boundaries use India (Asia/Kolkata), not UTC. */
 function startOfUtcDay(value = new Date()) {
-  const d = new Date(value);
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+  const start = startOfIstDay(value);
+  if (!start) throw new AppError("Invalid date", 400);
+  return start;
 }
 
 function addDaysUtc(startDate, days) {
-  const start = startOfUtcDay(startDate);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + Number(days));
-  // expiry is start + durationDays (exclusive end-of-day of last day = start of day after last day)
+  // expiry = start + durationDays (exclusive end = start of day after last active day)
   // Spec: Weekly from 25 Aug → expiry 01 Sep (start + 7 days)
+  const end = addIstCalendarDays(startDate, days);
+  if (!end) throw new AppError("Invalid date", 400);
   return end;
 }
 
 function parseStartDate(value) {
   const raw = String(value ?? "").trim();
   if (!raw) throw new AppError("Start date is required", 400);
+  const ymdMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymdMatch) {
+    const start = startOfIstDay(`${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`);
+    if (!start) throw new AppError("Start date is invalid", 400);
+    return start;
+  }
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) throw new AppError("Start date is invalid", 400);
   return startOfUtcDay(date);
+}
+
+function isPromotionExpiredOnIst(expiryDate, now = new Date()) {
+  const today = istCalendarDate(now);
+  const expiry = istCalendarDate(expiryDate);
+  if (!today || !expiry) return false;
+  return expiry <= today;
+}
+
+function isPromotionScheduledOnIst(startDate, now = new Date()) {
+  const today = istCalendarDate(now);
+  const start = istCalendarDate(startDate);
+  if (!today || !start) return false;
+  return start > today;
 }
 
 function resolveDurationOption(plan, durationType) {
@@ -90,25 +112,39 @@ function resolveRuntimeStatus(sub, now = new Date()) {
     return sub.status;
   }
   if (sub.approvalStatus !== "approved") return sub.status;
-  const today = startOfUtcDay(now);
-  const start = startOfUtcDay(sub.startDate);
-  const expiry = startOfUtcDay(sub.expiryDate);
-  if (expiry.getTime() <= today.getTime()) return "expired";
-  if (start.getTime() > today.getTime()) return "scheduled";
+  if (isPromotionExpiredOnIst(sub.expiryDate, now)) return "expired";
+  if (isPromotionScheduledOnIst(sub.startDate, now)) return "scheduled";
   return "active";
 }
 
 async function expireDueSubscriptions(filter = {}) {
-  const today = startOfUtcDay(new Date());
-  await PromotionSubscription.updateMany(
-    {
-      ...filter,
-      approvalStatus: "approved",
-      status: { $in: ["active", "scheduled"] },
-      expiryDate: { $lte: today },
-    },
-    { $set: { status: "expired" } }
-  );
+  const now = new Date();
+  const rows = await PromotionSubscription.find({
+    ...filter,
+    approvalStatus: "approved",
+    status: { $in: ["active", "scheduled"] },
+  })
+    .select("_id status startDate expiryDate")
+    .lean();
+
+  const toExpire = [];
+  const toActivate = [];
+  for (const row of rows) {
+    if (isPromotionExpiredOnIst(row.expiryDate, now)) {
+      toExpire.push(row._id);
+      continue;
+    }
+    if (row.status === "scheduled" && !isPromotionScheduledOnIst(row.startDate, now)) {
+      toActivate.push(row._id);
+    }
+  }
+
+  if (toExpire.length) {
+    await PromotionSubscription.updateMany({ _id: { $in: toExpire } }, { $set: { status: "expired" } });
+  }
+  if (toActivate.length) {
+    await PromotionSubscription.updateMany({ _id: { $in: toActivate } }, { $set: { status: "active" } });
+  }
 }
 
 function toPublicPromotionSubscription(doc, baseUrl = "") {
@@ -461,11 +497,8 @@ async function confirmPromotionPayment({
 }
 
 function computeApprovedRuntimeStatus(startDate, expiryDate, now = new Date()) {
-  const today = startOfUtcDay(now);
-  const start = startOfUtcDay(startDate);
-  const expiry = startOfUtcDay(expiryDate);
-  if (expiry.getTime() <= today.getTime()) return "expired";
-  if (start.getTime() > today.getTime()) return "scheduled";
+  if (isPromotionExpiredOnIst(expiryDate, now)) return "expired";
+  if (isPromotionScheduledOnIst(startDate, now)) return "scheduled";
   return "active";
 }
 
@@ -512,13 +545,11 @@ async function rejectPromotionRequest(requestId, adminId, reason = "") {
 }
 
 function activeApprovedLocationFilter({ planType, cityId, subDistrictId }) {
-  const today = startOfUtcDay(new Date());
+  // Status is synced to IST via expireDueSubscriptions (scheduled→active / expired).
   const filter = {
     planType,
     approvalStatus: "approved",
-    status: { $in: ["active", "scheduled"] },
-    startDate: { $lte: today },
-    expiryDate: { $gt: today },
+    status: "active",
   };
   if (cityId) {
     assertObjectId(cityId, "Invalid city id");
@@ -762,10 +793,8 @@ async function buildPromotionDashboard() {
     .lean();
 
   const today = startOfUtcDay(new Date());
-  const weekAgo = new Date(today);
-  weekAgo.setUTCDate(weekAgo.getUTCDate() - 7);
-  const monthAgo = new Date(today);
-  monthAgo.setUTCDate(monthAgo.getUTCDate() - 30);
+  const weekAgo = addDaysUtc(today, -7);
+  const monthAgo = addDaysUtc(today, -30);
 
   function isPaid(row) {
     return row.paymentStatus === "paid" || row.paymentStatus === "free";

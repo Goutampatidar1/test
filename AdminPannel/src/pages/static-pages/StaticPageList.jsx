@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { MdEditSquare } from "react-icons/md";
 import { AiFillDelete, AiOutlineLink } from "react-icons/ai";
 import { deletePage, listPages } from "../../api/adminMisc.js";
 import { logout } from "../../store/authSlice.js";
-import { StaticPageLayoutPanel } from "./StaticPageLayoutPanel.jsx";
 
 const APP_OPTIONS = [
   { value: "", label: "All apps" },
@@ -108,19 +107,12 @@ export function StaticPageList() {
 
   return (
     <div className="user-page">
-      <StaticPageLayoutPanel />
-
       <div className="page-card">
-        <div className="page-card__head page-card__head--split">
-          <div>
-            <h2 className="page-card__title">Static Pages</h2>
-            <p className="page-card__subtitle">
-              CMS pages for User, Vendor, Service Vendor, and Delivery Partner apps. Use the App URL in mobile WebView.
-            </p>
-          </div>
-          <Link to="/admin/static-pages/new" className="btn btn--accent">
-            Add Page
-          </Link>
+        <div className="page-card__head">
+          <h2 className="page-card__title">Static Pages</h2>
+          <p className="page-card__subtitle">
+            CMS pages for User, Vendor, Service Vendor, and Delivery Partner apps. Use the App URL in mobile WebView.
+          </p>
         </div>
 
         <div className="static-page-filters">

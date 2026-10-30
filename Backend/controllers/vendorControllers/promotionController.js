@@ -5,8 +5,9 @@ const { assertObjectId } = require("../../utils/assertObjectId");
 const { sendSuccess } = require("../../utils/apiResponse");
 const { getPagination } = require("../../utils/listQuery");
 const { getPublicBaseUrl } = require("../../utils/mediaUrl");
-const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
+const { publicUploadPathFromFile, getMulterUploadFile } = require("../../utils/publicUploadPath");
 const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
+const { assertBannerUploadDimensions } = require("../../utils/bannerSpecs");
 const {
   listActivePromotionPlans,
   createPromotionCheckout,
@@ -74,6 +75,7 @@ exports.subscribe = asyncHandler(async (req, res) => {
   }
 
   try {
+    await assertBannerUploadDimensions(getMulterUploadFile(req), "ecom");
     const checkout = await createPromotionCheckout({
       vendorId: req.user._id,
       planId,

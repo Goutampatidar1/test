@@ -11,7 +11,9 @@ const {
   clearSubscriptionBanner,
   setFeaturedPresenceProduct,
 } = require("../../utils/vendorPlanSubscription");
-const { publicUploadPathFromFile } = require("../../utils/publicUploadPath");
+const { publicUploadPathFromFile, getMulterUploadFile } = require("../../utils/publicUploadPath");
+const { assertBannerUploadDimensions } = require("../../utils/bannerSpecs");
+const { deleteUploadFileByPublicUrl } = require("../../utils/deleteUploadFile");
 
 const UPLOAD_FOLDER = "banner";
 
@@ -90,14 +92,20 @@ exports.uploadBanner = asyncHandler(async (req, res) => {
   if (!imagePath) {
     throw new AppError("Banner image file is required (field: file)", 400);
   }
-  const sub = await uploadSubscriptionBanner({
-    ownerType: "ecom",
-    ownerId: req.user._id,
-    imagePath,
-    title: req.body?.title,
-    baseUrl: requestBaseUrl(req),
-  });
-  sendSuccess(res, "Banner uploaded. Only one banner is allowed; re-upload replaces it.", sub);
+  try {
+    await assertBannerUploadDimensions(getMulterUploadFile(req), "ecom");
+    const sub = await uploadSubscriptionBanner({
+      ownerType: "ecom",
+      ownerId: req.user._id,
+      imagePath,
+      title: req.body?.title,
+      baseUrl: requestBaseUrl(req),
+    });
+    sendSuccess(res, "Banner uploaded. Only one banner is allowed; re-upload replaces it.", sub);
+  } catch (error) {
+    deleteUploadFileByPublicUrl(imagePath);
+    throw error;
+  }
 });
 
 /** Remove subscription banner image (keeps plan active) */

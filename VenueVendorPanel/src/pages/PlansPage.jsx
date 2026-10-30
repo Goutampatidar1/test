@@ -10,6 +10,7 @@ import {
 } from "../api/vendorPlans.js";
 import { mediaUrl } from "../media.js";
 import { selectAppDisplayName } from "../store/appConfigSelectors.js";
+import { assertVendorBannerFile, VENDOR_BANNER_HINT } from "../utils/bannerSpecs.js";
 import { openRazorpayCheckout } from "../utils/razorpayCheckout.js";
 
 function formatInr(amount) {
@@ -175,6 +176,11 @@ export function PlansPage() {
     setMessage("");
     setError("");
     try {
+      const sizeError = await assertVendorBannerFile(bannerFile);
+      if (sizeError) {
+        setError(sizeError);
+        return;
+      }
       const sub = await venueVendorUploadPlanBanner({
         file: bannerFile,
         title: bannerTitle,
@@ -288,7 +294,7 @@ export function PlansPage() {
                     onChange={(e) => setBannerFile(e.target.files?.[0] || null)}
                   />
                 </label>
-                <p className="vendor-plans__hint">Recommended about 1200×400px (3:1).</p>
+                <p className="vendor-plans__hint">{VENDOR_BANNER_HINT}</p>
                 <div className="vendor-plans__actions">
                   <button
                     type="submit"

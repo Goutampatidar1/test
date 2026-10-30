@@ -1,27 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Swal from "sweetalert2";
-import { AiFillDelete } from "react-icons/ai";
 import { getFeatureSettings, patchFeatureSettings } from "../../api/adminMisc.js";
 import { logout } from "../../store/authSlice.js";
-
-const PERK_OPTIONS = [
-  { value: "", label: "None (info only)" },
-  { value: "ranking_boost", label: "Ranking boost" },
-  { value: "get_verified_eligible", label: "Eligible for Get Verified" },
-  { value: "free_phone_trial", label: "Free Show Number trial" },
-];
 
 const TABS = [
   { id: "media", label: "Videos & hot deals" },
   { id: "alerts", label: "Alerts & approval" },
-  { id: "benefits", label: "Profile benefits" },
 ];
-
-const NUMBER_LIMITS = {
-  discountAlertMinPercent: [0, 100, "Discount alert minimum", "alerts"],
-  discountAlertCooldownHours: [0, 720, "Discount alert cooldown", "alerts"],
-};
 
 function toForm(fs) {
   const s = fs || {};
@@ -29,6 +15,7 @@ function toForm(fs) {
     videoEnabledUser: s.videoEnabledUser !== false,
     videoEnabledVendor: s.videoEnabledVendor !== false,
     hotDealsEnabled: s.hotDealsEnabled !== false,
+    // Kept in form/payload so Save does not wipe existing backend values (UI hidden).
     discountAlertMinPercent: String(s.discountAlertMinPercent ?? 5),
     discountAlertCooldownHours: String(s.discountAlertCooldownHours ?? 24),
     autoApproveTrustedVendors: s.autoApproveTrustedVendors !== false,
@@ -43,24 +30,6 @@ function toForm(fs) {
         }))
       : [],
   };
-}
-
-/** Returns `{ tab, text }` for the first problem found, or null. */
-function validate(form) {
-  for (const [key, [min, max, label, tab]] of Object.entries(NUMBER_LIMITS)) {
-    const n = Number(form[key]);
-    if (form[key] === "" || !Number.isFinite(n) || n < min || n > max) {
-      return { tab, text: `${label} must be between ${min} and ${max}.` };
-    }
-  }
-  for (const [idx, row] of form.profileBenefits.entries()) {
-    if (!row.title.trim()) return { tab: "benefits", text: `Profile benefit #${idx + 1} needs a title.` };
-    const pct = Number(row.minPercent);
-    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-      return { tab: "benefits", text: `Profile benefit "${row.title}" needs a percent between 0 and 100.` };
-    }
-  }
-  return null;
 }
 
 function toPayload(form) {
@@ -107,16 +76,6 @@ function ToggleField({ label, hint, checked, onChange }) {
   );
 }
 
-function NumberField({ label, hint, value, onChange, min, max }) {
-  return (
-    <label className="user-field col-12 col-md-6">
-      <span className="user-field__label">{label}</span>
-      <input type="number" min={min} max={max} className="user-field__input" value={value} onChange={(e) => onChange(e.target.value)} />
-      {hint ? <small className="data-table__muted">{hint}</small> : null}
-    </label>
-  );
-}
-
 function TabIntro({ children }) {
   return (
     <p className="data-table__muted" style={{ margin: "4px 0 16px" }}>
@@ -155,25 +114,8 @@ export function FeatureSettingsPage() {
 
   const set = (key) => (value) => setForm((p) => ({ ...p, [key]: value }));
 
-  const updateBenefit = (idx, patch) =>
-    setForm((p) => ({ ...p, profileBenefits: p.profileBenefits.map((r, i) => (i === idx ? { ...r, ...patch } : r)) }));
-
-  const addBenefit = () =>
-    setForm((p) => ({
-      ...p,
-      profileBenefits: [...p.profileBenefits, { minPercent: "50", title: "", description: "", icon: "star", perk: "", image: "" }],
-    }));
-
-  const removeBenefit = (idx) => setForm((p) => ({ ...p, profileBenefits: p.profileBenefits.filter((_, i) => i !== idx) }));
-
   const onSave = async () => {
     if (!adminToken || missing) return;
-    const error = validate(form);
-    if (error) {
-      setTab(error.tab);
-      await Swal.fire({ icon: "error", title: "Validation error", text: error.text });
-      return;
-    }
     setSaving(true);
     try {
       const next = await patchFeatureSettings(adminToken, toPayload(form));
@@ -245,24 +187,8 @@ export function FeatureSettingsPage() {
 
         {tab === "alerts" ? (
           <div className="settings-tab-panel" role="tabpanel">
-            <TabIntro>Discount alerts for wishlist/cart users, and approval of vendor listings.</TabIntro>
+            <TabIntro>Approval of vendor listings.</TabIntro>
             <div className="row g-3">
-              <NumberField
-                label="Discount alert minimum (%)"
-                hint="Wishlist/cart users are alerted when a discount is at least this much."
-                value={form.discountAlertMinPercent}
-                onChange={set("discountAlertMinPercent")}
-                min={0}
-                max={100}
-              />
-              <NumberField
-                label="Discount alert cooldown (hours)"
-                hint="Minimum gap between alerts for the same item."
-                value={form.discountAlertCooldownHours}
-                onChange={set("discountAlertCooldownHours")}
-                min={0}
-                max={720}
-              />
               <ToggleField
                 label="Auto-approve listings from approved vendors"
                 hint="When approval is on, approved vendors' new services go live immediately. Products never need approval."
@@ -270,56 +196,6 @@ export function FeatureSettingsPage() {
                 onChange={set("autoApproveTrustedVendors")}
               />
             </div>
-          </div>
-        ) : null}
-
-        {tab === "benefits" ? (
-          <div className="settings-tab-panel" role="tabpanel">
-            <TabIntro>
-              Profile completion milestones shown to vendors. The perk decides what they unlock at that percentage.
-            </TabIntro>
-            {form.profileBenefits.map((row, idx) => (
-              <div key={idx} className="row g-3" style={{ borderBottom: "1px solid #e5e7eb", paddingBottom: 12, marginBottom: 12 }}>
-                <label className="user-field col-12 col-md-2">
-                  <span className="user-field__label">At %</span>
-                  <input type="number" min="0" max="100" className="user-field__input" value={row.minPercent} onChange={(e) => updateBenefit(idx, { minPercent: e.target.value })} />
-                </label>
-                <label className="user-field col-12 col-md-4">
-                  <span className="user-field__label">Title</span>
-                  <input className="user-field__input" value={row.title} maxLength={60} onChange={(e) => updateBenefit(idx, { title: e.target.value })} />
-                </label>
-                <label className="user-field col-12 col-md-3">
-                  <span className="user-field__label">Perk</span>
-                  <select className="user-field__input" value={row.perk} onChange={(e) => updateBenefit(idx, { perk: e.target.value })}>
-                    {PERK_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="user-field col-10 col-md-2">
-                  <span className="user-field__label">Icon name</span>
-                  <input className="user-field__input" value={row.icon} maxLength={40} onChange={(e) => updateBenefit(idx, { icon: e.target.value })} placeholder="star" />
-                </label>
-                <div className="user-field col-2 col-md-1" style={{ justifyContent: "flex-end" }}>
-                  <button type="button" className="icon-btn icon-btn--delete" title="Remove" onClick={() => removeBenefit(idx)} style={{ marginTop: 24 }}>
-                    <AiFillDelete size={18} />
-                  </button>
-                </div>
-                <label className="user-field col-12 col-md-8">
-                  <span className="user-field__label">Description</span>
-                  <input className="user-field__input" value={row.description} maxLength={200} onChange={(e) => updateBenefit(idx, { description: e.target.value })} />
-                </label>
-                <label className="user-field col-12 col-md-4">
-                  <span className="user-field__label">Image URL (optional)</span>
-                  <input className="user-field__input" value={row.image} onChange={(e) => updateBenefit(idx, { image: e.target.value })} />
-                </label>
-              </div>
-            ))}
-            <button type="button" className="btn btn--ghost" onClick={addBenefit}>
-              Add benefit
-            </button>
           </div>
         ) : null}
 

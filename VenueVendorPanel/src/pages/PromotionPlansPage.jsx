@@ -18,6 +18,7 @@ import {
 import { AppImage } from "../components/AppImage.jsx";
 import { selectAppDisplayName } from "../store/appConfigSelectors.js";
 import { selectPanelMode } from "../store/authSlice.js";
+import { assertVendorBannerFile, VENDOR_BANNER_HINT } from "../utils/bannerSpecs.js";
 import { openRazorpayCheckout } from "../utils/razorpayCheckout.js";
 
 function formatInr(amount) {
@@ -168,6 +169,14 @@ function PromotionPlansPanel({ forcedMode = null, embedded = false }) {
 
     setSaving(true);
     try {
+      if (isBannerPlan && form.bannerFile) {
+        const sizeError = await assertVendorBannerFile(form.bannerFile);
+        if (sizeError) {
+          setError(sizeError);
+          setSaving(false);
+          return;
+        }
+      }
       const subscribePayload = {
         planId: form.planId,
         durationType: form.durationType,
@@ -419,7 +428,7 @@ function PromotionPlansPanel({ forcedMode = null, embedded = false }) {
                       </div>
                     ) : null}
                     <p className="vendor-plans__hint">
-                      Recommended about 1200×400px. Use the free daily banner plan for testing without payment.
+                      {VENDOR_BANNER_HINT} Use the free daily banner plan for testing without payment.
                     </p>
                   </div>
                 ) : null}

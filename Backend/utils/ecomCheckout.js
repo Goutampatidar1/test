@@ -272,6 +272,7 @@ function toCheckoutOrderPayload(order, addressSnapshot, transaction, customer, e
   return {
     orderId: order._id,
     orderNumber: order.orderNumber,
+    orderDisplayId: order.orderNumber || "",
     customer,
     placedBy: customer,
     paymentMethod,

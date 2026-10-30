@@ -119,6 +119,47 @@ function startOfOffsetDay(value, offsetMinutes = getListDateOffsetMinutes()) {
   return new Date(Date.UTC(year, month, day, 0, 0, 0, 0) - offsetMinutes * 60 * 1000);
 }
 
+const IST_TIME_ZONE = "Asia/Kolkata";
+
+/** Calendar YYYY-MM-DD in Asia/Kolkata for an instant (or YYYY-MM-DD string). */
+function istCalendarDate(value = new Date()) {
+  if (value === undefined || value === null || value === "") return null;
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: IST_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/**
+ * Midnight IST for the India calendar day of `value`.
+ * Date-only strings (YYYY-MM-DD) are treated as that IST business day.
+ */
+function startOfIstDay(value = new Date()) {
+  const ymd = istCalendarDate(value);
+  if (!ymd) return null;
+  return startOfOffsetDay(ymd, 330);
+}
+
+function addIstCalendarDays(startDate, days) {
+  const start = startOfIstDay(startDate);
+  if (!start) return null;
+  const ymd = istCalendarDate(start);
+  const [y, m, d] = ymd.split("-").map(Number);
+  const shifted = new Date(Date.UTC(y, m - 1, d + Number(days), 12, 0, 0, 0));
+  return startOfIstDay(shifted);
+}
+
 function endOfOffsetDay(value, offsetMinutes = getListDateOffsetMinutes()) {
   const start = startOfOffsetDay(value, offsetMinutes);
   if (!start) return null;
@@ -215,6 +256,10 @@ module.exports = {
   toIstIsoString,
   startOfOffsetDay,
   endOfOffsetDay,
+  IST_TIME_ZONE,
+  istCalendarDate,
+  startOfIstDay,
+  addIstCalendarDays,
   parseDateRangeFromQuery,
   parseListDateRangeFromQuery,
 };
